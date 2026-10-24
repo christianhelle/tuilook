@@ -23,3 +23,8 @@ pub struct MailFolder {
     #[serde(default)]
     pub total_item_count: u32,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Id {
+    pub id: String,
+}

@@ -1,8 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use tuilook_auth::TokenSource;
-use tuilook_model::{BackendError, DeltaPage, Folder, FolderId, MailBackend};
+use tuilook_model::{BackendError, DeltaPage, Folder, FolderId, MailBackend, WellKnown};
 
 use crate::{
     GraphClient, GraphError,
@@ -20,6 +21,23 @@ pub struct GraphBackend<T> {
 impl<T: TokenSource> GraphBackend<T> {
     pub fn new(client: GraphClient<T>) -> Self {
         Self { client }
+    }
+
+    /// Maps folder ids to the well-known role Graph gives them. Mailboxes
+    /// without a folder (often Archive) answer 404, which is skipped.
+    async fn well_known_ids(&self) -> Result<HashMap<String, WellKnown>, GraphError> {
+        let mut ids = HashMap::new();
+        for kind in WellKnown::ALL {
+            let path = format!("/me/mailFolders/{}?$select=id", kind.as_graph_name());
+            match self.client.get::<dto::Id>(&path, &[]).await {
+                Ok(folder) => {
+                    ids.insert(folder.id, kind);
+                }
+                Err(GraphError::Status { status, .. }) if status == StatusCode::NOT_FOUND => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(ids)
     }
 
     /// Follows `@odata.nextLink` until the collection is exhausted.
@@ -54,14 +72,15 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             i += 1;
         }
         let ids: HashSet<_> = graph_folders.iter().map(|f| f.id.clone()).collect();
+        let well_known = self.well_known_ids().await?;
         Ok(graph_folders
             .into_iter()
             .map(|f| Folder {
                 // Top-level folders hang off the hidden root; treat them as roots.
                 parent_id: f.parent_folder_id.filter(|p| ids.contains(p)).map(FolderId),
+                well_known: well_known.get(&f.id).copied(),
                 id: FolderId(f.id),
                 name: f.display_name,
-                well_known: None,
                 unread: f.unread_item_count,
                 total: f.total_item_count,
             })

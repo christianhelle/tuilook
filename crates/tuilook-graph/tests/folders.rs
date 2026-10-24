@@ -99,3 +99,38 @@ async fn child_folders_are_fetched_recursively() {
         ]
     );
 }
+
+#[tokio::test]
+async fn well_known_folders_are_identified_and_missing_ones_skipped() {
+    let server = MockServer::start().await;
+    Mock::given(path("/me/mailFolders"))
+        .respond_with(page(
+            vec![
+                graph_folder("f1", "Inbox", "root", 0),
+                graph_folder("f2", "Sent Items", "root", 0),
+                graph_folder("f3", "Projects", "root", 0),
+            ],
+            None,
+        ))
+        .mount(&server)
+        .await;
+    for (alias, id) in [("inbox", "f1"), ("sentitems", "f2")] {
+        Mock::given(path(format!("/me/mailFolders/{alias}")))
+            .and(query_param("$select", "id"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": id })))
+            .mount(&server)
+            .await;
+    }
+    // Archive and the rest are left unmocked, so Graph answers 404.
+
+    let folders = backend(&server).list_folders().await.unwrap();
+
+    assert_eq!(
+        folders,
+        [
+            folder("f1", "Inbox", None, Some(WellKnown::Inbox)),
+            folder("f2", "Sent Items", None, Some(WellKnown::SentItems)),
+            folder("f3", "Projects", None, None),
+        ]
+    );
+}

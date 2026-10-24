@@ -10,6 +10,15 @@ pub enum WellKnown {
 }
 
 impl WellKnown {
+    pub const ALL: [Self; 6] = [
+        Self::Inbox,
+        Self::Drafts,
+        Self::SentItems,
+        Self::Archive,
+        Self::DeletedItems,
+        Self::JunkEmail,
+    ];
+
     pub fn from_graph_name(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "inbox" => Some(Self::Inbox),
@@ -112,14 +121,7 @@ mod tests {
 
     #[test]
     fn graph_names_round_trip() {
-        for kind in [
-            WellKnown::Inbox,
-            WellKnown::Drafts,
-            WellKnown::SentItems,
-            WellKnown::Archive,
-            WellKnown::DeletedItems,
-            WellKnown::JunkEmail,
-        ] {
+        for kind in WellKnown::ALL {
             assert_eq!(WellKnown::from_graph_name(kind.as_graph_name()), Some(kind));
         }
     }
