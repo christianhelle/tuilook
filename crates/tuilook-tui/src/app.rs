@@ -48,6 +48,39 @@ impl AppState {
         self.selection_changed()
     }
 
+    /// Shows a newly synced folder tree, keeping the selected folder.
+    pub fn set_folders(&mut self, folders: Vec<Folder>) -> Option<Effect> {
+        let previous = self.current_folder().cloned();
+        self.selected_folder = previous
+            .as_ref()
+            .and_then(|id| folders.iter().position(|f| &f.id == id))
+            .unwrap_or(0);
+        self.folders = folders;
+        let current = self.current_folder().cloned();
+        (current != previous)
+            .then_some(current)
+            .flatten()
+            .map(Effect::LoadFolder)
+    }
+
+    pub fn current_folder(&self) -> Option<&FolderId> {
+        self.folders.get(self.selected_folder).map(|f| &f.id)
+    }
+
+    /// Shows the current folder's messages after a sync, keeping the
+    /// selected message when it is still there.
+    pub fn refresh_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
+        let selected = self.selected().map(|m| m.id.clone());
+        match selected.and_then(|id| messages.iter().position(|m| m.id == id)) {
+            Some(index) => {
+                self.messages = messages;
+                self.selected_message = index;
+                None
+            }
+            None => self.set_messages(messages),
+        }
+    }
+
     /// Shows a body core loaded, unless the user has moved on.
     pub fn body_loaded(&mut self, message: MessageId, text: String) {
         if self.selected().is_some_and(|m| m.id == message) {
@@ -240,6 +273,51 @@ mod tests {
 
         app.body_loaded(MessageId("m2".to_owned()), "fresh".to_owned());
         assert_eq!(app.body.as_deref(), Some("fresh"));
+    }
+
+    #[test]
+    fn the_first_folder_tree_selects_and_loads_the_first_folder() {
+        let mut app = AppState::default();
+
+        let effect = app.set_folders(vec![folder("a"), folder("b")]);
+
+        assert_eq!(effect, Some(Effect::LoadFolder(FolderId("a".to_owned()))));
+        assert_eq!(app.current_folder(), Some(&FolderId("a".to_owned())));
+    }
+
+    #[test]
+    fn a_refreshed_folder_tree_keeps_the_selected_folder() {
+        let mut app = with_folders(&["a", "b"]);
+        app.update(Action::SelectNext);
+
+        let effect = app.set_folders(vec![folder("new"), folder("a"), folder("b")]);
+
+        assert_eq!(effect, None);
+        assert_eq!(app.selected_folder, 2);
+    }
+
+    #[test]
+    fn refreshed_messages_keep_the_selected_message_and_its_body() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.update(Action::SelectNext);
+        app.body_loaded(MessageId("m2".to_owned()), "body".to_owned());
+
+        let effect = app.refresh_messages(vec![message("m0"), message("m1"), message("m2")]);
+
+        assert_eq!(effect, None);
+        assert_eq!(app.selected_message, 2);
+        assert_eq!(app.body.as_deref(), Some("body"));
+    }
+
+    #[test]
+    fn when_the_selected_message_disappears_the_first_is_selected() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.update(Action::SelectNext);
+
+        let effect = app.refresh_messages(vec![message("m1")]);
+
+        assert_eq!(effect, load_body("m1"));
+        assert_eq!(app.selected_message, 0);
     }
 
     #[test]
