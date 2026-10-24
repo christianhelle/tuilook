@@ -113,6 +113,18 @@ impl OAuthClient {
         }
     }
 
+    /// Trades a refresh token for a fresh access token.
+    pub async fn refresh(&self, refresh_token: &str) -> Result<TokenSet, AuthError> {
+        let scope = self.config.scopes.join(" ");
+        self.request_tokens(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", &self.config.client_id),
+            ("refresh_token", refresh_token),
+            ("scope", &scope),
+        ])
+        .await
+    }
+
     async fn request_tokens(&self, form: &[(&str, &str)]) -> Result<TokenSet, AuthError> {
         let response = self
             .http
