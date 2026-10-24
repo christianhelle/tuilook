@@ -1,0 +1,121 @@
+use std::time::Duration;
+
+use jiff::Timestamp;
+use serde::Deserialize;
+
+/// Where and as whom to sign in.
+#[derive(Debug, Clone)]
+pub struct OAuthConfig {
+    /// e.g. `https://login.microsoftonline.com`
+    pub authority: String,
+    /// `common`, `organizations`, `consumers` or a tenant id.
+    pub tenant: String,
+    pub client_id: String,
+    pub scopes: Vec<String>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+    #[error("sign-in was declined")]
+    Declined,
+    #[error("the sign-in code expired before it was used")]
+    Expired,
+    #[error("{error}: {description}")]
+    OAuth { error: String, description: String },
+    #[error(transparent)]
+    Http(#[from] reqwest::Error),
+}
+
+/// What the user needs to finish signing in on another device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceCode {
+    pub user_code: String,
+    pub verification_uri: String,
+    pub message: String,
+    pub interval: Duration,
+    device_code: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenSet {
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    pub expires_at: Timestamp,
+}
+
+pub struct OAuthClient {
+    http: reqwest::Client,
+    config: OAuthConfig,
+}
+
+impl OAuthClient {
+    pub fn new(config: OAuthConfig) -> Self {
+        Self {
+            http: reqwest::Client::new(),
+            config,
+        }
+    }
+
+    /// Asks Entra ID for a code the user enters at the verification URL.
+    pub async fn start_device_code(&self) -> Result<DeviceCode, AuthError> {
+        let scope = self.config.scopes.join(" ");
+        let response = self
+            .http
+            .post(self.endpoint("devicecode"))
+            .form(&[
+                ("client_id", self.config.client_id.as_str()),
+                ("scope", &scope),
+            ])
+            .send()
+            .await?;
+        let body: DeviceCodeResponse = parse(response).await?;
+        Ok(DeviceCode {
+            user_code: body.user_code,
+            verification_uri: body.verification_uri,
+            message: body.message,
+            interval: Duration::from_secs(body.interval),
+            device_code: body.device_code,
+        })
+    }
+
+    fn endpoint(&self, name: &str) -> String {
+        format!(
+            "{}/{}/oauth2/v2.0/{name}",
+            self.config.authority.trim_end_matches('/'),
+            self.config.tenant
+        )
+    }
+}
+
+#[derive(Deserialize)]
+struct DeviceCodeResponse {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    interval: u64,
+    message: String,
+}
+
+#[derive(Deserialize)]
+struct ErrorResponse {
+    error: String,
+    #[serde(default)]
+    error_description: String,
+}
+
+/// Decodes a successful response, or the OAuth error a failed one carries.
+async fn parse<T: serde::de::DeserializeOwned>(
+    response: reqwest::Response,
+) -> Result<T, AuthError> {
+    if response.status().is_success() {
+        return Ok(response.json().await?);
+    }
+    let status = response.error_for_status_ref().map(|_| ());
+    match response.json::<ErrorResponse>().await {
+        Ok(e) => Err(AuthError::OAuth {
+            error: e.error,
+            description: e.error_description,
+        }),
+        Err(_) => Err(status.unwrap_err().into()),
+    }
+}
