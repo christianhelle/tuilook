@@ -2,4 +2,4 @@
 
 mod folder;
 
-pub use folder::WellKnown;
+pub use folder::{Folder, FolderId, WellKnown, sort_folders};
