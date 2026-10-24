@@ -13,3 +13,4 @@ tuilook-auth = { path = "crates/tuilook-auth" }
 tuilook-graph = { path = "crates/tuilook-graph" }
 tuilook-store = { path = "crates/tuilook-store" }
 tuilook-core = { path = "crates/tuilook-core" }
+jiff = "0.2.38"
