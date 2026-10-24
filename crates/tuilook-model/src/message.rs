@@ -32,7 +32,7 @@ pub struct Message {
 
 /// Orders messages the way the message list shows them: newest first.
 pub fn sort_messages(messages: &mut [Message]) {
-    messages.sort_by(|a, b| b.received_at.cmp(&a.received_at));
+    messages.sort_by_key(|m| std::cmp::Reverse(m.received_at));
 }
 
 #[cfg(test)]
