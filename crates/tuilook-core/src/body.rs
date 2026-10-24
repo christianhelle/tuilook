@@ -17,21 +17,37 @@ pub fn body_text(body: &Body) -> String {
             // Malformed HTML still deserves to be readable.
             .unwrap_or_else(|_| body.content.clone()),
     };
-    shorten_separators(&text)
+    tidy_lines(&text)
 }
 
-/// Long rows of dashes and the like wrap into screenfuls in a narrow pane.
-fn shorten_separators(text: &str) -> String {
-    text.split('\n')
-        .map(|line| {
-            if is_separator(line.trim()) {
-                "───"
-            } else {
-                line
+/// Shortens separator rows and collapses runs of blank lines, both of
+/// which turn into screenfuls of nothing in a narrow pane.
+fn tidy_lines(text: &str) -> String {
+    let mut lines: Vec<&str> = Vec::new();
+    for line in text.split('\n') {
+        if is_blank(line) {
+            if lines.last().is_some_and(|last| last.is_empty()) {
+                continue;
             }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+            lines.push("");
+        } else if is_separator(line.trim()) {
+            lines.push("───");
+        } else {
+            lines.push(line);
+        }
+    }
+    lines.join("\n")
+}
+
+/// Whitespace, or characters that render as nothing.
+fn is_blank(line: &str) -> bool {
+    line.chars().all(|c| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '\u{ad}' | '\u{34f}' | '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}'
+            )
+    })
 }
 
 fn is_separator(line: &str) -> bool {
@@ -100,6 +116,25 @@ mod tests {
             content_type: BodyType::Text,
             content: content.to_owned(),
         }
+    }
+
+    #[test]
+    fn runs_of_blank_lines_become_one() {
+        // Newsletters pad with invisible characters, not just spaces.
+        let body =
+            text("Hello\n\n\n   \n\u{a0}\n\t\n\u{200c}\u{a0}\u{34f}\u{ad}\u{feff}\nWorld\n\nBye");
+
+        assert_eq!(body_text(&body), "Hello\n\nWorld\n\nBye");
+    }
+
+    #[test]
+    fn empty_layout_cells_leave_no_gaps() {
+        let text = body_text(&html(
+            "<table><tr><td>&nbsp;</td></tr><tr><td><p>Hi</p></td></tr>\
+             <tr><td>&nbsp;</td></tr><tr><td>&nbsp;</td></tr><tr><td><p>Bye</p></td></tr></table>",
+        ));
+
+        assert!(!text.contains("\n\n\n"), "{text:?}");
     }
 
     #[test]
