@@ -5,11 +5,23 @@ use tuilook_model::Action;
 
 pub fn action_for(key: KeyEvent) -> Option<Action> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
-        return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
+        let action = match key.code {
+            KeyCode::Char('c') => Action::Quit,
+            KeyCode::Char('f') => Action::PageDown,
+            KeyCode::Char('b') => Action::PageUp,
+            KeyCode::Char('d') => Action::HalfPageDown,
+            KeyCode::Char('u') => Action::HalfPageUp,
+            _ => return None,
+        };
+        return Some(action);
     }
     let action = match key.code {
         KeyCode::Char('j') | KeyCode::Down => Action::SelectNext,
         KeyCode::Char('k') | KeyCode::Up => Action::SelectPrev,
+        KeyCode::PageDown => Action::PageDown,
+        KeyCode::PageUp => Action::PageUp,
+        KeyCode::Char('G') | KeyCode::End => Action::Bottom,
+        KeyCode::Home => Action::Top,
         KeyCode::Char('l') | KeyCode::Tab => Action::FocusNextPane,
         KeyCode::Char('h') | KeyCode::BackTab => Action::FocusPrevPane,
         KeyCode::Enter => Action::Open,
@@ -53,6 +65,28 @@ mod tests {
     fn ctrl_c_quits() {
         let key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
         assert_eq!(action_for(key), Some(Action::Quit));
+    }
+
+    fn ctrl(c: char) -> Option<Action> {
+        action_for(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
+    }
+
+    #[test]
+    fn page_keys_and_vim_scrolls_page() {
+        assert_eq!(press(KeyCode::PageDown), Some(Action::PageDown));
+        assert_eq!(press(KeyCode::PageUp), Some(Action::PageUp));
+        assert_eq!(ctrl('f'), Some(Action::PageDown));
+        assert_eq!(ctrl('b'), Some(Action::PageUp));
+        assert_eq!(ctrl('d'), Some(Action::HalfPageDown));
+        assert_eq!(ctrl('u'), Some(Action::HalfPageUp));
+    }
+
+    #[test]
+    fn capital_g_home_and_end_jump_to_the_ends() {
+        let shift_g = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
+        assert_eq!(action_for(shift_g), Some(Action::Bottom));
+        assert_eq!(press(KeyCode::End), Some(Action::Bottom));
+        assert_eq!(press(KeyCode::Home), Some(Action::Top));
     }
 
     #[test]
