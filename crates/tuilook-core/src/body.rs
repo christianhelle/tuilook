@@ -20,27 +20,55 @@ pub fn body_text(body: &Body) -> String {
     tidy_lines(&text)
 }
 
-/// Shortens separator rows and collapses runs of blank lines, both of
+/// Longer runs of spaces are table-column padding, not layout worth keeping.
+const MAX_SPACE_RUN: usize = 8;
+
+/// Shortens separator rows, column padding and runs of blank lines, all of
 /// which turn into screenfuls of nothing in a narrow pane.
 fn tidy_lines(text: &str) -> String {
-    let mut lines: Vec<&str> = Vec::new();
+    let mut lines: Vec<String> = Vec::new();
     for line in text.split('\n') {
         if is_blank(line) {
             // Skip leading blanks and any blank after another.
             if lines.last().is_none_or(|last| last.is_empty()) {
                 continue;
             }
-            lines.push("");
+            lines.push(String::new());
         } else if is_separator(line.trim()) {
-            lines.push("───");
+            lines.push("───".to_owned());
         } else {
-            lines.push(line);
+            lines.push(shrink_padding(line));
         }
     }
-    if lines.last() == Some(&"") {
+    if lines.last().is_some_and(|last| last.is_empty()) {
         lines.pop();
     }
     lines.join("\n")
+}
+
+/// Drops long runs of spaces at either end of a line and narrows them in
+/// between to two spaces, so columns stay apart. Short runs are kept, like
+/// the trailing space of a `-- ` signature line.
+fn shrink_padding(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut run = String::new();
+    for c in line.chars() {
+        if c.is_whitespace() {
+            run.push(c);
+            continue;
+        }
+        if run.chars().count() <= MAX_SPACE_RUN {
+            out.push_str(&run);
+        } else if !out.is_empty() {
+            out.push_str("  ");
+        }
+        run.clear();
+        out.push(c);
+    }
+    if run.chars().count() <= MAX_SPACE_RUN {
+        out.push_str(&run);
+    }
+    out
 }
 
 /// Whitespace, or characters that render as nothing.
@@ -129,6 +157,28 @@ mod tests {
             text("Hello\n\n\n   \n\u{a0}\n\t\n\u{200c}\u{a0}\u{34f}\u{ad}\u{feff}\nWorld\n\nBye");
 
         assert_eq!(body_text(&body), "Hello\n\nWorld\n\nBye");
+    }
+
+    #[test]
+    fn column_padding_shrinks_so_it_does_not_wrap_into_empty_rows() {
+        let body = text(&format!(
+            "Order{}#42{}\n{}Total  $9",
+            " ".repeat(500),
+            " ".repeat(300),
+            "\u{a0}".repeat(400)
+        ));
+
+        assert_eq!(body_text(&body), "Order  #42\nTotal  $9");
+    }
+
+    #[test]
+    fn short_indentation_and_spacing_are_kept() {
+        let body = text("    indented code\n> quoted  reply\ntwo  spaces");
+
+        assert_eq!(
+            body_text(&body),
+            "    indented code\n> quoted  reply\ntwo  spaces"
+        );
     }
 
     #[test]
