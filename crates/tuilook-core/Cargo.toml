@@ -5,6 +5,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+html2text = { workspace = true }
 thiserror = { workspace = true }
 tuilook-store = { workspace = true }
 tuilook-model = { workspace = true }
