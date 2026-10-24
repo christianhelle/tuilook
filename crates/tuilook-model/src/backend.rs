@@ -3,8 +3,13 @@ use std::future::Future;
 use crate::{Folder, FolderId, Message, MessageId};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{0}")]
-pub struct BackendError(pub String);
+pub enum BackendError {
+    /// The delta link is no longer valid; the folder must be fully resynced.
+    #[error("the folder's sync state expired")]
+    DeltaExpired,
+    #[error("{0}")]
+    Other(String),
+}
 
 /// One page of changes from a folder's delta query.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

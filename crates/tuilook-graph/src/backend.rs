@@ -98,6 +98,6 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
 
 impl From<GraphError> for BackendError {
     fn from(e: GraphError) -> Self {
-        BackendError(e.to_string())
+        BackendError::Other(e.to_string())
     }
 }
