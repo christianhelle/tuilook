@@ -2,4 +2,4 @@
 
 mod oauth;
 
-pub use oauth::{AuthError, DeviceCode, OAuthClient, OAuthConfig, TokenSet};
+pub use oauth::{AuthError, DeviceCode, OAuthClient, OAuthConfig, Sleeper, TokenSet};

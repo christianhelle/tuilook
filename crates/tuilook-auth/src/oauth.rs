@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use jiff::Timestamp;
 use serde::Deserialize;
@@ -43,9 +43,13 @@ pub struct TokenSet {
     pub expires_at: Timestamp,
 }
 
+/// Waits between polls. Swapped out in tests so they need not wait.
+pub type Sleeper = Arc<dyn Fn(Duration) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+
 pub struct OAuthClient {
     http: reqwest::Client,
     config: OAuthConfig,
+    sleep: Sleeper,
 }
 
 impl OAuthClient {
@@ -53,7 +57,13 @@ impl OAuthClient {
         Self {
             http: reqwest::Client::new(),
             config,
+            sleep: Arc::new(|d| Box::pin(tokio::time::sleep(d))),
         }
+    }
+
+    pub fn with_sleeper(mut self, sleep: Sleeper) -> Self {
+        self.sleep = sleep;
+        self
     }
 
     /// Asks Entra ID for a code the user enters at the verification URL.
@@ -82,7 +92,7 @@ impl OAuthClient {
     pub async fn poll_device_code(&self, code: &DeviceCode) -> Result<TokenSet, AuthError> {
         let mut interval = code.interval;
         loop {
-            tokio::time::sleep(interval).await;
+            (self.sleep)(interval).await;
             let result = self
                 .request_tokens(&[
                     ("grant_type", DEVICE_CODE_GRANT),

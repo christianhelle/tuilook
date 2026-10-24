@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use serde_json::json;
 use tuilook_auth::{AuthError, OAuthClient, OAuthConfig};
@@ -14,6 +17,17 @@ fn client(server: &MockServer) -> OAuthClient {
         client_id: "client-123".to_owned(),
         scopes: vec!["offline_access".to_owned(), "Mail.Read".to_owned()],
     })
+}
+
+/// A client whose poll waits return at once, recording how long they asked for.
+fn client_recording_waits(server: &MockServer) -> (OAuthClient, Arc<Mutex<Vec<Duration>>>) {
+    let waits = Arc::new(Mutex::new(Vec::new()));
+    let recorded = waits.clone();
+    let client = client(server).with_sleeper(Arc::new(move |d| {
+        recorded.lock().unwrap().push(d);
+        Box::pin(async {})
+    }));
+    (client, waits)
 }
 
 async fn mount_device_code(server: &MockServer) {
@@ -42,7 +56,7 @@ fn token_endpoint() -> wiremock::MockBuilder {
     Mock::given(method("POST")).and(path("/common/oauth2/v2.0/token"))
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn polling_waits_while_authorization_is_pending_then_returns_tokens() {
     let server = MockServer::start().await;
     mount_device_code(&server).await;
@@ -66,16 +80,15 @@ async fn polling_waits_while_authorization_is_pending_then_returns_tokens() {
         })))
         .mount(&server)
         .await;
-    let client = client(&server);
+    let (client, waits) = client_recording_waits(&server);
     let code = client.start_device_code().await.unwrap();
-    let started = tokio::time::Instant::now();
 
     let tokens = client.poll_device_code(&code).await.unwrap();
 
     assert_eq!(tokens.access_token, "access-1");
     assert_eq!(tokens.refresh_token.as_deref(), Some("refresh-1"));
     assert!(tokens.expires_at > jiff::Timestamp::now());
-    assert!(started.elapsed() >= Duration::from_secs(15));
+    assert_eq!(*waits.lock().unwrap(), [Duration::from_secs(5); 3]);
 }
 
 #[tokio::test]
@@ -114,7 +127,7 @@ fn tokens_response() -> ResponseTemplate {
     }))
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn slow_down_adds_five_seconds_to_the_poll_interval() {
     let server = MockServer::start().await;
     mount_device_code(&server).await;
@@ -128,17 +141,18 @@ async fn slow_down_adds_five_seconds_to_the_poll_interval() {
         .respond_with(tokens_response())
         .mount(&server)
         .await;
-    let client = client(&server);
+    let (client, waits) = client_recording_waits(&server);
     let code = client.start_device_code().await.unwrap();
-    let started = tokio::time::Instant::now();
 
     client.poll_device_code(&code).await.unwrap();
 
-    // 5s before the first poll, then 5s + 5s before the second.
-    assert_eq!(started.elapsed().as_secs(), 15);
+    assert_eq!(
+        *waits.lock().unwrap(),
+        [Duration::from_secs(5), Duration::from_secs(10)]
+    );
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_declined_sign_in_stops_polling() {
     let server = MockServer::start().await;
     mount_device_code(&server).await;
@@ -147,7 +161,7 @@ async fn a_declined_sign_in_stops_polling() {
         .expect(1)
         .mount(&server)
         .await;
-    let client = client(&server);
+    let (client, _) = client_recording_waits(&server);
     let code = client.start_device_code().await.unwrap();
 
     let error = client.poll_device_code(&code).await.unwrap_err();
@@ -155,7 +169,7 @@ async fn a_declined_sign_in_stops_polling() {
     assert!(matches!(error, AuthError::Declined), "{error:?}");
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn an_expired_code_stops_polling() {
     let server = MockServer::start().await;
     mount_device_code(&server).await;
@@ -164,7 +178,7 @@ async fn an_expired_code_stops_polling() {
         .expect(1)
         .mount(&server)
         .await;
-    let client = client(&server);
+    let (client, _) = client_recording_waits(&server);
     let code = client.start_device_code().await.unwrap();
 
     let error = client.poll_device_code(&code).await.unwrap_err();
