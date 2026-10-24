@@ -6,7 +6,10 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use ratatui::crossterm::event::{self, Event as TermEvent, KeyEventKind};
+use ratatui::{
+    crossterm::event::{self, Event as TermEvent, KeyEventKind},
+    layout::Rect,
+};
 use tokio::sync::mpsc;
 use tuilook_auth::{KeyringStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider};
 use tuilook_core::{Command, run_engine, sync_folders, sync_messages};
@@ -199,6 +202,8 @@ fn run_ui(
                 continue;
             }
             if let Some(action) = keymap.action_for(key) {
+                let size = terminal.size()?;
+                app.viewport = ui::viewport(Rect::new(0, 0, size.width, size.height), &app);
                 let effect = app.update(action);
                 apply(&mut app, &store, &commands, effect)?;
             }
