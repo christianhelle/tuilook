@@ -16,6 +16,10 @@ pub struct OAuthConfig {
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
+    #[error("not signed in; run `tuilook login`")]
+    NotSignedIn,
+    #[error(transparent)]
+    Secrets(#[from] crate::SecretError),
     #[error("sign-in was declined")]
     Declined,
     #[error("the sign-in code expired before it was used")]

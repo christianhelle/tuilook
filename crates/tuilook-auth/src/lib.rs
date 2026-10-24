@@ -1,7 +1,9 @@
 //! Entra ID sign-in: OAuth2 device-code flow, token refresh and storage.
 
 mod oauth;
+mod provider;
 mod secrets;
 
 pub use oauth::{AuthError, DeviceCode, OAuthClient, OAuthConfig, Sleeper, TokenSet};
+pub use provider::TokenProvider;
 pub use secrets::{KeyringStore, MemoryStore, SecretError, SecretStore};
