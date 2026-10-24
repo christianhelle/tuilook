@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 /// Folders Graph exposes under a well-known name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum WellKnown {
@@ -57,10 +59,44 @@ pub struct Folder {
     pub total: u32,
 }
 
-/// Orders folders the way the folder tree shows them: well-known folders
-/// first in Outlook order, then the rest alphabetically.
+/// Orders folders the way the folder tree shows them: each folder is
+/// followed by its subfolders. Siblings put well-known folders first in
+/// Outlook order, then the rest alphabetically. A folder whose parent is
+/// not in the list is shown at the top level.
 pub fn sort_folders(folders: &mut [Folder]) {
     folders.sort_by_cached_key(|f| (f.well_known.is_none(), f.well_known, f.name.to_lowercase()));
+
+    let ids: HashSet<&FolderId> = folders.iter().map(|f| &f.id).collect();
+    let mut children: HashMap<Option<&FolderId>, Vec<usize>> = HashMap::new();
+    for (i, f) in folders.iter().enumerate() {
+        let parent = f.parent_id.as_ref().filter(|p| ids.contains(p));
+        children.entry(parent).or_default().push(i);
+    }
+
+    let mut order = Vec::with_capacity(folders.len());
+    let mut visited = vec![false; folders.len()];
+    // Depth-first; reversed pushes keep siblings in sorted order.
+    let mut stack: Vec<usize> = children
+        .get(&None)
+        .into_iter()
+        .flatten()
+        .rev()
+        .copied()
+        .collect();
+    while let Some(i) = stack.pop() {
+        if std::mem::replace(&mut visited[i], true) {
+            continue;
+        }
+        order.push(i);
+        if let Some(kids) = children.get(&Some(&folders[i].id)) {
+            stack.extend(kids.iter().rev());
+        }
+    }
+    // Folders caught in a parent cycle are never reached from a root.
+    order.extend((0..folders.len()).filter(|&i| !visited[i]));
+
+    let sorted: Vec<Folder> = order.iter().map(|&i| folders[i].clone()).collect();
+    folders.clone_from_slice(&sorted);
 }
 
 #[cfg(test)]
@@ -95,6 +131,56 @@ mod tests {
             names,
             ["Inbox", "Sent Items", "Archive", "bills", "projects"]
         );
+    }
+
+    fn child(name: &str, parent: &str) -> Folder {
+        Folder {
+            parent_id: Some(FolderId(parent.to_owned())),
+            ..folder(name, None)
+        }
+    }
+
+    #[test]
+    fn subfolders_follow_their_parent_depth_first() {
+        let mut folders = vec![
+            child("2026", "Receipts"),
+            folder("Projects", None),
+            child("Receipts", "Inbox"),
+            child("Alpha", "Projects"),
+            folder("Inbox", Some(WellKnown::Inbox)),
+            child("Bills", "Inbox"),
+        ];
+
+        sort_folders(&mut folders);
+
+        let names: Vec<_> = folders.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Inbox", "Bills", "Receipts", "2026", "Projects", "Alpha"]
+        );
+    }
+
+    #[test]
+    fn folders_whose_parent_is_missing_are_shown_at_the_top_level() {
+        let mut folders = vec![
+            child("Orphan", "gone"),
+            folder("Inbox", Some(WellKnown::Inbox)),
+        ];
+
+        sort_folders(&mut folders);
+
+        let names: Vec<_> = folders.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["Inbox", "Orphan"]);
+    }
+
+    #[test]
+    fn folders_in_a_parent_cycle_are_still_listed_once() {
+        let mut folders = vec![child("A", "B"), child("B", "A"), folder("Inbox", None)];
+
+        sort_folders(&mut folders);
+
+        let names: Vec<_> = folders.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["Inbox", "A", "B"]);
     }
 
     #[test]
