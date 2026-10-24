@@ -26,7 +26,8 @@ fn tidy_lines(text: &str) -> String {
     let mut lines: Vec<&str> = Vec::new();
     for line in text.split('\n') {
         if is_blank(line) {
-            if lines.last().is_some_and(|last| last.is_empty()) {
+            // Skip leading blanks and any blank after another.
+            if lines.last().is_none_or(|last| last.is_empty()) {
                 continue;
             }
             lines.push("");
@@ -35,6 +36,9 @@ fn tidy_lines(text: &str) -> String {
         } else {
             lines.push(line);
         }
+    }
+    if lines.last() == Some(&"") {
+        lines.pop();
     }
     lines.join("\n")
 }
@@ -98,7 +102,7 @@ mod tests {
 
         assert_eq!(
             text,
-            "See [the docs][1].\n\nThanks\n\n[1]: https://example.com/docs\n"
+            "See [the docs][1].\n\nThanks\n\n[1]: https://example.com/docs"
         );
     }
 
@@ -108,7 +112,7 @@ mod tests {
             r#"<p>Hi</p><img src="https://cdn.example.com/logo.png" alt="Company logo"><p>Bye</p>"#,
         ));
 
-        assert_eq!(text, "Hi\n\nBye\n");
+        assert_eq!(text, "Hi\n\nBye");
     }
 
     fn text(content: &str) -> Body {
@@ -125,6 +129,13 @@ mod tests {
             text("Hello\n\n\n   \n\u{a0}\n\t\n\u{200c}\u{a0}\u{34f}\u{ad}\u{feff}\nWorld\n\nBye");
 
         assert_eq!(body_text(&body), "Hello\n\nWorld\n\nBye");
+    }
+
+    #[test]
+    fn blank_lines_at_the_start_and_end_are_dropped() {
+        let body = text("\n \n\u{a0}\nHello\n\nWorld\n\n\n");
+
+        assert_eq!(body_text(&body), "Hello\n\nWorld");
     }
 
     #[test]
@@ -156,7 +167,7 @@ mod tests {
             "-".repeat(70)
         )));
 
-        assert_eq!(text, "Hi\n\n───\n\nBye\n");
+        assert_eq!(text, "Hi\n\n───\n\nBye");
     }
 
     #[test]
@@ -170,7 +181,7 @@ mod tests {
     fn a_horizontal_rule_adds_no_dashes() {
         let text = body_text(&html("<p>Above</p><hr><p>Below</p>"));
 
-        assert_eq!(text, "Above\n\nBelow\n");
+        assert_eq!(text, "Above\n\nBelow");
     }
 
     #[test]
@@ -190,9 +201,6 @@ mod tests {
                <p>Read <a href="https://example.com/post">the post</a>.</p>"#,
         ));
 
-        assert_eq!(
-            text,
-            "Read [the post][1].\n\n[1]: https://example.com/post\n"
-        );
+        assert_eq!(text, "Read [the post][1].\n\n[1]: https://example.com/post");
     }
 }

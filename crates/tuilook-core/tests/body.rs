@@ -60,7 +60,7 @@ async fn opening_a_message_fetches_its_body_as_text() {
         .await
         .unwrap();
 
-    assert_eq!(text, "Hello **there**\n");
+    assert_eq!(text, "Hello **there**");
 }
 
 #[tokio::test]
@@ -73,5 +73,5 @@ async fn a_fetched_body_is_served_from_the_cache_afterwards() {
     backend.bodies.clear();
     let text = load_body(&backend, &mut store, &id).await.unwrap();
 
-    assert_eq!(text, "Cached\n");
+    assert_eq!(text, "Cached");
 }
