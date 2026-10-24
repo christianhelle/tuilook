@@ -21,6 +21,17 @@ impl WellKnown {
             _ => None,
         }
     }
+
+    pub fn as_graph_name(self) -> &'static str {
+        match self {
+            Self::Inbox => "inbox",
+            Self::Drafts => "drafts",
+            Self::SentItems => "sentitems",
+            Self::Archive => "archive",
+            Self::DeletedItems => "deleteditems",
+            Self::JunkEmail => "junkemail",
+        }
+    }
 }
 
 /// Graph folder id.
@@ -97,6 +108,20 @@ mod tests {
     #[test]
     fn graph_names_are_case_insensitive() {
         assert_eq!(WellKnown::from_graph_name("Inbox"), Some(WellKnown::Inbox));
+    }
+
+    #[test]
+    fn graph_names_round_trip() {
+        for kind in [
+            WellKnown::Inbox,
+            WellKnown::Drafts,
+            WellKnown::SentItems,
+            WellKnown::Archive,
+            WellKnown::DeletedItems,
+            WellKnown::JunkEmail,
+        ] {
+            assert_eq!(WellKnown::from_graph_name(kind.as_graph_name()), Some(kind));
+        }
     }
 
     #[test]
