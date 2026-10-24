@@ -1,6 +1,6 @@
 mod support;
 
-use std::time::Duration;
+use std::{sync::atomic::Ordering, time::Duration};
 
 use serde_json::{Value, json};
 use tuilook_graph::{GraphError, RetryPolicy};
@@ -132,4 +132,43 @@ async fn client_errors_are_not_retried() {
         "{error:?}"
     );
     assert!(waits.recorded().is_empty());
+}
+
+#[tokio::test]
+async fn an_unauthorized_response_refreshes_the_token_and_retries_once() {
+    let server = MockServer::start().await;
+    Mock::given(path("/me"))
+        .and(header("authorization", "Bearer token-1"))
+        .respond_with(graph_error(401, "InvalidAuthenticationToken"))
+        .mount(&server)
+        .await;
+    Mock::given(path("/me"))
+        .and(header("authorization", "Bearer token-2"))
+        .respond_with(ok())
+        .mount(&server)
+        .await;
+    let (client, tokens, _) = support::client(&server);
+
+    let body: Value = client.get("/me", &[]).await.unwrap();
+
+    assert_eq!(body, json!({"ok": true}));
+    assert_eq!(tokens.invalidations.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_second_unauthorized_response_is_an_error() {
+    let server = MockServer::start().await;
+    Mock::given(path("/me"))
+        .respond_with(graph_error(401, "InvalidAuthenticationToken"))
+        .expect(2)
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+
+    let error = client.get::<Value>("/me", &[]).await.unwrap_err();
+
+    assert!(
+        matches!(&error, GraphError::Status { status, .. } if status.as_u16() == 401),
+        "{error:?}"
+    );
 }

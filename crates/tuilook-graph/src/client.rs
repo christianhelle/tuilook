@@ -84,12 +84,18 @@ impl<T: TokenSource> GraphClient<T> {
             format!("{}{path}", self.base_url.trim_end_matches('/'))
         };
         let mut attempt = 0;
+        let mut reauthenticated = false;
         loop {
             attempt += 1;
             let response = self.send(&url, headers).await?;
             let status = response.status();
             if status.is_success() {
                 return Ok(response.json().await?);
+            }
+            if status == StatusCode::UNAUTHORIZED && !reauthenticated {
+                reauthenticated = true;
+                self.tokens.invalidate().await;
+                continue;
             }
             if !is_retryable(status) || attempt >= self.retry.max_attempts {
                 return Err(status_error(response).await);
