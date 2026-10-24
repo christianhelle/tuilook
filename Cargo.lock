@@ -388,6 +388,7 @@ name = "tuilook-model"
 version = "0.1.0"
 dependencies = [
  "jiff",
+ "thiserror",
 ]
 
 [[package]]
