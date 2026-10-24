@@ -1,0 +1,11 @@
+[package]
+name = "tuilook-tui"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[[bin]]
+name = "tuilook"
+path = "src/main.rs"

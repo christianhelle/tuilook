@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/christianhelle/tuilook"
+
+[workspace.dependencies]
+tuilook-model = { path = "crates/tuilook-model" }
+tuilook-auth = { path = "crates/tuilook-auth" }
+tuilook-graph = { path = "crates/tuilook-graph" }
+tuilook-store = { path = "crates/tuilook-store" }
+tuilook-core = { path = "crates/tuilook-core" }
