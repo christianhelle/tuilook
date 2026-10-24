@@ -6,14 +6,42 @@ const WRAP_WIDTH: usize = 1000;
 /// A terminal cannot show images, and their alt text is mostly noise.
 const HIDE_IMAGES: &str = "img, svg, picture { display: none; }";
 
+/// Lines of at least this many repeated separator characters are shortened.
+const MIN_SEPARATOR_LEN: usize = 10;
+
 /// Renders a message body as plain text, numbering links as footnotes.
 pub fn body_text(body: &Body) -> String {
-    match body.content_type {
+    let text = match body.content_type {
         BodyType::Text => body.content.clone(),
         BodyType::Html => html_to_text(&body.content)
             // Malformed HTML still deserves to be readable.
             .unwrap_or_else(|_| body.content.clone()),
-    }
+    };
+    shorten_separators(&text)
+}
+
+/// Long rows of dashes and the like wrap into screenfuls in a narrow pane.
+fn shorten_separators(text: &str) -> String {
+    text.split('\n')
+        .map(|line| {
+            if is_separator(line.trim()) {
+                "───"
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn is_separator(line: &str) -> bool {
+    let mut chars = line.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    "-=_*~#─━═".contains(first)
+        && chars.all(|c| c == first)
+        && line.chars().count() >= MIN_SEPARATOR_LEN
 }
 
 fn html_to_text(html: &str) -> Result<String, html2text::Error> {
@@ -65,6 +93,42 @@ mod tests {
         ));
 
         assert_eq!(text, "Hi\n\nBye\n");
+    }
+
+    fn text(content: &str) -> Body {
+        Body {
+            content_type: BodyType::Text,
+            content: content.to_owned(),
+        }
+    }
+
+    #[test]
+    fn long_separator_lines_are_shortened() {
+        let body = text(&format!(
+            "Hello\n{}\n  {}  \nBye\n{}",
+            "-".repeat(80),
+            "=".repeat(40),
+            "_".repeat(60)
+        ));
+
+        assert_eq!(body_text(&body), "Hello\n───\n───\nBye\n───");
+    }
+
+    #[test]
+    fn separators_typed_into_html_are_shortened() {
+        let text = body_text(&html(&format!(
+            "<p>Hi</p><p>{}</p><p>Bye</p>",
+            "-".repeat(70)
+        )));
+
+        assert_eq!(text, "Hi\n\n───\n\nBye\n");
+    }
+
+    #[test]
+    fn dashes_inside_text_are_kept() {
+        let body = text("-- \nSigned -- me\n---\n2026-10-25");
+
+        assert_eq!(body_text(&body), "-- \nSigned -- me\n---\n2026-10-25");
     }
 
     #[test]
