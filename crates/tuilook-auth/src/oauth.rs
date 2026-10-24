@@ -78,6 +78,39 @@ impl OAuthClient {
         })
     }
 
+    /// Polls until the user approves, declines, or the code expires.
+    pub async fn poll_device_code(&self, code: &DeviceCode) -> Result<TokenSet, AuthError> {
+        loop {
+            tokio::time::sleep(code.interval).await;
+            let result = self
+                .request_tokens(&[
+                    ("grant_type", DEVICE_CODE_GRANT),
+                    ("client_id", &self.config.client_id),
+                    ("device_code", &code.device_code),
+                ])
+                .await;
+            match result {
+                Err(AuthError::OAuth { error, .. }) if error == "authorization_pending" => {}
+                other => return other,
+            }
+        }
+    }
+
+    async fn request_tokens(&self, form: &[(&str, &str)]) -> Result<TokenSet, AuthError> {
+        let response = self
+            .http
+            .post(self.endpoint("token"))
+            .form(form)
+            .send()
+            .await?;
+        let body: TokenResponse = parse(response).await?;
+        Ok(TokenSet {
+            access_token: body.access_token,
+            refresh_token: body.refresh_token,
+            expires_at: Timestamp::now() + Duration::from_secs(body.expires_in),
+        })
+    }
+
     fn endpoint(&self, name: &str) -> String {
         format!(
             "{}/{}/oauth2/v2.0/{name}",
@@ -85,6 +118,15 @@ impl OAuthClient {
             self.config.tenant
         )
     }
+}
+
+const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+
+#[derive(Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: u64,
 }
 
 #[derive(Deserialize)]
