@@ -133,3 +133,39 @@ async fn a_rejected_refresh_token_signs_the_user_out() {
     assert!(matches!(error, AuthError::NotSignedIn), "{error:?}");
     assert_eq!(secrets.load().unwrap(), None);
 }
+
+#[tokio::test]
+async fn login_shows_the_code_and_stores_the_refresh_token() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/common/oauth2/v2.0/devicecode"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "device_code": "dev-code",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://microsoft.com/devicelogin",
+            "expires_in": 900,
+            "interval": 0,
+            "message": "To sign in..."
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/common/oauth2/v2.0/token"))
+        .and(body_string_contains("device_code=dev-code"))
+        .respond_with(tokens("access-1", "refresh-1", 3600))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let secrets = Arc::new(MemoryStore::default());
+    let provider = provider(&server, secrets.clone());
+    let mut shown = None;
+
+    provider
+        .login(|code| shown = Some(code.user_code.clone()))
+        .await
+        .unwrap();
+
+    assert_eq!(shown.as_deref(), Some("ABCD-EFGH"));
+    assert_eq!(secrets.load().unwrap().as_deref(), Some("refresh-1"));
+    assert_eq!(provider.access_token().await.unwrap(), "access-1");
+}

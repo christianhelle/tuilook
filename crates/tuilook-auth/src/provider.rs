@@ -3,7 +3,7 @@ use std::sync::Arc;
 use jiff::{SignedDuration, Timestamp};
 use tokio::sync::Mutex;
 
-use crate::{AuthError, OAuthClient, SecretStore, TokenSet};
+use crate::{AuthError, DeviceCode, OAuthClient, SecretStore, TokenSet};
 
 /// Refresh this long before the access token actually expires.
 const EXPIRY_MARGIN: SignedDuration = SignedDuration::from_mins(5);
@@ -47,6 +47,19 @@ impl TokenProvider {
         let access_token = tokens.access_token.clone();
         *cached = Some(tokens);
         Ok(access_token)
+    }
+
+    /// Signs in with the device-code flow. `show_code` tells the user where
+    /// to go and what to enter.
+    pub async fn login(&self, show_code: impl FnOnce(&DeviceCode)) -> Result<(), AuthError> {
+        let code = self.oauth.start_device_code().await?;
+        show_code(&code);
+        let tokens = self.oauth.poll_device_code(&code).await?;
+        if let Some(refresh_token) = &tokens.refresh_token {
+            self.secrets.save(refresh_token)?;
+        }
+        *self.cached.lock().await = Some(tokens);
+        Ok(())
     }
 
     /// Forgets the cached access token, e.g. after Graph answered 401.
