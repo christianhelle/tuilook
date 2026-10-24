@@ -83,7 +83,7 @@ fn main() -> Result<()> {
 }
 
 fn token_provider(cli: &Cli) -> Result<TokenProvider> {
-    let Some(client_id) = cli.client_id.clone() else {
+    let Some(client_id) = cli.client_id.clone().filter(|id| !id.is_empty()) else {
         bail!(
             "no client ID: register a public client app in Entra ID, then pass \
              --client-id or set TUILOOK_CLIENT_ID"
