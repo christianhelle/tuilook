@@ -39,8 +39,14 @@ struct Cli {
     /// Entra ID application (client) ID; use your own if your tenant blocks tuilook's.
     #[arg(long, env = "TUILOOK_CLIENT_ID", default_value = DEFAULT_CLIENT_ID, global = true)]
     client_id: Option<String>,
-    /// Tenant to sign in to: common, organizations, consumers or a tenant ID.
-    #[arg(long, env = "TUILOOK_TENANT", default_value = "common", global = true)]
+    /// Tenant to sign in to: consumers (personal accounts), organizations, common
+    /// or a tenant ID. The default app registration only accepts consumers.
+    #[arg(
+        long,
+        env = "TUILOOK_TENANT",
+        default_value = "consumers",
+        global = true
+    )]
     tenant: String,
     /// Browse a built-in sample mailbox instead of signing in.
     #[arg(long)]
@@ -254,6 +260,14 @@ mod tests {
             cli.client_id.as_deref(),
             Some("5de297ab-80a5-4cfc-bdea-38e33b917993")
         );
+    }
+
+    #[test]
+    fn signs_in_to_personal_accounts_by_default() {
+        // The default app registration accepts personal Microsoft accounts only.
+        let cli = Cli::try_parse_from(["tuilook"]).unwrap();
+
+        assert_eq!(cli.tenant, "consumers");
     }
 
     #[test]
