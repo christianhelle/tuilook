@@ -103,3 +103,43 @@ fn upserting_an_existing_message_updates_it() {
         [m]
     );
 }
+
+#[test]
+fn a_folder_remembers_its_delta_link() {
+    let mut store = Store::open_in_memory().unwrap();
+    let inbox = FolderId("inbox".to_owned());
+    store
+        .upsert_folders(&[folder("inbox", "Inbox", None)])
+        .unwrap();
+    assert_eq!(store.delta_link(&inbox).unwrap(), None);
+
+    store
+        .set_delta_link(&inbox, Some("https://delta/1"))
+        .unwrap();
+
+    assert_eq!(
+        store.delta_link(&inbox).unwrap().as_deref(),
+        Some("https://delta/1")
+    );
+}
+
+#[test]
+fn refreshing_folders_keeps_their_delta_links() {
+    let mut store = Store::open_in_memory().unwrap();
+    let inbox = FolderId("inbox".to_owned());
+    store
+        .upsert_folders(&[folder("inbox", "Inbox", None)])
+        .unwrap();
+    store
+        .set_delta_link(&inbox, Some("https://delta/1"))
+        .unwrap();
+
+    store
+        .upsert_folders(&[folder("inbox", "Inbox", None)])
+        .unwrap();
+
+    assert_eq!(
+        store.delta_link(&inbox).unwrap().as_deref(),
+        Some("https://delta/1")
+    );
+}

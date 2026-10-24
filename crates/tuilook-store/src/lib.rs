@@ -3,7 +3,7 @@
 use std::sync::LazyLock;
 
 use jiff::Timestamp;
-use rusqlite::{Connection, Row, types::Type};
+use rusqlite::{Connection, OptionalExtension, Row, types::Type};
 use rusqlite_migration::{M, Migrations};
 use tuilook_model::{Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders};
 
@@ -120,6 +120,27 @@ impl Store {
             .query_map([&folder.0], message_from_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(messages)
+    }
+
+    /// Where the next delta sync of `folder` resumes, if it has synced before.
+    pub fn delta_link(&self, folder: &FolderId) -> Result<Option<String>> {
+        let link = self
+            .conn
+            .query_row(
+                "SELECT delta_link FROM folders WHERE id = ?1",
+                [&folder.0],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(link.flatten())
+    }
+
+    pub fn set_delta_link(&mut self, folder: &FolderId, link: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE folders SET delta_link = ?2 WHERE id = ?1",
+            (&folder.0, link),
+        )?;
+        Ok(())
     }
 
     /// Folders in folder tree order.
