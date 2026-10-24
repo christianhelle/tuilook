@@ -123,3 +123,23 @@ fn a_scrolled_reading_pane_starts_further_down() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn viewport_measures_what_each_pane_can_show() {
+    let mut app = sample_app();
+    let long_line = "word ".repeat(20); // 100 columns: three rows at 34 wide
+    app.body_loaded(MessageId("m1".to_owned()), format!("Hi\n{long_line}"));
+
+    let viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 90, 12), &app);
+
+    assert_eq!(
+        viewport,
+        tuilook_tui::app::Viewport {
+            folders: 9,
+            messages: 4,
+            reader: 9,
+            // From, Subject, blank, "Hi", then the long line wrapped in three
+            reader_lines: 7,
+        }
+    );
+}

@@ -9,17 +9,41 @@ use ratatui::{
 };
 use tuilook_model::folder_depths;
 
-use crate::app::{AppState, Pane};
+use crate::app::{AppState, Pane, Viewport};
 
-pub fn draw(frame: &mut Frame, app: &AppState) {
-    let [main, status] =
-        Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(frame.area());
+/// Each message takes this many rows in the message list.
+const MESSAGE_ROWS: usize = 2;
+
+struct Panes {
+    folders: Rect,
+    messages: Rect,
+    reader: Rect,
+    status: Rect,
+}
+
+fn panes(area: Rect) -> Panes {
+    let [main, status] = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
     let [folders, messages, reader] = Layout::horizontal([
         Constraint::Percentage(20),
         Constraint::Percentage(40),
         Constraint::Percentage(40),
     ])
     .areas(main);
+    Panes {
+        folders,
+        messages,
+        reader,
+        status,
+    }
+}
+
+pub fn draw(frame: &mut Frame, app: &AppState) {
+    let Panes {
+        folders,
+        messages,
+        reader,
+        status,
+    } = panes(frame.area());
 
     draw_folders(frame, app, folders);
     draw_messages(frame, app, messages);
@@ -82,10 +106,20 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
 
 fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
     let block = pane_block(app, Pane::Reader, "Reading");
-    let Some(m) = app.messages.get(app.selected_message) else {
+    let Some(text) = reader_paragraph(app) else {
         frame.render_widget(block, area);
         return;
     };
+    frame.render_widget(
+        text.block(block)
+            .scroll((app.reader_scroll.try_into().unwrap_or(u16::MAX), 0)),
+        area,
+    );
+}
+
+/// The selected message's headers and body, wrapped to the pane.
+fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
+    let m = app.messages.get(app.selected_message)?;
     let mut text = vec![
         Line::raw(format!("From: {} <{}>", m.from_name, m.from_addr)),
         Line::raw(format!("Subject: {}", m.subject)),
@@ -94,11 +128,26 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
     // The preview stands in until core has loaded the body.
     let body = app.body.as_deref().unwrap_or(&m.preview);
     text.extend(body.lines().map(|l| Line::raw(l.to_owned())));
-    frame.render_widget(
-        Paragraph::new(text)
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .scroll((app.reader_scroll.try_into().unwrap_or(u16::MAX), 0)),
-        area,
-    );
+    Some(Paragraph::new(text).wrap(Wrap { trim: false }))
+}
+
+/// What each pane can show in `area`, for paging and scroll limits.
+pub fn viewport(area: Rect, app: &AppState) -> Viewport {
+    let panes = panes(area);
+    // Every pane has a one-cell border all round.
+    let inner = |r: Rect| {
+        (
+            r.width.saturating_sub(2),
+            usize::from(r.height.saturating_sub(2)),
+        )
+    };
+    let (_, folders) = inner(panes.folders);
+    let (_, messages) = inner(panes.messages);
+    let (reader_width, reader) = inner(panes.reader);
+    Viewport {
+        folders,
+        messages: messages / MESSAGE_ROWS,
+        reader,
+        reader_lines: reader_paragraph(app).map_or(0, |p| p.line_count(reader_width)),
+    }
 }
