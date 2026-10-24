@@ -13,4 +13,5 @@ name = "tuilook"
 path = "src/main.rs"
 
 [dev-dependencies]
+insta = { workspace = true }
 jiff = { workspace = true }

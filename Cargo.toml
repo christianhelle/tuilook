@@ -19,3 +19,4 @@ rusqlite_migration = "2.6.0"
 rusqlite = { version = "0.40", features = ["bundled"] }
 tokio = { version = "1.54", features = ["macros", "rt-multi-thread"] }
 ratatui = "0.30.2"
+insta = "1.49.0"

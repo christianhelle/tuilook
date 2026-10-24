@@ -1,0 +1,16 @@
+---
+source: crates/tuilook-tui/tests/render.rs
+expression: render(&app)
+---
+"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"┃> Inbox (2)     ┃│No messages                       ││                                  │"
+"┃  Sent Items    ┃│                                  ││                                  │"
+"┃  Projects      ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" q quit · Tab/h/l switch pane · j/k move · Enter open                                     "
