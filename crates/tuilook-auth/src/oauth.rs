@@ -80,8 +80,9 @@ impl OAuthClient {
 
     /// Polls until the user approves, declines, or the code expires.
     pub async fn poll_device_code(&self, code: &DeviceCode) -> Result<TokenSet, AuthError> {
+        let mut interval = code.interval;
         loop {
-            tokio::time::sleep(code.interval).await;
+            tokio::time::sleep(interval).await;
             let result = self
                 .request_tokens(&[
                     ("grant_type", DEVICE_CODE_GRANT),
@@ -90,7 +91,13 @@ impl OAuthClient {
                 ])
                 .await;
             match result {
-                Err(AuthError::OAuth { error, .. }) if error == "authorization_pending" => {}
+                Err(AuthError::OAuth { error, description }) => match error.as_str() {
+                    "authorization_pending" => {}
+                    "slow_down" => interval += SLOW_DOWN_STEP,
+                    "authorization_declined" => return Err(AuthError::Declined),
+                    "expired_token" => return Err(AuthError::Expired),
+                    _ => return Err(AuthError::OAuth { error, description }),
+                },
                 other => return other,
             }
         }
@@ -119,6 +126,9 @@ impl OAuthClient {
         )
     }
 }
+
+/// RFC 8628 §3.5: back off by five seconds on `slow_down`.
+const SLOW_DOWN_STEP: Duration = Duration::from_secs(5);
 
 const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 

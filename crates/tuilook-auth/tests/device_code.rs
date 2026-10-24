@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde_json::json;
-use tuilook_auth::{OAuthClient, OAuthConfig};
+use tuilook_auth::{AuthError, OAuthClient, OAuthConfig};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{body_string_contains, method, path},
@@ -103,4 +103,71 @@ async fn start_returns_the_code_the_user_must_enter() {
     assert_eq!(code.verification_uri, "https://microsoft.com/devicelogin");
     assert_eq!(code.message, "To sign in, use a web browser...");
     assert_eq!(code.interval, Duration::from_secs(5));
+}
+
+fn tokens_response() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({
+        "token_type": "Bearer",
+        "access_token": "access-1",
+        "refresh_token": "refresh-1",
+        "expires_in": 3600
+    }))
+}
+
+#[tokio::test(start_paused = true)]
+async fn slow_down_adds_five_seconds_to_the_poll_interval() {
+    let server = MockServer::start().await;
+    mount_device_code(&server).await;
+    token_endpoint()
+        .respond_with(oauth_error("slow_down"))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    token_endpoint()
+        .respond_with(tokens_response())
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    let code = client.start_device_code().await.unwrap();
+    let started = tokio::time::Instant::now();
+
+    client.poll_device_code(&code).await.unwrap();
+
+    // 5s before the first poll, then 5s + 5s before the second.
+    assert_eq!(started.elapsed().as_secs(), 15);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_declined_sign_in_stops_polling() {
+    let server = MockServer::start().await;
+    mount_device_code(&server).await;
+    token_endpoint()
+        .respond_with(oauth_error("authorization_declined"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    let code = client.start_device_code().await.unwrap();
+
+    let error = client.poll_device_code(&code).await.unwrap_err();
+
+    assert!(matches!(error, AuthError::Declined), "{error:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_expired_code_stops_polling() {
+    let server = MockServer::start().await;
+    mount_device_code(&server).await;
+    token_endpoint()
+        .respond_with(oauth_error("expired_token"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    let code = client.start_device_code().await.unwrap();
+
+    let error = client.poll_device_code(&code).await.unwrap_err();
+
+    assert!(matches!(error, AuthError::Expired), "{error:?}");
 }
