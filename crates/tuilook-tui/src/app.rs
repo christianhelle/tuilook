@@ -25,6 +25,8 @@ pub struct Viewport {
     pub messages: usize,
     /// Body lines that fit in the reading pane.
     pub reader: usize,
+    /// Lines the reading pane's content takes once wrapped.
+    pub reader_lines: usize,
 }
 
 /// Everything the UI shows. Rendering is a pure function of this state.
@@ -41,6 +43,8 @@ pub struct AppState {
     /// Shown in the status bar until the next error replaces it.
     pub status: Option<String>,
     pub viewport: Viewport,
+    /// Lines of the reading pane scrolled out of view at the top.
+    pub reader_scroll: usize,
 }
 
 impl AppState {
@@ -120,6 +124,7 @@ impl AppState {
     /// Drops the old body and asks for the newly selected one.
     fn selection_changed(&mut self) -> Option<Effect> {
         self.body = None;
+        self.reader_scroll = 0;
         self.selected().map(|m| Effect::LoadBody(m.id.clone()))
     }
 
@@ -155,7 +160,15 @@ impl AppState {
                     None
                 }
             }
-            Pane::Reader => None,
+            Pane::Reader => {
+                // Scroll until the last line is at the bottom of the pane.
+                let max = self
+                    .viewport
+                    .reader_lines
+                    .saturating_sub(self.viewport.reader);
+                self.reader_scroll = self.reader_scroll.saturating_add_signed(delta).min(max);
+                None
+            }
         }
     }
 }
@@ -240,7 +253,69 @@ mod tests {
             folders,
             messages,
             reader,
+            reader_lines: 0,
         }
+    }
+
+    /// A message open in the reading pane, which shows `visible` of its
+    /// `lines` lines.
+    fn reading(visible: usize, lines: usize) -> AppState {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.focus = Pane::Reader;
+        app.viewport = Viewport {
+            reader: visible,
+            reader_lines: lines,
+            ..Default::default()
+        };
+        app
+    }
+
+    #[test]
+    fn j_and_k_scroll_the_reading_pane_within_the_body() {
+        let mut app = reading(10, 12);
+
+        assert_eq!(app.update(Action::SelectNext), None);
+        app.update(Action::SelectNext);
+        app.update(Action::SelectNext);
+        assert_eq!(app.reader_scroll, 2, "stops when the last line is in view");
+
+        app.update(Action::SelectPrev);
+        assert_eq!(app.reader_scroll, 1);
+        assert_eq!(app.selected_message, 0);
+    }
+
+    #[test]
+    fn the_reading_pane_pages_and_jumps() {
+        let mut app = reading(10, 100);
+
+        app.update(Action::PageDown);
+        assert_eq!(app.reader_scroll, 10);
+        app.update(Action::HalfPageDown);
+        assert_eq!(app.reader_scroll, 15);
+        app.update(Action::Bottom);
+        assert_eq!(app.reader_scroll, 90);
+        app.update(Action::Top);
+        assert_eq!(app.reader_scroll, 0);
+    }
+
+    #[test]
+    fn a_body_that_fits_does_not_scroll() {
+        let mut app = reading(10, 5);
+
+        app.update(Action::PageDown);
+
+        assert_eq!(app.reader_scroll, 0);
+    }
+
+    #[test]
+    fn another_message_starts_at_the_top() {
+        let mut app = reading(10, 100);
+        app.update(Action::PageDown);
+        app.focus = Pane::Messages;
+
+        app.update(Action::SelectNext);
+
+        assert_eq!(app.reader_scroll, 0);
     }
 
     #[test]
