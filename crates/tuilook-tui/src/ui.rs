@@ -95,7 +95,10 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
     let body = app.body.as_deref().unwrap_or(&m.preview);
     text.extend(body.lines().map(|l| Line::raw(l.to_owned())));
     frame.render_widget(
-        Paragraph::new(text).block(block).wrap(Wrap { trim: false }),
+        Paragraph::new(text)
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .scroll((app.reader_scroll.try_into().unwrap_or(u16::MAX), 0)),
         area,
     );
 }

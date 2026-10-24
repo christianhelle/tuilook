@@ -113,3 +113,13 @@ fn subfolders_are_indented_under_their_parent() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn a_scrolled_reading_pane_starts_further_down() {
+    let mut app = sample_app();
+    let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
+    app.body_loaded(MessageId("m1".to_owned()), body.join("\n"));
+    app.reader_scroll = 5;
+
+    insta::assert_snapshot!(render(&app));
+}
