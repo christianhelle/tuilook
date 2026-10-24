@@ -5,6 +5,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+tuilook-model = { workspace = true }
 
 [[bin]]
 name = "tuilook"

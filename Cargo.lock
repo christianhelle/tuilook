@@ -439,6 +439,9 @@ dependencies = [
 [[package]]
 name = "tuilook-tui"
 version = "0.1.0"
+dependencies = [
+ "tuilook-model",
+]
 
 [[package]]
 name = "unicode-ident"
