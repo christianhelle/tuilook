@@ -1766,10 +1766,14 @@ dependencies = [
 name = "tuilook-tui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "insta",
  "jiff",
  "ratatui",
+ "tokio",
+ "tuilook-core",
  "tuilook-model",
+ "tuilook-store",
 ]
 
 [[package]]

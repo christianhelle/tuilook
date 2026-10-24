@@ -5,6 +5,11 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+jiff = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tuilook-store = { workspace = true }
+tuilook-core = { workspace = true }
 ratatui = { workspace = true }
 tuilook-model = { workspace = true }
 
@@ -14,4 +19,3 @@ path = "src/main.rs"
 
 [dev-dependencies]
 insta = { workspace = true }
-jiff = { workspace = true }
