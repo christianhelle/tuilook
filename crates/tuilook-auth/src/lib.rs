@@ -5,5 +5,5 @@ mod provider;
 mod secrets;
 
 pub use oauth::{AuthError, DeviceCode, OAuthClient, OAuthConfig, Sleeper, TokenSet};
-pub use provider::TokenProvider;
+pub use provider::{TokenProvider, TokenSource};
 pub use secrets::{KeyringStore, MemoryStore, SecretError, SecretStore};

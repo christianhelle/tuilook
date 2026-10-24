@@ -67,3 +67,21 @@ impl TokenProvider {
         *self.cached.lock().await = None;
     }
 }
+
+/// Something that hands out Graph access tokens.
+pub trait TokenSource: Send + Sync {
+    fn access_token(&self) -> impl Future<Output = Result<String, AuthError>> + Send;
+
+    /// The last token was rejected; the next call must fetch a new one.
+    fn invalidate(&self) -> impl Future<Output = ()> + Send;
+}
+
+impl TokenSource for TokenProvider {
+    async fn access_token(&self) -> Result<String, AuthError> {
+        TokenProvider::access_token(self).await
+    }
+
+    async fn invalidate(&self) {
+        TokenProvider::invalidate(self).await
+    }
+}
