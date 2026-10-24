@@ -55,6 +55,8 @@ impl AppState {
             Action::PageUp => return self.move_selection(-self.page()),
             Action::HalfPageDown => return self.move_selection(self.page() / 2),
             Action::HalfPageUp => return self.move_selection(-self.page() / 2),
+            Action::Top => return self.move_selection(-isize::MAX),
+            Action::Bottom => return self.move_selection(isize::MAX),
             Action::Open => self.open(),
         }
         None
@@ -266,6 +268,15 @@ mod tests {
         assert_eq!(app.update(Action::PageDown), load_body("m6"));
         assert_eq!(app.update(Action::PageDown), None);
         assert_eq!(app.selected_message, 6);
+    }
+
+    #[test]
+    fn top_and_bottom_jump_to_the_ends_of_the_list() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+
+        assert_eq!(app.update(Action::Bottom), load_body("m2"));
+        assert_eq!(app.update(Action::Bottom), None);
+        assert_eq!(app.update(Action::Top), load_body("m0"));
     }
 
     #[test]
