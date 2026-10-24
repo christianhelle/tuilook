@@ -83,22 +83,57 @@ impl<T: TokenSource> GraphClient<T> {
         } else {
             format!("{}{path}", self.base_url.trim_end_matches('/'))
         };
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let response = self.send(&url, headers).await?;
+            let status = response.status();
+            if status.is_success() {
+                return Ok(response.json().await?);
+            }
+            if !is_retryable(status) || attempt >= self.retry.max_attempts {
+                return Err(status_error(response).await);
+            }
+            let wait = retry_after(&response).unwrap_or_else(|| self.backoff(attempt));
+            (self.sleep)(wait).await;
+        }
+    }
+
+    async fn send(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+    ) -> Result<reqwest::Response, GraphError> {
         let _permit = self
             .limit
             .acquire()
             .await
             .expect("semaphore is never closed");
         let token = self.tokens.access_token().await?;
-        let mut request = self.http.get(&url).bearer_auth(token);
+        let mut request = self.http.get(url).bearer_auth(token);
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
-        let response = request.send().await?;
-        if response.status().is_success() {
-            return Ok(response.json().await?);
-        }
-        Err(status_error(response).await)
+        Ok(request.send().await?)
     }
+
+    /// Exponential backoff for the given 1-based attempt, plus jitter.
+    fn backoff(&self, attempt: u32) -> Duration {
+        let base = self.retry.base_delay;
+        let exponential = base.saturating_mul(1 << (attempt - 1).min(16));
+        let jitter = base.mul_f64(fastrand::f64());
+        (exponential + jitter).min(self.retry.max_delay)
+    }
+}
+
+fn is_retryable(status: StatusCode) -> bool {
+    status == StatusCode::TOO_MANY_REQUESTS
+        || (status.is_server_error() && status != StatusCode::NOT_IMPLEMENTED)
+}
+
+fn retry_after(response: &reqwest::Response) -> Option<Duration> {
+    let seconds = response.headers().get("retry-after")?.to_str().ok()?;
+    Some(Duration::from_secs(seconds.trim().parse().ok()?))
 }
 
 #[derive(serde::Deserialize)]
