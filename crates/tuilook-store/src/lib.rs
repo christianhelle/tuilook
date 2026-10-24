@@ -2,9 +2,10 @@
 
 use std::sync::LazyLock;
 
-use rusqlite::{Connection, Row};
+use jiff::Timestamp;
+use rusqlite::{Connection, Row, types::Type};
 use rusqlite_migration::{M, Migrations};
-use tuilook_model::{Folder, FolderId, WellKnown, sort_folders};
+use tuilook_model::{Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders};
 
 static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
     Migrations::new(vec![M::up(include_str!(
@@ -65,6 +66,62 @@ impl Store {
         Ok(())
     }
 
+    pub fn upsert_messages(&mut self, messages: &[Message]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO messages (
+                     id, folder_id, conversation_id, subject, from_name, from_addr,
+                     received_at, is_read, flagged, importance, has_attachments, preview)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ON CONFLICT (id) DO UPDATE SET
+                     folder_id = excluded.folder_id,
+                     conversation_id = excluded.conversation_id,
+                     subject = excluded.subject,
+                     from_name = excluded.from_name,
+                     from_addr = excluded.from_addr,
+                     received_at = excluded.received_at,
+                     is_read = excluded.is_read,
+                     flagged = excluded.flagged,
+                     importance = excluded.importance,
+                     has_attachments = excluded.has_attachments,
+                     preview = excluded.preview",
+            )?;
+            for m in messages {
+                stmt.execute((
+                    &m.id.0,
+                    &m.folder_id.0,
+                    &m.conversation_id,
+                    &m.subject,
+                    &m.from_name,
+                    &m.from_addr,
+                    m.received_at.as_millisecond(),
+                    m.is_read,
+                    m.flagged,
+                    importance_to_str(m.importance),
+                    m.has_attachments,
+                    &m.preview,
+                ))?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Messages in one folder, newest first.
+    pub fn messages_in(&self, folder: &FolderId) -> Result<Vec<Message>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, folder_id, conversation_id, subject, from_name, from_addr,
+                    received_at, is_read, flagged, importance, has_attachments, preview
+             FROM messages WHERE folder_id = ?1
+             ORDER BY received_at DESC",
+        )?;
+        let messages = stmt
+            .query_map([&folder.0], message_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(messages)
+    }
+
     /// Folders in folder tree order.
     pub fn folders(&self) -> Result<Vec<Folder>> {
         let mut stmt = self
@@ -90,6 +147,42 @@ fn folder_from_row(row: &Row) -> rusqlite::Result<Folder> {
         unread: row.get(4)?,
         total: row.get(5)?,
     })
+}
+
+fn message_from_row(row: &Row) -> rusqlite::Result<Message> {
+    let received_at = row.get(6)?;
+    Ok(Message {
+        id: MessageId(row.get(0)?),
+        folder_id: FolderId(row.get(1)?),
+        conversation_id: row.get(2)?,
+        subject: row.get(3)?,
+        from_name: row.get(4)?,
+        from_addr: row.get(5)?,
+        received_at: Timestamp::from_millisecond(received_at).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(6, Type::Integer, Box::new(e))
+        })?,
+        is_read: row.get(7)?,
+        flagged: row.get(8)?,
+        importance: importance_from_str(&row.get::<_, String>(9)?),
+        has_attachments: row.get(10)?,
+        preview: row.get(11)?,
+    })
+}
+
+fn importance_to_str(importance: Importance) -> &'static str {
+    match importance {
+        Importance::Low => "low",
+        Importance::Normal => "normal",
+        Importance::High => "high",
+    }
+}
+
+fn importance_from_str(s: &str) -> Importance {
+    match s {
+        "low" => Importance::Low,
+        "high" => Importance::High,
+        _ => Importance::Normal,
+    }
 }
 
 #[cfg(test)]
