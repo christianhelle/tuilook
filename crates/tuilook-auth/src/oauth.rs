@@ -127,7 +127,7 @@ impl OAuthClient {
     }
 }
 
-/// RFC 8628 §3.5: back off by five seconds on `slow_down`.
+/// RFC 8628 section 3.5: back off by five seconds on `slow_down`.
 const SLOW_DOWN_STEP: Duration = Duration::from_secs(5);
 
 const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
