@@ -1,8 +1,8 @@
-//! Sample mailbox served by a [`FakeBackend`] until Graph sign-in exists.
+//! Sample mailbox served by a [`FakeBackend`] for `tuilook --demo`.
 
 use jiff::Timestamp;
 use tuilook_core::fake::FakeBackend;
-use tuilook_model::{Folder, FolderId, Importance, Message, MessageId, WellKnown};
+use tuilook_model::{Body, BodyType, Folder, FolderId, Importance, Message, MessageId, WellKnown};
 
 pub fn backend() -> FakeBackend {
     let folders = vec![
@@ -58,8 +58,24 @@ pub fn backend() -> FakeBackend {
         "2026-10-20T09:00:00Z",
         true,
     )];
+    let bodies = [&inbox, &sent, &projects]
+        .into_iter()
+        .flatten()
+        .map(|m| {
+            let html = format!(
+                r#"<p>Hi,</p><p>{}</p><p>More at <a href="https://example.com/{}">example.com</a>.</p>"#,
+                m.preview, m.id.0
+            );
+            let body = Body {
+                content_type: BodyType::Html,
+                content: html,
+            };
+            (m.id.clone(), body)
+        })
+        .collect();
     FakeBackend {
         folders,
+        bodies,
         messages: [
             (FolderId("inbox".to_owned()), inbox),
             (FolderId("sent".to_owned()), sent),
