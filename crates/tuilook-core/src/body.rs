@@ -64,4 +64,17 @@ mod tests {
 
         assert_eq!(text, "Hi\n\nBye\n");
     }
+
+    #[test]
+    fn links_around_only_an_image_are_left_out_too() {
+        let text = body_text(&html(
+            r#"<p><a href="https://shop.example.com/sale"><img src="banner.png" alt="Sale!"></a></p>
+               <p>Read <a href="https://example.com/post">the post</a>.</p>"#,
+        ));
+
+        assert_eq!(
+            text,
+            "Read [the post][1].\n\n[1]: https://example.com/post\n"
+        );
+    }
 }
