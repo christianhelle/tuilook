@@ -3,7 +3,7 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, List, ListItem, ListState, Paragraph, Wrap},
 };
@@ -23,10 +23,11 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     draw_folders(frame, app, folders);
     draw_messages(frame, app, messages);
     draw_reader(frame, app, reader);
-    frame.render_widget(
-        Line::from(" q quit · Tab/h/l switch pane · j/k move · Enter open"),
-        status,
-    );
+    let status_line = match &app.status {
+        Some(error) => Line::styled(format!(" {error}"), Style::new().fg(Color::Red)),
+        None => Line::from(" q quit · Tab/h/l switch pane · j/k move · Enter open"),
+    };
+    frame.render_widget(status_line, status);
 }
 
 fn pane_block(app: &AppState, pane: Pane, title: &str) -> Block<'static> {
@@ -83,12 +84,14 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
         frame.render_widget(block, area);
         return;
     };
-    let text = vec![
+    let mut text = vec![
         Line::raw(format!("From: {} <{}>", m.from_name, m.from_addr)),
         Line::raw(format!("Subject: {}", m.subject)),
         Line::raw(""),
-        Line::raw(m.preview.clone()),
     ];
+    // The preview stands in until core has loaded the body.
+    let body = app.body.as_deref().unwrap_or(&m.preview);
+    text.extend(body.lines().map(|l| Line::raw(l.to_owned())));
     frame.render_widget(
         Paragraph::new(text).block(block).wrap(Wrap { trim: false }),
         area,

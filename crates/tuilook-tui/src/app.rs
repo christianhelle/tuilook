@@ -26,6 +26,8 @@ pub struct AppState {
     pub selected_message: usize,
     /// The selected message's body, once core has loaded it.
     pub body: Option<String>,
+    /// Shown in the status bar until the next error replaces it.
+    pub status: Option<String>,
 }
 
 impl AppState {
@@ -79,6 +81,10 @@ impl AppState {
             }
             None => self.set_messages(messages),
         }
+    }
+
+    pub fn show_error(&mut self, message: String) {
+        self.status = Some(message);
     }
 
     /// Shows a body core loaded, unless the user has moved on.

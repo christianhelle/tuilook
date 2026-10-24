@@ -76,3 +76,23 @@ fn empty_folder_says_so() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn reading_pane_shows_the_loaded_body() {
+    let mut app = sample_app();
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "Dear Charles,\n\nThe engine weaves algebraic patterns.\n\n[1]: https://example.com"
+            .to_owned(),
+    );
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn status_bar_shows_the_last_error() {
+    let mut app = sample_app();
+    app.show_error("Graph returned 503 Service Unavailable".to_owned());
+
+    insta::assert_snapshot!(render(&app));
+}

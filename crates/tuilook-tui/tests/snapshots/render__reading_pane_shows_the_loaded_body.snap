@@ -1,0 +1,16 @@
+---
+source: crates/tuilook-tui/tests/render.rs
+expression: render(&app)
+---
+"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"┃> Inbox (2)     ┃│> Ada                             ││From: Ada <ada@example.com>       │"
+"┃  Sent Items    ┃│    Analytical engine             ││Subject: Analytical engine        │"
+"┃  Projects      ┃│  Grace                           ││                                  │"
+"┃                ┃│    Compiler draft                ││Dear Charles,                     │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││The engine weaves algebraic       │"
+"┃                ┃│                                  ││patterns.                         │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││[1]: https://example.com          │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" q quit · Tab/h/l switch pane · j/k move · Enter open                                     "
