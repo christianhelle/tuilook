@@ -5,6 +5,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+keyring = { workspace = true }
 jiff = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
