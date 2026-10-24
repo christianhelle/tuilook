@@ -5,4 +5,4 @@ pub mod fake;
 mod sync;
 
 pub use body::body_text;
-pub use sync::{SyncError, sync_folders, sync_messages};
+pub use sync::{SyncError, load_body, sync_folders, sync_messages};

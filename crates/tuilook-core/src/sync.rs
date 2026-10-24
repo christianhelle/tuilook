@@ -1,4 +1,4 @@
-use tuilook_model::{BackendError, FolderId, MailBackend};
+use tuilook_model::{BackendError, FolderId, MailBackend, MessageId};
 use tuilook_store::{Store, StoreError};
 
 #[derive(Debug, thiserror::Error)]
@@ -37,4 +37,21 @@ pub async fn sync_messages(
     store.delete_messages(&page.removed)?;
     store.set_delta_link(folder, page.delta_link.as_deref())?;
     Ok(())
+}
+
+/// The text of a message body, fetched once and then served from the store.
+pub async fn load_body(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    message: &MessageId,
+) -> Result<String, SyncError> {
+    let body = match store.body(message)? {
+        Some(body) => body,
+        None => {
+            let body = backend.fetch_body(message).await?;
+            store.put_body(message, &body)?;
+            body
+        }
+    };
+    Ok(crate::body_text(&body))
 }
