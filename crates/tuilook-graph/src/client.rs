@@ -16,6 +16,11 @@ pub enum GraphError {
     Auth(#[from] AuthError),
     #[error(transparent)]
     Http(#[from] reqwest::Error),
+    #[error("unexpected response from {url}: {source}")]
+    Decode {
+        url: String,
+        source: serde_json::Error,
+    },
     #[error("Graph returned {status}: {code}: {message}")]
     Status {
         status: StatusCode,
@@ -90,7 +95,11 @@ impl<T: TokenSource> GraphClient<T> {
             let response = self.send(&url, headers).await?;
             let status = response.status();
             if status.is_success() {
-                return Ok(response.json().await?);
+                let body = response.text().await?;
+                return serde_json::from_str(&body).map_err(|source| GraphError::Decode {
+                    url: url.clone(),
+                    source,
+                });
             }
             if status == StatusCode::UNAUTHORIZED && !reauthenticated {
                 reauthenticated = true;

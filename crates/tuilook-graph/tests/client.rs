@@ -195,3 +195,27 @@ async fn at_most_four_requests_are_in_flight() {
         started.elapsed()
     );
 }
+
+#[tokio::test]
+async fn a_body_that_does_not_match_says_which_field_is_wrong() {
+    #[derive(Debug, serde::Deserialize)]
+    #[allow(dead_code)]
+    struct Me {
+        id: String,
+    }
+    let server = MockServer::start().await;
+    Mock::given(path("/me"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": null})))
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+
+    let error = client.get::<Me>("/me", &[]).await.unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("/me"), "{message}");
+    assert!(
+        message.contains("invalid type: null, expected a string"),
+        "{message}"
+    );
+}
