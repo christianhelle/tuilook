@@ -440,6 +440,7 @@ dependencies = [
 name = "tuilook-tui"
 version = "0.1.0"
 dependencies = [
+ "jiff",
  "tuilook-model",
 ]
 

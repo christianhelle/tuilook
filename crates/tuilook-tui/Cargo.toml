@@ -10,3 +10,6 @@ tuilook-model = { workspace = true }
 [[bin]]
 name = "tuilook"
 path = "src/main.rs"
+
+[dev-dependencies]
+jiff = { workspace = true }

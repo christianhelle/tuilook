@@ -38,13 +38,23 @@ impl AppState {
         None
     }
 
+    /// Shows a newly loaded folder's messages, selecting the first.
+    pub fn set_messages(&mut self, messages: Vec<Message>) {
+        self.messages = messages;
+        self.selected_message = 0;
+    }
+
     fn move_selection(&mut self, delta: isize) -> Option<Effect> {
         match self.focus {
             Pane::Folders => {
                 let moved = step(&mut self.selected_folder, self.folders.len(), delta);
                 moved.then(|| Effect::LoadFolder(self.folders[self.selected_folder].id.clone()))
             }
-            Pane::Messages | Pane::Reader => None,
+            Pane::Messages => {
+                step(&mut self.selected_message, self.messages.len(), delta);
+                None
+            }
+            Pane::Reader => None,
         }
     }
 }
@@ -98,6 +108,55 @@ mod tests {
             folders: ids.iter().map(|id| folder(id)).collect(),
             ..Default::default()
         }
+    }
+
+    fn message(id: &str) -> Message {
+        Message {
+            id: tuilook_model::MessageId(id.to_owned()),
+            folder_id: FolderId("a".to_owned()),
+            conversation_id: String::new(),
+            subject: id.to_owned(),
+            from_name: String::new(),
+            from_addr: String::new(),
+            received_at: jiff::Timestamp::UNIX_EPOCH,
+            is_read: false,
+            flagged: false,
+            importance: Default::default(),
+            has_attachments: false,
+            preview: String::new(),
+        }
+    }
+
+    fn in_message_list(ids: &[&str]) -> AppState {
+        let mut app = with_folders(&["a"]);
+        app.set_messages(ids.iter().map(|id| message(id)).collect());
+        app.focus = Pane::Messages;
+        app
+    }
+
+    #[test]
+    fn selection_moves_through_messages_when_the_list_has_focus() {
+        let mut app = in_message_list(&["m1", "m2", "m3"]);
+
+        assert_eq!(app.update(Action::SelectNext), None);
+        assert_eq!(app.update(Action::SelectNext), None);
+        assert_eq!(app.update(Action::SelectNext), None);
+        assert_eq!(app.selected_message, 2);
+        assert_eq!(app.selected_folder, 0);
+
+        app.update(Action::SelectPrev);
+        assert_eq!(app.selected_message, 1);
+    }
+
+    #[test]
+    fn loading_messages_selects_the_first() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.update(Action::SelectNext);
+
+        app.set_messages(vec![message("m9")]);
+
+        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.messages, [message("m9")]);
     }
 
     #[test]
