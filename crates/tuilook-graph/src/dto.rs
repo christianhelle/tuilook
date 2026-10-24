@@ -73,3 +73,16 @@ pub struct EmailAddress {
 pub struct Flag {
     pub flag_status: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct MessageBody {
+    pub body: ItemBody,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemBody {
+    pub content_type: String,
+    #[serde(default)]
+    pub content: String,
+}

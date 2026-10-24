@@ -20,6 +20,18 @@ pub struct DeltaPage {
     pub delta_link: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BodyType {
+    Text,
+    Html,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Body {
+    pub content_type: BodyType,
+    pub content: String,
+}
+
 /// A mail service. Graph is the only real implementation; tests use a fake.
 pub trait MailBackend {
     fn list_folders(&self) -> impl Future<Output = Result<Vec<Folder>, BackendError>> + Send;
@@ -29,4 +41,9 @@ pub trait MailBackend {
         folder: &FolderId,
         delta_link: Option<&str>,
     ) -> impl Future<Output = Result<DeltaPage, BackendError>> + Send;
+
+    fn fetch_body(
+        &self,
+        message: &MessageId,
+    ) -> impl Future<Output = Result<Body, BackendError>> + Send;
 }

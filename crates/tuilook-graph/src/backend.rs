@@ -5,8 +5,8 @@ use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use tuilook_auth::TokenSource;
 use tuilook_model::{
-    BackendError, DeltaPage, Folder, FolderId, Importance, MailBackend, Message, MessageId,
-    WellKnown,
+    BackendError, Body, BodyType, DeltaPage, Folder, FolderId, Importance, MailBackend, Message,
+    MessageId, WellKnown,
 };
 
 use crate::{
@@ -141,6 +141,20 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             result.delta_link = page.delta_link;
         }
         Ok(result)
+    }
+
+    async fn fetch_body(&self, message: &MessageId) -> Result<Body, BackendError> {
+        let path = format!("/me/messages/{}?$select=body", message.0);
+        let prefer = ("Prefer", r#"outlook.body-content-type="html""#);
+        let response: dto::MessageBody = self.client.get(&path, &[prefer]).await?;
+        Ok(Body {
+            content_type: if response.body.content_type.eq_ignore_ascii_case("html") {
+                BodyType::Html
+            } else {
+                BodyType::Text
+            },
+            content: response.body.content,
+        })
     }
 }
 

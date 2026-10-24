@@ -66,6 +66,7 @@ pub fn backend() -> FakeBackend {
             (FolderId("projects".to_owned()), projects),
         ]
         .into(),
+        ..Default::default()
     }
 }
 

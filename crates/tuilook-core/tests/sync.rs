@@ -60,6 +60,7 @@ async fn syncing_a_folder_stores_its_messages() {
     let backend = FakeBackend {
         folders: vec![folder("f1", "Inbox", Some(WellKnown::Inbox))],
         messages: [(inbox.clone(), vec![older.clone(), newer.clone()])].into(),
+        ..Default::default()
     };
     let mut store = Store::open_in_memory().unwrap();
     sync_folders(&backend, &mut store).await.unwrap();
