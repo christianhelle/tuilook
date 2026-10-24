@@ -5,12 +5,15 @@ use std::{collections::HashSet, sync::LazyLock};
 use jiff::Timestamp;
 use rusqlite::{Connection, OptionalExtension, Row, types::Type};
 use rusqlite_migration::{M, Migrations};
-use tuilook_model::{Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders};
+use tuilook_model::{
+    Body, BodyType, Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders,
+};
 
 static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
-    Migrations::new(vec![M::up(include_str!(
-        "../migrations/001_folders_messages.sql"
-    ))])
+    Migrations::new(vec![
+        M::up(include_str!("../migrations/001_folders_messages.sql")),
+        M::up(include_str!("../migrations/002_bodies.sql")),
+    ])
 });
 
 #[derive(Debug, thiserror::Error)]
@@ -135,6 +138,49 @@ impl Store {
                 .collect()
         };
         self.delete_messages(&stale)
+    }
+
+    pub fn put_body(&mut self, message: &MessageId, body: &Body) -> Result<()> {
+        let content_type = match body.content_type {
+            BodyType::Text => "text",
+            BodyType::Html => "html",
+        };
+        self.conn.execute(
+            "INSERT INTO bodies (message_id, content_type, body, fetched_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (message_id) DO UPDATE SET
+                 content_type = excluded.content_type,
+                 body = excluded.body,
+                 fetched_at = excluded.fetched_at",
+            (
+                &message.0,
+                content_type,
+                &body.content,
+                Timestamp::now().as_millisecond(),
+            ),
+        )?;
+        Ok(())
+    }
+
+    /// The cached body of `message`, if it has been fetched.
+    pub fn body(&self, message: &MessageId) -> Result<Option<Body>> {
+        let body = self
+            .conn
+            .query_row(
+                "SELECT content_type, body FROM bodies WHERE message_id = ?1",
+                [&message.0],
+                |row| {
+                    Ok(Body {
+                        content_type: match row.get::<_, String>(0)?.as_str() {
+                            "html" => BodyType::Html,
+                            _ => BodyType::Text,
+                        },
+                        content: row.get(1)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(body)
     }
 
     /// Messages in one folder, newest first.

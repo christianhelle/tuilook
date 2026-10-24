@@ -1,4 +1,4 @@
-use tuilook_model::{Folder, FolderId, Importance, Message, MessageId, WellKnown};
+use tuilook_model::{Body, BodyType, Folder, FolderId, Importance, Message, MessageId, WellKnown};
 use tuilook_store::Store;
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>) -> Folder {
@@ -186,4 +186,25 @@ fn retaining_messages_drops_the_rest_of_the_folder_only() {
 
     assert_eq!(store.messages_in(&inbox).unwrap(), [keep]);
     assert_eq!(store.messages_in(&other).unwrap(), [elsewhere]);
+}
+
+#[test]
+fn a_fetched_body_is_cached_until_its_message_is_deleted() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .upsert_folders(&[folder("inbox", "Inbox", None)])
+        .unwrap();
+    let m = message("m1", "inbox", "2026-01-01T09:00:00Z");
+    store.upsert_messages(std::slice::from_ref(&m)).unwrap();
+    let body = Body {
+        content_type: BodyType::Html,
+        content: "<p>Hi</p>".to_owned(),
+    };
+    assert_eq!(store.body(&m.id).unwrap(), None);
+
+    store.put_body(&m.id, &body).unwrap();
+    assert_eq!(store.body(&m.id).unwrap(), Some(body));
+
+    store.delete_messages(std::slice::from_ref(&m.id)).unwrap();
+    assert_eq!(store.body(&m.id).unwrap(), None);
 }
