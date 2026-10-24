@@ -11,6 +11,9 @@ pub struct FakeBackend {
     pub folders: Vec<Folder>,
     pub messages: HashMap<FolderId, Vec<Message>>,
     pub bodies: HashMap<MessageId, Body>,
+    /// Answers for a folder's delta sync from a given link. A first sync
+    /// (`None`) that is not scripted returns all of the folder's `messages`.
+    pub deltas: HashMap<(FolderId, Option<String>), Result<DeltaPage, BackendError>>,
 }
 
 impl MailBackend for FakeBackend {
@@ -21,8 +24,12 @@ impl MailBackend for FakeBackend {
     async fn delta_sync(
         &self,
         folder: &FolderId,
-        _delta_link: Option<&str>,
+        delta_link: Option<&str>,
     ) -> Result<DeltaPage, BackendError> {
+        let key = (folder.clone(), delta_link.map(str::to_owned));
+        if let Some(scripted) = self.deltas.get(&key) {
+            return scripted.clone();
+        }
         Ok(DeltaPage {
             upserted: self.messages.get(folder).cloned().unwrap_or_default(),
             ..Default::default()

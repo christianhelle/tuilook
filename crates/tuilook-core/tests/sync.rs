@@ -1,5 +1,7 @@
 use tuilook_core::{fake::FakeBackend, sync_folders, sync_messages};
-use tuilook_model::{Folder, FolderId, Importance, Message, MessageId, WellKnown};
+use tuilook_model::{
+    BackendError, DeltaPage, Folder, FolderId, Importance, Message, MessageId, WellKnown,
+};
 use tuilook_store::Store;
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>) -> Folder {
@@ -68,4 +70,77 @@ async fn syncing_a_folder_stores_its_messages() {
     sync_messages(&backend, &mut store, &inbox).await.unwrap();
 
     assert_eq!(store.messages_in(&inbox).unwrap(), [newer, older]);
+}
+
+fn delta(upserted: Vec<Message>, removed: &[&str], link: &str) -> DeltaPage {
+    DeltaPage {
+        upserted,
+        removed: removed
+            .iter()
+            .map(|id| MessageId((*id).to_owned()))
+            .collect(),
+        delta_link: Some(link.to_owned()),
+    }
+}
+
+#[tokio::test]
+async fn later_syncs_resume_from_the_stored_delta_link() {
+    let inbox = FolderId("f1".to_owned());
+    let m1 = message("m1", "2026-01-01T09:00:00Z");
+    let m2 = message("m2", "2026-01-02T09:00:00Z");
+    let m3 = message("m3", "2026-01-03T09:00:00Z");
+    let backend = FakeBackend {
+        folders: vec![folder("f1", "Inbox", Some(WellKnown::Inbox))],
+        deltas: [
+            (
+                (inbox.clone(), None),
+                Ok(delta(vec![m1.clone(), m2.clone()], &[], "d1")),
+            ),
+            (
+                (inbox.clone(), Some("d1".to_owned())),
+                Ok(delta(vec![m3.clone()], &["m1"], "d2")),
+            ),
+        ]
+        .into(),
+        ..Default::default()
+    };
+    let mut store = Store::open_in_memory().unwrap();
+    sync_folders(&backend, &mut store).await.unwrap();
+
+    sync_messages(&backend, &mut store, &inbox).await.unwrap();
+    sync_messages(&backend, &mut store, &inbox).await.unwrap();
+
+    assert_eq!(store.messages_in(&inbox).unwrap(), [m3, m2]);
+    assert_eq!(store.delta_link(&inbox).unwrap().as_deref(), Some("d2"));
+}
+
+#[tokio::test]
+async fn an_expired_delta_link_triggers_a_full_resync() {
+    let inbox = FolderId("f1".to_owned());
+    let kept = message("m1", "2026-01-01T09:00:00Z");
+    let gone = message("m2", "2026-01-02T09:00:00Z");
+    let backend = FakeBackend {
+        folders: vec![folder("f1", "Inbox", Some(WellKnown::Inbox))],
+        deltas: [
+            (
+                (inbox.clone(), Some("old".to_owned())),
+                Err(BackendError::DeltaExpired),
+            ),
+            (
+                (inbox.clone(), None),
+                Ok(delta(vec![kept.clone()], &[], "fresh")),
+            ),
+        ]
+        .into(),
+        ..Default::default()
+    };
+    let mut store = Store::open_in_memory().unwrap();
+    sync_folders(&backend, &mut store).await.unwrap();
+    store.upsert_messages(&[kept.clone(), gone]).unwrap();
+    store.set_delta_link(&inbox, Some("old")).unwrap();
+
+    sync_messages(&backend, &mut store, &inbox).await.unwrap();
+
+    assert_eq!(store.messages_in(&inbox).unwrap(), [kept]);
+    assert_eq!(store.delta_link(&inbox).unwrap().as_deref(), Some("fresh"));
 }

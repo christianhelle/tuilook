@@ -22,7 +22,19 @@ pub async fn sync_messages(
     store: &mut Store,
     folder: &FolderId,
 ) -> Result<(), SyncError> {
-    let page = backend.delta_sync(folder, None).await?;
+    let link = store.delta_link(folder)?;
+    let page = match backend.delta_sync(folder, link.as_deref()).await {
+        Err(BackendError::DeltaExpired) => {
+            // Start over and drop whatever the fresh sync no longer has.
+            let page = backend.delta_sync(folder, None).await?;
+            let synced: Vec<_> = page.upserted.iter().map(|m| m.id.clone()).collect();
+            store.retain_messages_in(folder, &synced)?;
+            page
+        }
+        result => result?,
+    };
     store.upsert_messages(&page.upserted)?;
+    store.delete_messages(&page.removed)?;
+    store.set_delta_link(folder, page.delta_link.as_deref())?;
     Ok(())
 }
