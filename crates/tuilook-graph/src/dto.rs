@@ -37,21 +37,16 @@ pub struct Message {
     pub id: String,
     #[serde(rename = "@removed")]
     pub removed: Option<serde::de::IgnoredAny>,
-    #[serde(default)]
-    pub conversation_id: String,
-    #[serde(default)]
+    // Graph may send null for any of these, so none is required.
+    pub conversation_id: Option<String>,
     pub subject: Option<String>,
     pub from: Option<Recipient>,
     pub received_date_time: Option<jiff::Timestamp>,
-    #[serde(default)]
-    pub is_read: bool,
+    pub is_read: Option<bool>,
     pub flag: Option<Flag>,
-    #[serde(default)]
     pub importance: Option<String>,
-    #[serde(default)]
-    pub has_attachments: bool,
-    #[serde(default)]
-    pub body_preview: String,
+    pub has_attachments: Option<bool>,
+    pub body_preview: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -152,3 +152,47 @@ async fn an_expired_delta_link_asks_for_a_full_resync() {
 
     assert_eq!(error, BackendError::DeltaExpired);
 }
+
+#[tokio::test]
+async fn null_fields_fall_back_to_defaults() {
+    // Seen in a live Outlook.com Deleted Items folder.
+    let server = MockServer::start().await;
+    Mock::given(path("/delta"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "value": [{
+                "id": "m1",
+                "conversationId": null,
+                "subject": null,
+                "from": null,
+                "receivedDateTime": "2026-10-24T08:15:00Z",
+                "isRead": null,
+                "flag": null,
+                "importance": null,
+                "hasAttachments": null,
+                "bodyPreview": null
+            }],
+            "@odata.deltaLink": "https://graph.example/delta?token=def"
+        })))
+        .mount(&server)
+        .await;
+
+    let page = backend(&server)
+        .delta_sync(
+            &FolderId("inbox".to_owned()),
+            Some(&format!("{}/delta?token=abc", server.uri())),
+        )
+        .await
+        .unwrap();
+
+    let m = &page.upserted[0];
+    assert_eq!(m.conversation_id, "");
+    assert_eq!(m.subject, "");
+    assert_eq!(m.from_name, "");
+    assert!(
+        m.is_read,
+        "an item with no read state should not show as unread"
+    );
+    assert!(!m.has_attachments);
+    assert_eq!(m.importance, Importance::Normal);
+    assert_eq!(m.preview, "");
+}

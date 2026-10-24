@@ -166,20 +166,21 @@ fn to_message(m: dto::Message, folder: &FolderId) -> Message {
     Message {
         id: MessageId(m.id),
         folder_id: folder.clone(),
-        conversation_id: m.conversation_id,
+        conversation_id: m.conversation_id.unwrap_or_default(),
         subject: m.subject.unwrap_or_default(),
         from_name,
         from_addr,
         received_at: m.received_date_time.unwrap_or(Timestamp::UNIX_EPOCH),
-        is_read: m.is_read,
+        // Without a read state, do not nag the user with a bold row.
+        is_read: m.is_read.unwrap_or(true),
         flagged: m.flag.is_some_and(|f| f.flag_status == "flagged"),
         importance: match m.importance.as_deref() {
             Some("low") => Importance::Low,
             Some("high") => Importance::High,
             _ => Importance::Normal,
         },
-        has_attachments: m.has_attachments,
-        preview: m.body_preview,
+        has_attachments: m.has_attachments.unwrap_or(false),
+        preview: m.body_preview.unwrap_or_default(),
     }
 }
 
