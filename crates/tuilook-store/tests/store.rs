@@ -143,3 +143,47 @@ fn refreshing_folders_keeps_their_delta_links() {
         Some("https://delta/1")
     );
 }
+
+#[test]
+fn deleted_messages_are_gone() {
+    let mut store = Store::open_in_memory().unwrap();
+    let inbox = FolderId("inbox".to_owned());
+    store
+        .upsert_folders(&[folder("inbox", "Inbox", None)])
+        .unwrap();
+    let keep = message("m1", "inbox", "2026-01-01T09:00:00Z");
+    let drop = message("m2", "inbox", "2026-01-02T09:00:00Z");
+    store
+        .upsert_messages(&[keep.clone(), drop.clone()])
+        .unwrap();
+
+    store.delete_messages(&[drop.id]).unwrap();
+
+    assert_eq!(store.messages_in(&inbox).unwrap(), [keep]);
+}
+
+#[test]
+fn retaining_messages_drops_the_rest_of_the_folder_only() {
+    let mut store = Store::open_in_memory().unwrap();
+    let inbox = FolderId("inbox".to_owned());
+    let other = FolderId("other".to_owned());
+    store
+        .upsert_folders(&[
+            folder("inbox", "Inbox", None),
+            folder("other", "Other", None),
+        ])
+        .unwrap();
+    let keep = message("m1", "inbox", "2026-01-01T09:00:00Z");
+    let stale = message("m2", "inbox", "2026-01-02T09:00:00Z");
+    let elsewhere = message("m3", "other", "2026-01-03T09:00:00Z");
+    store
+        .upsert_messages(&[keep.clone(), stale, elsewhere.clone()])
+        .unwrap();
+
+    store
+        .retain_messages_in(&inbox, std::slice::from_ref(&keep.id))
+        .unwrap();
+
+    assert_eq!(store.messages_in(&inbox).unwrap(), [keep]);
+    assert_eq!(store.messages_in(&other).unwrap(), [elsewhere]);
+}

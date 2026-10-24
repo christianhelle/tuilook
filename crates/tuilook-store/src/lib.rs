@@ -1,6 +1,6 @@
 //! Local SQLite cache. The UI reads from it; only core writes to it.
 
-use std::sync::LazyLock;
+use std::{collections::HashSet, sync::LazyLock};
 
 use jiff::Timestamp;
 use rusqlite::{Connection, OptionalExtension, Row, types::Type};
@@ -106,6 +106,35 @@ impl Store {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn delete_messages(&mut self, ids: &[MessageId]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM messages WHERE id = ?1")?;
+            for id in ids {
+                stmt.execute([&id.0])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Deletes every message in `folder` that is not in `keep`.
+    pub fn retain_messages_in(&mut self, folder: &FolderId, keep: &[MessageId]) -> Result<()> {
+        let keep: HashSet<&str> = keep.iter().map(|id| id.0.as_str()).collect();
+        let stale: Vec<MessageId> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id FROM messages WHERE folder_id = ?1")?;
+            stmt.query_map([&folder.0], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+                .into_iter()
+                .filter(|id| !keep.contains(id.as_str()))
+                .map(MessageId)
+                .collect()
+        };
+        self.delete_messages(&stale)
     }
 
     /// Messages in one folder, newest first.
