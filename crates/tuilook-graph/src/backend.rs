@@ -1,14 +1,22 @@
 use std::collections::{HashMap, HashSet};
 
+use jiff::{SignedDuration, Timestamp, Unit};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use tuilook_auth::TokenSource;
-use tuilook_model::{BackendError, DeltaPage, Folder, FolderId, MailBackend, WellKnown};
+use tuilook_model::{
+    BackendError, DeltaPage, Folder, FolderId, Importance, MailBackend, Message, MessageId,
+    WellKnown,
+};
 
 use crate::{
     GraphClient, GraphError,
     dto::{self, Page},
 };
+
+const MESSAGE_SELECT: &str = "id,conversationId,subject,from,receivedDateTime,isRead,flag,importance,hasAttachments,bodyPreview";
+
+const PAGE_SIZE: (&str, &str) = ("Prefer", "odata.maxpagesize=50");
 
 const FOLDER_SELECT: &str =
     "$select=id,displayName,parentFolderId,childFolderCount,unreadItemCount,totalItemCount";
@@ -16,11 +24,21 @@ const FOLDER_SELECT: &str =
 /// [`MailBackend`] over Microsoft Graph.
 pub struct GraphBackend<T> {
     client: GraphClient<T>,
+    sync_window: SignedDuration,
 }
 
 impl<T: TokenSource> GraphBackend<T> {
     pub fn new(client: GraphClient<T>) -> Self {
-        Self { client }
+        Self {
+            client,
+            sync_window: SignedDuration::from_hours(90 * 24),
+        }
+    }
+
+    /// How far back the first sync of a folder reaches.
+    pub fn with_sync_window(mut self, window: SignedDuration) -> Self {
+        self.sync_window = window;
+        self
     }
 
     /// Maps folder ids to the well-known role Graph gives them. Mailboxes
@@ -89,10 +107,60 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
 
     async fn delta_sync(
         &self,
-        _folder: &FolderId,
-        _delta_link: Option<&str>,
+        folder: &FolderId,
+        delta_link: Option<&str>,
     ) -> Result<DeltaPage, BackendError> {
-        todo!()
+        let mut next = Some(match delta_link {
+            Some(link) => link.to_owned(),
+            None => {
+                let since = (Timestamp::now() - self.sync_window)
+                    .round(Unit::Second)
+                    .map_err(|e| BackendError::Other(e.to_string()))?;
+                format!(
+                    "/me/mailFolders/{}/messages/delta?$select={MESSAGE_SELECT}&$filter=receivedDateTime ge {since}",
+                    folder.0
+                )
+            }
+        });
+        let mut result = DeltaPage::default();
+        while let Some(url) = next {
+            let page: Page<dto::Message> = self.client.get(&url, &[PAGE_SIZE]).await?;
+            for m in page.value {
+                if m.removed.is_some() {
+                    result.removed.push(MessageId(m.id));
+                } else {
+                    result.upserted.push(to_message(m, folder));
+                }
+            }
+            next = page.next_link;
+            result.delta_link = page.delta_link;
+        }
+        Ok(result)
+    }
+}
+
+fn to_message(m: dto::Message, folder: &FolderId) -> Message {
+    let (from_name, from_addr) = m
+        .from
+        .map(|r| (r.email_address.name, r.email_address.address))
+        .unwrap_or_default();
+    Message {
+        id: MessageId(m.id),
+        folder_id: folder.clone(),
+        conversation_id: m.conversation_id,
+        subject: m.subject.unwrap_or_default(),
+        from_name,
+        from_addr,
+        received_at: m.received_date_time.unwrap_or(Timestamp::UNIX_EPOCH),
+        is_read: m.is_read,
+        flagged: m.flag.is_some_and(|f| f.flag_status == "flagged"),
+        importance: match m.importance.as_deref() {
+            Some("low") => Importance::Low,
+            Some("high") => Importance::High,
+            _ => Importance::Normal,
+        },
+        has_attachments: m.has_attachments,
+        preview: m.body_preview,
     }
 }
 

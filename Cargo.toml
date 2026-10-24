@@ -13,7 +13,7 @@ tuilook-auth = { path = "crates/tuilook-auth" }
 tuilook-graph = { path = "crates/tuilook-graph" }
 tuilook-store = { path = "crates/tuilook-store" }
 tuilook-core = { path = "crates/tuilook-core" }
-jiff = "0.2.38"
+jiff = { version = "0.2.38", features = ["serde"] }
 thiserror = "2.0.21"
 rusqlite_migration = "2.6.0"
 rusqlite = { version = "0.40", features = ["bundled"] }
