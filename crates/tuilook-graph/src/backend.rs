@@ -37,9 +37,22 @@ impl<T: TokenSource> GraphBackend<T> {
 
 impl<T: TokenSource> MailBackend for GraphBackend<T> {
     async fn list_folders(&self) -> Result<Vec<Folder>, BackendError> {
-        let graph_folders: Vec<dto::MailFolder> = self
+        let mut graph_folders: Vec<dto::MailFolder> = self
             .get_all(&format!("/me/mailFolders?$top=100&{FOLDER_SELECT}"))
             .await?;
+        // Breadth-first: append each folder's children as it is reached.
+        let mut i = 0;
+        while i < graph_folders.len() {
+            if graph_folders[i].child_folder_count > 0 {
+                let path = format!(
+                    "/me/mailFolders/{}/childFolders?$top=100&{FOLDER_SELECT}",
+                    graph_folders[i].id
+                );
+                let children = self.get_all(&path).await?;
+                graph_folders.extend(children);
+            }
+            i += 1;
+        }
         let ids: HashSet<_> = graph_folders.iter().map(|f| f.id.clone()).collect();
         Ok(graph_folders
             .into_iter()

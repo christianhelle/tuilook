@@ -17,6 +17,8 @@ pub struct MailFolder {
     pub display_name: String,
     pub parent_folder_id: Option<String>,
     #[serde(default)]
+    pub child_folder_count: u32,
+    #[serde(default)]
     pub unread_item_count: u32,
     #[serde(default)]
     pub total_item_count: u32,

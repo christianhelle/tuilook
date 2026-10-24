@@ -70,3 +70,32 @@ async fn lists_top_level_folders_across_pages() {
         ]
     );
 }
+
+#[tokio::test]
+async fn child_folders_are_fetched_recursively() {
+    let server = MockServer::start().await;
+    Mock::given(path("/me/mailFolders"))
+        .respond_with(page(vec![graph_folder("f1", "Inbox", "root", 1)], None))
+        .mount(&server)
+        .await;
+    Mock::given(path("/me/mailFolders/f1/childFolders"))
+        .and(query_param("$top", "100"))
+        .respond_with(page(vec![graph_folder("f2", "Receipts", "f1", 1)], None))
+        .mount(&server)
+        .await;
+    Mock::given(path("/me/mailFolders/f2/childFolders"))
+        .respond_with(page(vec![graph_folder("f3", "2026", "f2", 0)], None))
+        .mount(&server)
+        .await;
+
+    let folders = backend(&server).list_folders().await.unwrap();
+
+    assert_eq!(
+        folders,
+        [
+            folder("f1", "Inbox", None, None),
+            folder("f2", "Receipts", Some("f1"), None),
+            folder("f3", "2026", Some("f2"), None),
+        ]
+    );
+}
