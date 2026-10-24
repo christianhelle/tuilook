@@ -12,6 +12,7 @@ pub enum Pane {
 #[derive(Debug, Default)]
 pub struct AppState {
     pub focus: Pane,
+    pub should_quit: bool,
 }
 
 impl AppState {
@@ -19,6 +20,7 @@ impl AppState {
         match action {
             Action::FocusNextPane => self.focus = self.focus.next(),
             Action::FocusPrevPane => self.focus = self.focus.prev(),
+            Action::Quit => self.should_quit = true,
             _ => {}
         }
     }
@@ -45,6 +47,15 @@ impl Pane {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quit_stops_the_app() {
+        let mut app = AppState::default();
+
+        app.update(Action::Quit);
+
+        assert!(app.should_quit);
+    }
 
     #[test]
     fn focus_cycles_forward_through_panes() {
