@@ -1,3 +1,5 @@
+use crate::{FolderId, MessageId};
+
 /// Something the user asked for. The UI applies it to its own state and
 /// forwards anything that needs IO to core.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,7 +15,13 @@ pub enum Action {
 /// Something core tells the UI happened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    Synced,
-    Toast(String),
+    /// The folder tree in the store changed.
+    FoldersSynced,
+    /// A folder's messages in the store changed.
+    FolderSynced(FolderId),
+    BodyLoaded {
+        message: MessageId,
+        text: String,
+    },
     Error(String),
 }
