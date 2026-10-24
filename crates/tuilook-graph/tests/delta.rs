@@ -3,7 +3,9 @@ mod support;
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Value, json};
 use tuilook_graph::GraphBackend;
-use tuilook_model::{DeltaPage, FolderId, Importance, MailBackend, Message, MessageId};
+use tuilook_model::{
+    BackendError, DeltaPage, FolderId, Importance, MailBackend, Message, MessageId,
+};
 use wiremock::{
     Mock, MockServer, Request, ResponseTemplate,
     matchers::{header, method, path, query_param},
@@ -99,4 +101,54 @@ async fn first_sync_pages_through_the_last_90_days_to_a_delta_link() {
             delta_link: Some("https://graph.example/delta?token=abc".to_owned()),
         }
     );
+}
+
+#[tokio::test]
+async fn later_syncs_follow_the_delta_link_and_report_removals() {
+    let server = MockServer::start().await;
+    let delta_link = format!("{}/delta?token=abc", server.uri());
+    Mock::given(path("/delta"))
+        .and(query_param("token", "abc"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "value": [
+                graph_message("m1", "Edited"),
+                { "id": "m2", "@removed": { "reason": "deleted" } }
+            ],
+            "@odata.deltaLink": "https://graph.example/delta?token=def"
+        })))
+        .mount(&server)
+        .await;
+
+    let page = backend(&server)
+        .delta_sync(&FolderId("inbox".to_owned()), Some(&delta_link))
+        .await
+        .unwrap();
+
+    assert_eq!(page.upserted, [message("m1", "Edited")]);
+    assert_eq!(page.removed, [MessageId("m2".to_owned())]);
+    assert_eq!(
+        page.delta_link.as_deref(),
+        Some("https://graph.example/delta?token=def")
+    );
+}
+
+#[tokio::test]
+async fn an_expired_delta_link_asks_for_a_full_resync() {
+    let server = MockServer::start().await;
+    Mock::given(path("/delta"))
+        .respond_with(ResponseTemplate::new(410).set_body_json(json!({
+            "error": { "code": "SyncStateNotFound", "message": "The sync state is expired." }
+        })))
+        .mount(&server)
+        .await;
+
+    let error = backend(&server)
+        .delta_sync(
+            &FolderId("inbox".to_owned()),
+            Some(&format!("{}/delta?token=old", server.uri())),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, BackendError::DeltaExpired);
 }

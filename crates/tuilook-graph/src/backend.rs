@@ -124,7 +124,12 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         });
         let mut result = DeltaPage::default();
         while let Some(url) = next {
-            let page: Page<dto::Message> = self.client.get(&url, &[PAGE_SIZE]).await?;
+            let page: Page<dto::Message> = match self.client.get(&url, &[PAGE_SIZE]).await {
+                Err(GraphError::Status { status, .. }) if status == StatusCode::GONE => {
+                    return Err(BackendError::DeltaExpired);
+                }
+                result => result?,
+            };
             for m in page.value {
                 if m.removed.is_some() {
                     result.removed.push(MessageId(m.id));
