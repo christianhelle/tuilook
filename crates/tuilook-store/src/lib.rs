@@ -31,6 +31,16 @@ pub struct Store {
 }
 
 impl Store {
+    /// Opens (creating if needed) the cache at `path`. Several handles may
+    /// share one file: the UI reads while core writes.
+    pub fn open(path: &std::path::Path) -> Result<Self> {
+        let conn = Connection::open(path)?;
+        // WAL lets readers proceed while the sync engine writes.
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        Self::init(conn)
+    }
+
     pub fn open_in_memory() -> Result<Self> {
         Self::init(Connection::open_in_memory()?)
     }

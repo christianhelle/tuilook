@@ -208,3 +208,17 @@ fn a_fetched_body_is_cached_until_its_message_is_deleted() {
     store.delete_messages(std::slice::from_ref(&m.id)).unwrap();
     assert_eq!(store.body(&m.id).unwrap(), None);
 }
+
+#[test]
+fn two_handles_on_one_file_see_each_others_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let mut writer = Store::open(&path).unwrap();
+    let reader = Store::open(&path).unwrap();
+
+    writer
+        .upsert_folders(&[folder("f1", "Inbox", None)])
+        .unwrap();
+
+    assert_eq!(reader.folders().unwrap(), [folder("f1", "Inbox", None)]);
+}

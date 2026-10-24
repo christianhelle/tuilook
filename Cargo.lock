@@ -3600,6 +3600,7 @@ dependencies = [
  "jiff",
  "rusqlite",
  "rusqlite_migration",
+ "tempfile",
  "thiserror 2.0.21",
  "tuilook-model",
 ]
