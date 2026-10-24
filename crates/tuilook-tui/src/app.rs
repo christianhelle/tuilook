@@ -15,6 +15,18 @@ pub enum Pane {
     Reader,
 }
 
+/// How much of each pane fits on screen, measured by the UI before each
+/// update so paging moves by what the user can actually see.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Viewport {
+    /// Folder rows that fit in the folder pane.
+    pub folders: usize,
+    /// Messages that fit in the message list.
+    pub messages: usize,
+    /// Body lines that fit in the reading pane.
+    pub reader: usize,
+}
+
 /// Everything the UI shows. Rendering is a pure function of this state.
 #[derive(Debug, Default)]
 pub struct AppState {
@@ -28,6 +40,7 @@ pub struct AppState {
     pub body: Option<String>,
     /// Shown in the status bar until the next error replaces it.
     pub status: Option<String>,
+    pub viewport: Viewport,
 }
 
 impl AppState {
@@ -38,6 +51,10 @@ impl AppState {
             Action::Quit => self.should_quit = true,
             Action::SelectNext => return self.move_selection(1),
             Action::SelectPrev => return self.move_selection(-1),
+            Action::PageDown => return self.move_selection(self.page()),
+            Action::PageUp => return self.move_selection(-self.page()),
+            Action::HalfPageDown => return self.move_selection(self.page() / 2),
+            Action::HalfPageUp => return self.move_selection(-self.page() / 2),
             Action::Open => self.open(),
         }
         None
@@ -110,6 +127,16 @@ impl AppState {
             Pane::Messages if !self.messages.is_empty() => self.focus = Pane::Reader,
             _ => {}
         }
+    }
+
+    /// Rows the focused pane shows; at least 2 so half a page still moves.
+    fn page(&self) -> isize {
+        let rows = match self.focus {
+            Pane::Folders => self.viewport.folders,
+            Pane::Messages => self.viewport.messages,
+            Pane::Reader => self.viewport.reader,
+        };
+        rows.max(2) as isize
     }
 
     fn move_selection(&mut self, delta: isize) -> Option<Effect> {
@@ -204,6 +231,49 @@ mod tests {
         app.set_messages(ids.iter().map(|id| message(id)).collect());
         app.focus = Pane::Messages;
         app
+    }
+
+    fn viewport(folders: usize, messages: usize, reader: usize) -> Viewport {
+        Viewport {
+            folders,
+            messages,
+            reader,
+        }
+    }
+
+    #[test]
+    fn paging_the_folder_list_moves_by_the_visible_rows() {
+        let ids: Vec<String> = (0..30).map(|i| format!("f{i}")).collect();
+        let mut app = with_folders(&ids.iter().map(String::as_str).collect::<Vec<_>>());
+        app.viewport = viewport(10, 0, 0);
+
+        let effect = app.update(Action::PageDown);
+        assert_eq!(app.selected_folder, 10);
+        assert_eq!(effect, Some(Effect::LoadFolder(FolderId("f10".to_owned()))));
+
+        app.update(Action::HalfPageUp);
+        assert_eq!(app.selected_folder, 5);
+        app.update(Action::PageUp);
+        assert_eq!(app.selected_folder, 0);
+    }
+
+    #[test]
+    fn paging_the_message_list_requests_the_new_body() {
+        let mut app = in_message_list(&["m0", "m1", "m2", "m3", "m4", "m5", "m6"]);
+        app.viewport = viewport(0, 4, 0);
+
+        assert_eq!(app.update(Action::HalfPageDown), load_body("m2"));
+        assert_eq!(app.update(Action::PageDown), load_body("m6"));
+        assert_eq!(app.update(Action::PageDown), None);
+        assert_eq!(app.selected_message, 6);
+    }
+
+    #[test]
+    fn paging_moves_at_least_one_row() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.viewport = viewport(0, 1, 0);
+
+        assert_eq!(app.update(Action::HalfPageDown), load_body("m1"));
     }
 
     #[test]

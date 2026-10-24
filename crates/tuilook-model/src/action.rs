@@ -8,6 +8,10 @@ pub enum Action {
     FocusPrevPane,
     SelectNext,
     SelectPrev,
+    PageDown,
+    PageUp,
+    HalfPageDown,
+    HalfPageUp,
     Open,
     Quit,
 }
