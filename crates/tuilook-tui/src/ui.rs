@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, BorderType, List, ListItem, ListState, Paragraph, Wrap},
 };
+use tuilook_model::folder_depths;
 
 use crate::app::{AppState, Pane};
 
@@ -42,8 +43,9 @@ fn pane_block(app: &AppState, pane: Pane, title: &str) -> Block<'static> {
 }
 
 fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
-    let items = app.folders.iter().map(|f| {
-        let mut spans = vec![Span::raw(f.name.clone())];
+    let depths = folder_depths(&app.folders);
+    let items = app.folders.iter().zip(depths).map(|(f, depth)| {
+        let mut spans = vec![Span::raw("  ".repeat(depth)), Span::raw(f.name.clone())];
         if f.unread > 0 {
             spans.push(Span::raw(format!(" ({})", f.unread)));
         }

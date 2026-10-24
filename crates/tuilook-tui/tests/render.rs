@@ -96,3 +96,20 @@ fn status_bar_shows_the_last_error() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn subfolders_are_indented_under_their_parent() {
+    let mut receipts = folder("receipts", "Receipts", None, 1);
+    receipts.parent_id = Some(FolderId("inbox".to_owned()));
+    let mut year = folder("2026", "2026", None, 0);
+    year.parent_id = Some(FolderId("receipts".to_owned()));
+    let mut app = sample_app();
+    app.folders = vec![
+        folder("inbox", "Inbox", Some(WellKnown::Inbox), 2),
+        receipts,
+        year,
+        folder("proj", "Projects", None, 0),
+    ];
+
+    insta::assert_snapshot!(render(&app));
+}
