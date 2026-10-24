@@ -1,4 +1,10 @@
-use tuilook_model::Action;
+use tuilook_model::{Action, Folder, FolderId, Message};
+
+/// IO the event loop must perform after an update.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Effect {
+    LoadFolder(FolderId),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Pane {
@@ -13,17 +19,45 @@ pub enum Pane {
 pub struct AppState {
     pub focus: Pane,
     pub should_quit: bool,
+    pub folders: Vec<Folder>,
+    pub selected_folder: usize,
+    pub messages: Vec<Message>,
+    pub selected_message: usize,
 }
 
 impl AppState {
-    pub fn update(&mut self, action: Action) {
+    pub fn update(&mut self, action: Action) -> Option<Effect> {
         match action {
             Action::FocusNextPane => self.focus = self.focus.next(),
             Action::FocusPrevPane => self.focus = self.focus.prev(),
             Action::Quit => self.should_quit = true,
+            Action::SelectNext => return self.move_selection(1),
+            Action::SelectPrev => return self.move_selection(-1),
             _ => {}
         }
+        None
     }
+
+    fn move_selection(&mut self, delta: isize) -> Option<Effect> {
+        match self.focus {
+            Pane::Folders => {
+                let moved = step(&mut self.selected_folder, self.folders.len(), delta);
+                moved.then(|| Effect::LoadFolder(self.folders[self.selected_folder].id.clone()))
+            }
+            Pane::Messages | Pane::Reader => None,
+        }
+    }
+}
+
+/// Moves `index` by `delta` within `0..len`. Returns whether it moved.
+fn step(index: &mut usize, len: usize, delta: isize) -> bool {
+    let Some(last) = len.checked_sub(1) else {
+        return false;
+    };
+    let next = index.saturating_add_signed(delta).min(last);
+    let moved = next != *index;
+    *index = next;
+    moved
 }
 
 impl Pane {
@@ -47,6 +81,64 @@ impl Pane {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn folder(id: &str) -> Folder {
+        Folder {
+            id: FolderId(id.to_owned()),
+            parent_id: None,
+            name: id.to_owned(),
+            well_known: None,
+            unread: 0,
+            total: 0,
+        }
+    }
+
+    fn with_folders(ids: &[&str]) -> AppState {
+        AppState {
+            folders: ids.iter().map(|id| folder(id)).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn selecting_next_folder_loads_it() {
+        let mut app = with_folders(&["a", "b", "c"]);
+
+        let effect = app.update(Action::SelectNext);
+
+        assert_eq!(app.selected_folder, 1);
+        assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
+    }
+
+    #[test]
+    fn selecting_previous_folder_loads_it() {
+        let mut app = with_folders(&["a", "b", "c"]);
+        app.selected_folder = 2;
+
+        let effect = app.update(Action::SelectPrev);
+
+        assert_eq!(app.selected_folder, 1);
+        assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
+    }
+
+    #[test]
+    fn folder_selection_stops_at_the_ends() {
+        let mut app = with_folders(&["a", "b"]);
+
+        assert_eq!(app.update(Action::SelectPrev), None);
+        assert_eq!(app.selected_folder, 0);
+
+        app.selected_folder = 1;
+        assert_eq!(app.update(Action::SelectNext), None);
+        assert_eq!(app.selected_folder, 1);
+    }
+
+    #[test]
+    fn selecting_with_no_folders_does_nothing() {
+        let mut app = AppState::default();
+
+        assert_eq!(app.update(Action::SelectNext), None);
+    }
 
     #[test]
     fn quit_stops_the_app() {
