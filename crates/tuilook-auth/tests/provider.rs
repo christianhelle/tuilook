@@ -95,3 +95,41 @@ async fn a_token_close_to_expiry_is_refreshed() {
     assert_eq!(provider.access_token().await.unwrap(), "access-1");
     assert_eq!(provider.access_token().await.unwrap(), "access-2");
 }
+
+#[tokio::test]
+async fn invalidating_forces_the_next_call_to_refresh() {
+    let server = MockServer::start().await;
+    refresh_with("refresh-1")
+        .respond_with(tokens("access-1", "refresh-2", 3600))
+        .mount(&server)
+        .await;
+    refresh_with("refresh-2")
+        .respond_with(tokens("access-2", "refresh-3", 3600))
+        .mount(&server)
+        .await;
+    let provider = provider(&server, signed_in("refresh-1"));
+    provider.access_token().await.unwrap();
+
+    provider.invalidate().await;
+
+    assert_eq!(provider.access_token().await.unwrap(), "access-2");
+}
+
+#[tokio::test]
+async fn a_rejected_refresh_token_signs_the_user_out() {
+    let server = MockServer::start().await;
+    refresh_with("revoked")
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "error": "invalid_grant",
+            "error_description": "AADSTS50173: The provided grant has expired."
+        })))
+        .mount(&server)
+        .await;
+    let secrets = signed_in("revoked");
+    let provider = provider(&server, secrets.clone());
+
+    let error = provider.access_token().await.unwrap_err();
+
+    assert!(matches!(error, AuthError::NotSignedIn), "{error:?}");
+    assert_eq!(secrets.load().unwrap(), None);
+}

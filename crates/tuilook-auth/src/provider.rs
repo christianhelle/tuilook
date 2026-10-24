@@ -34,12 +34,23 @@ impl TokenProvider {
             return Ok(tokens.access_token.clone());
         }
         let refresh_token = self.secrets.load()?.ok_or(AuthError::NotSignedIn)?;
-        let tokens = self.oauth.refresh(&refresh_token).await?;
+        let tokens = match self.oauth.refresh(&refresh_token).await {
+            Err(AuthError::OAuth { error, .. }) if error == "invalid_grant" => {
+                self.secrets.clear()?;
+                return Err(AuthError::NotSignedIn);
+            }
+            result => result?,
+        };
         if let Some(rotated) = &tokens.refresh_token {
             self.secrets.save(rotated)?;
         }
         let access_token = tokens.access_token.clone();
         *cached = Some(tokens);
         Ok(access_token)
+    }
+
+    /// Forgets the cached access token, e.g. after Graph answered 401.
+    pub async fn invalidate(&self) {
+        *self.cached.lock().await = None;
     }
 }
