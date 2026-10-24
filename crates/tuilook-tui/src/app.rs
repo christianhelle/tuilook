@@ -33,7 +33,7 @@ impl AppState {
             Action::Quit => self.should_quit = true,
             Action::SelectNext => return self.move_selection(1),
             Action::SelectPrev => return self.move_selection(-1),
-            _ => {}
+            Action::Open => self.open(),
         }
         None
     }
@@ -42,6 +42,14 @@ impl AppState {
     pub fn set_messages(&mut self, messages: Vec<Message>) {
         self.messages = messages;
         self.selected_message = 0;
+    }
+
+    fn open(&mut self) {
+        match self.focus {
+            Pane::Folders if !self.folders.is_empty() => self.focus = Pane::Messages,
+            Pane::Messages if !self.messages.is_empty() => self.focus = Pane::Reader,
+            _ => {}
+        }
     }
 
     fn move_selection(&mut self, delta: isize) -> Option<Effect> {
@@ -146,6 +154,33 @@ mod tests {
 
         app.update(Action::SelectPrev);
         assert_eq!(app.selected_message, 1);
+    }
+
+    #[test]
+    fn opening_a_folder_focuses_its_message_list() {
+        let mut app = with_folders(&["a"]);
+
+        app.update(Action::Open);
+
+        assert_eq!(app.focus, Pane::Messages);
+    }
+
+    #[test]
+    fn opening_a_message_focuses_the_reading_pane() {
+        let mut app = in_message_list(&["m1"]);
+
+        app.update(Action::Open);
+
+        assert_eq!(app.focus, Pane::Reader);
+    }
+
+    #[test]
+    fn opening_in_an_empty_message_list_does_nothing() {
+        let mut app = in_message_list(&[]);
+
+        app.update(Action::Open);
+
+        assert_eq!(app.focus, Pane::Messages);
     }
 
     #[test]
