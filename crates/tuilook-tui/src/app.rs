@@ -1,9 +1,10 @@
-use tuilook_model::{Action, Folder, FolderId, Message};
+use tuilook_model::{Action, Folder, FolderId, Message, MessageId};
 
 /// IO the event loop must perform after an update.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     LoadFolder(FolderId),
+    LoadBody(MessageId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -23,6 +24,8 @@ pub struct AppState {
     pub selected_folder: usize,
     pub messages: Vec<Message>,
     pub selected_message: usize,
+    /// The selected message's body, once core has loaded it.
+    pub body: Option<String>,
 }
 
 impl AppState {
@@ -39,9 +42,27 @@ impl AppState {
     }
 
     /// Shows a newly loaded folder's messages, selecting the first.
-    pub fn set_messages(&mut self, messages: Vec<Message>) {
+    pub fn set_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
         self.messages = messages;
         self.selected_message = 0;
+        self.selection_changed()
+    }
+
+    /// Shows a body core loaded, unless the user has moved on.
+    pub fn body_loaded(&mut self, message: MessageId, text: String) {
+        if self.selected().is_some_and(|m| m.id == message) {
+            self.body = Some(text);
+        }
+    }
+
+    fn selected(&self) -> Option<&Message> {
+        self.messages.get(self.selected_message)
+    }
+
+    /// Drops the old body and asks for the newly selected one.
+    fn selection_changed(&mut self) -> Option<Effect> {
+        self.body = None;
+        self.selected().map(|m| Effect::LoadBody(m.id.clone()))
     }
 
     fn open(&mut self) {
@@ -59,8 +80,12 @@ impl AppState {
                 moved.then(|| Effect::LoadFolder(self.folders[self.selected_folder].id.clone()))
             }
             Pane::Messages => {
-                step(&mut self.selected_message, self.messages.len(), delta);
-                None
+                let moved = step(&mut self.selected_message, self.messages.len(), delta);
+                if moved {
+                    self.selection_changed()
+                } else {
+                    None
+                }
             }
             Pane::Reader => None,
         }
@@ -120,7 +145,7 @@ mod tests {
 
     fn message(id: &str) -> Message {
         Message {
-            id: tuilook_model::MessageId(id.to_owned()),
+            id: MessageId(id.to_owned()),
             folder_id: FolderId("a".to_owned()),
             conversation_id: String::new(),
             subject: id.to_owned(),
@@ -146,9 +171,9 @@ mod tests {
     fn selection_moves_through_messages_when_the_list_has_focus() {
         let mut app = in_message_list(&["m1", "m2", "m3"]);
 
-        assert_eq!(app.update(Action::SelectNext), None);
-        assert_eq!(app.update(Action::SelectNext), None);
-        assert_eq!(app.update(Action::SelectNext), None);
+        app.update(Action::SelectNext);
+        app.update(Action::SelectNext);
+        app.update(Action::SelectNext);
         assert_eq!(app.selected_message, 2);
         assert_eq!(app.selected_folder, 0);
 
@@ -181,6 +206,40 @@ mod tests {
         app.update(Action::Open);
 
         assert_eq!(app.focus, Pane::Messages);
+    }
+
+    fn load_body(id: &str) -> Option<Effect> {
+        Some(Effect::LoadBody(MessageId(id.to_owned())))
+    }
+
+    #[test]
+    fn moving_to_another_message_requests_its_body() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.body_loaded(MessageId("m1".to_owned()), "first".to_owned());
+
+        assert_eq!(app.update(Action::SelectNext), load_body("m2"));
+        assert_eq!(app.body, None);
+        assert_eq!(app.update(Action::SelectNext), None);
+    }
+
+    #[test]
+    fn loading_messages_requests_the_first_body() {
+        let mut app = with_folders(&["a"]);
+
+        assert_eq!(app.set_messages(vec![message("m1")]), load_body("m1"));
+        assert_eq!(app.set_messages(vec![]), None);
+    }
+
+    #[test]
+    fn a_body_is_shown_only_if_its_message_is_still_selected() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.update(Action::SelectNext);
+
+        app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned());
+        assert_eq!(app.body, None);
+
+        app.body_loaded(MessageId("m2".to_owned()), "fresh".to_owned());
+        assert_eq!(app.body.as_deref(), Some("fresh"));
     }
 
     #[test]

@@ -14,7 +14,7 @@ fn main() -> Result<()> {
         ..Default::default()
     };
     if let Some(first) = app.folders.first() {
-        app.set_messages(store.messages_in(&first.id)?);
+        let _ = app.set_messages(store.messages_in(&first.id)?);
     }
 
     let mut terminal = ratatui::init();
@@ -50,9 +50,12 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut AppState, store: &Stor
         let Some(action) = keymap::action_for(key) else {
             continue;
         };
-        match app.update(action) {
-            Some(Effect::LoadFolder(id)) => app.set_messages(store.messages_in(&id)?),
-            None => {}
+        let mut effect = app.update(action);
+        while let Some(next) = effect {
+            effect = match next {
+                Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
+                Effect::LoadBody(_) => None,
+            };
         }
     }
     Ok(())
