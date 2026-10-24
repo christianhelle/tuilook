@@ -172,3 +172,26 @@ async fn a_second_unauthorized_response_is_an_error() {
         "{error:?}"
     );
 }
+
+#[tokio::test]
+async fn at_most_four_requests_are_in_flight() {
+    let server = MockServer::start().await;
+    Mock::given(path("/me"))
+        .respond_with(ok().set_delay(Duration::from_millis(200)))
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+    let started = std::time::Instant::now();
+
+    let requests = (0..8).map(|_| client.get::<Value>("/me", &[]));
+    for result in futures::future::join_all(requests).await {
+        result.unwrap();
+    }
+
+    // Eight 200 ms requests, four at a time, take two rounds.
+    assert!(
+        started.elapsed() >= Duration::from_millis(400),
+        "{:?}",
+        started.elapsed()
+    );
+}

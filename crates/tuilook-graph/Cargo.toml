@@ -16,4 +16,5 @@ tuilook-model = { workspace = true }
 tuilook-auth = { workspace = true }
 
 [dev-dependencies]
+futures = { workspace = true }
 wiremock = { workspace = true }

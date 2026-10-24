@@ -3454,6 +3454,7 @@ name = "tuilook-graph"
 version = "0.1.0"
 dependencies = [
  "fastrand",
+ "futures",
  "jiff",
  "reqwest",
  "serde",
