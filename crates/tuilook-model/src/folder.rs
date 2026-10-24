@@ -99,6 +99,27 @@ pub fn sort_folders(folders: &mut [Folder]) {
     folders.clone_from_slice(&sorted);
 }
 
+/// How deeply each folder is nested: 0 for top-level folders.
+pub fn folder_depths(folders: &[Folder]) -> Vec<usize> {
+    let parents: HashMap<&FolderId, Option<&FolderId>> = folders
+        .iter()
+        .map(|f| (&f.id, f.parent_id.as_ref()))
+        .collect();
+    folders
+        .iter()
+        .map(|f| {
+            let mut seen = HashSet::from([&f.id]);
+            let mut parent = f.parent_id.as_ref();
+            let mut depth = 0;
+            while let Some(p) = parent.filter(|p| parents.contains_key(p) && seen.insert(p)) {
+                depth += 1;
+                parent = parents[p];
+            }
+            depth
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +192,25 @@ mod tests {
 
         let names: Vec<_> = folders.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, ["Inbox", "Orphan"]);
+    }
+
+    #[test]
+    fn depth_counts_the_parents_above_each_folder() {
+        let folders = vec![
+            folder("Inbox", None),
+            child("Receipts", "Inbox"),
+            child("2026", "Receipts"),
+            child("Orphan", "gone"),
+        ];
+
+        assert_eq!(folder_depths(&folders), [0, 1, 2, 0]);
+    }
+
+    #[test]
+    fn depth_stops_at_a_parent_cycle() {
+        let folders = vec![child("A", "B"), child("B", "A")];
+
+        assert_eq!(folder_depths(&folders), [1, 1]);
     }
 
     #[test]
