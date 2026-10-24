@@ -37,6 +37,34 @@ impl Store {
         Ok(Self { conn })
     }
 
+    pub fn upsert_folders(&mut self, folders: &[Folder]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO folders (id, parent_id, name, well_known, unread, total)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT (id) DO UPDATE SET
+                     parent_id = excluded.parent_id,
+                     name = excluded.name,
+                     well_known = excluded.well_known,
+                     unread = excluded.unread,
+                     total = excluded.total",
+            )?;
+            for f in folders {
+                stmt.execute((
+                    &f.id.0,
+                    f.parent_id.as_ref().map(|p| &p.0),
+                    &f.name,
+                    f.well_known.map(WellKnown::as_graph_name),
+                    f.unread,
+                    f.total,
+                ))?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Folders in folder tree order.
     pub fn folders(&self) -> Result<Vec<Folder>> {
         let mut stmt = self
