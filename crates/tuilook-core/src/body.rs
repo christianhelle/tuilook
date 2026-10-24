@@ -19,6 +19,8 @@ pub fn body_text(body: &Body) -> String {
 fn html_to_text(html: &str) -> Result<String, html2text::Error> {
     html2text::config::plain()
         .link_footnotes(true)
+        // Mail uses tables for layout; their borders are just rows of dashes.
+        .no_table_borders()
         .add_agent_css(HIDE_IMAGES)?
         .string_from_read(html.as_bytes(), WRAP_WIDTH)
 }
@@ -63,6 +65,23 @@ mod tests {
         ));
 
         assert_eq!(text, "Hi\n\nBye\n");
+    }
+
+    #[test]
+    fn a_horizontal_rule_adds_no_dashes() {
+        let text = body_text(&html("<p>Above</p><hr><p>Below</p>"));
+
+        assert_eq!(text, "Above\n\nBelow\n");
+    }
+
+    #[test]
+    fn layout_tables_have_no_borders() {
+        let text = body_text(&html(
+            "<table><tr><td>Order</td><td>#42</td></tr><tr><td>Total</td><td>$9</td></tr></table>",
+        ));
+
+        assert!(!text.contains('-') && !text.contains('─'), "{text}");
+        assert!(text.contains("Order") && text.contains("$9"), "{text}");
     }
 
     #[test]
