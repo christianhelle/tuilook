@@ -3,7 +3,27 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tuilook_model::Action;
 
-pub fn action_for(key: KeyEvent) -> Option<Action> {
+/// Turns key presses into actions, remembering a half-typed `gg`.
+#[derive(Debug, Default)]
+pub struct Keymap {
+    pending_g: bool,
+}
+
+impl Keymap {
+    pub fn action_for(&mut self, key: KeyEvent) -> Option<Action> {
+        let pending_g = std::mem::take(&mut self.pending_g);
+        if key.code == KeyCode::Char('g') && !key.modifiers.contains(KeyModifiers::CONTROL) {
+            if pending_g {
+                return Some(Action::Top);
+            }
+            self.pending_g = true;
+            return None;
+        }
+        single_key(key)
+    }
+}
+
+fn single_key(key: KeyEvent) -> Option<Action> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         let action = match key.code {
             KeyCode::Char('c') => Action::Quit,
@@ -36,7 +56,7 @@ mod tests {
     use super::*;
 
     fn press(code: KeyCode) -> Option<Action> {
-        action_for(KeyEvent::new(code, KeyModifiers::NONE))
+        Keymap::default().action_for(KeyEvent::new(code, KeyModifiers::NONE))
     }
 
     #[test]
@@ -64,11 +84,11 @@ mod tests {
     #[test]
     fn ctrl_c_quits() {
         let key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
-        assert_eq!(action_for(key), Some(Action::Quit));
+        assert_eq!(Keymap::default().action_for(key), Some(Action::Quit));
     }
 
     fn ctrl(c: char) -> Option<Action> {
-        action_for(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
+        Keymap::default().action_for(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
     }
 
     #[test]
@@ -84,9 +104,31 @@ mod tests {
     #[test]
     fn capital_g_home_and_end_jump_to_the_ends() {
         let shift_g = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
-        assert_eq!(action_for(shift_g), Some(Action::Bottom));
+        assert_eq!(Keymap::default().action_for(shift_g), Some(Action::Bottom));
         assert_eq!(press(KeyCode::End), Some(Action::Bottom));
         assert_eq!(press(KeyCode::Home), Some(Action::Top));
+    }
+
+    #[test]
+    fn g_twice_jumps_to_the_top() {
+        let mut keymap = Keymap::default();
+        let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+
+        assert_eq!(keymap.action_for(g), None);
+        assert_eq!(keymap.action_for(g), Some(Action::Top));
+        assert_eq!(keymap.action_for(g), None, "a third g starts over");
+    }
+
+    #[test]
+    fn g_followed_by_another_key_runs_that_key() {
+        let mut keymap = Keymap::default();
+
+        keymap.action_for(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
+        let next = keymap.action_for(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+
+        assert_eq!(next, Some(Action::SelectNext));
+        let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+        assert_eq!(keymap.action_for(g), None, "the earlier g was dropped");
     }
 
     #[test]

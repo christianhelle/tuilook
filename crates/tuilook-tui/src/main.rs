@@ -15,7 +15,9 @@ use tuilook_model::{Event, MailBackend};
 use tuilook_store::Store;
 use tuilook_tui::{
     app::{AppState, Effect},
-    demo, keymap, ui,
+    demo,
+    keymap::Keymap,
+    ui,
 };
 
 /// Delegated Graph scopes; calendar and contacts can be added post-v1.
@@ -178,6 +180,7 @@ fn run_ui(
     let effect = app.set_folders(store.folders()?);
     apply(&mut app, &store, &commands, effect)?;
 
+    let mut keymap = Keymap::default();
     let mut terminal = ratatui::init();
     let result = (|| {
         while !app.should_quit {
@@ -195,7 +198,7 @@ fn run_ui(
             if key.kind != KeyEventKind::Press {
                 continue;
             }
-            if let Some(action) = keymap::action_for(key) {
+            if let Some(action) = keymap.action_for(key) {
                 let effect = app.update(action);
                 apply(&mut app, &store, &commands, effect)?;
             }
