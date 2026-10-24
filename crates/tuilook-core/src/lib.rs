@@ -3,4 +3,4 @@
 pub mod fake;
 mod sync;
 
-pub use sync::{SyncError, sync_folders};
+pub use sync::{SyncError, sync_folders, sync_messages};

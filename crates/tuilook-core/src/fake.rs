@@ -17,9 +17,12 @@ impl MailBackend for FakeBackend {
 
     async fn delta_sync(
         &self,
-        _folder: &FolderId,
+        folder: &FolderId,
         _delta_link: Option<&str>,
     ) -> Result<DeltaPage, BackendError> {
-        todo!()
+        Ok(DeltaPage {
+            upserted: self.messages.get(folder).cloned().unwrap_or_default(),
+            ..Default::default()
+        })
     }
 }
