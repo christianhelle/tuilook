@@ -5,6 +5,10 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+tuilook-graph = { workspace = true }
+tuilook-auth = { workspace = true }
+directories = { workspace = true }
+clap = { workspace = true }
 jiff = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
