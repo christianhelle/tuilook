@@ -3452,6 +3452,18 @@ dependencies = [
 [[package]]
 name = "tuilook-graph"
 version = "0.1.0"
+dependencies = [
+ "fastrand",
+ "jiff",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tuilook-auth",
+ "tuilook-model",
+ "wiremock",
+]
 
 [[package]]
 name = "tuilook-model"

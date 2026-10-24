@@ -85,3 +85,13 @@ impl TokenSource for TokenProvider {
         TokenProvider::invalidate(self).await
     }
 }
+
+impl<T: TokenSource> TokenSource for Arc<T> {
+    async fn access_token(&self) -> Result<String, AuthError> {
+        (**self).access_token().await
+    }
+
+    async fn invalidate(&self) {
+        (**self).invalidate().await
+    }
+}
