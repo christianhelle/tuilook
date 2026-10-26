@@ -147,6 +147,9 @@ pub struct AppState {
     pub expanded: BTreeSet<FolderId>,
     pub confirm: Option<Confirm>,
     pub show_help: bool,
+    /// What the mail service said when it blocked sending, shown in a
+    /// dialog until the next key.
+    pub blocked: Option<String>,
     /// A message being written, which takes over the screen.
     pub compose: Option<Compose>,
 }
@@ -166,6 +169,9 @@ impl AppState {
         }
         if self.show_help {
             self.show_help = false;
+            return None;
+        }
+        if self.blocked.take().is_some() {
             return None;
         }
         if let Some(confirm) = self.confirm.take() {
@@ -197,6 +203,12 @@ impl AppState {
     pub fn on_mouse(&mut self, mouse: Mouse, hit: Option<Hit>) -> Option<Effect> {
         if self.show_help {
             self.show_help = mouse != Mouse::Click;
+            return None;
+        }
+        if self.blocked.is_some() {
+            if mouse == Mouse::Click {
+                self.blocked = None;
+            }
             return None;
         }
         if self.confirm.is_some() || self.compose.is_some() {
@@ -431,6 +443,16 @@ impl AppState {
             compose.sending = false;
         }
         self.show_error(format!("could not send: {error}"));
+    }
+
+    /// Explains that the account may not send for now. The message stays
+    /// open, unsent, to send once the account is unblocked.
+    pub fn send_blocked(&mut self, said: String) {
+        if let Some(compose) = &mut self.compose {
+            compose.sending = false;
+        }
+        self.show_error("Outlook.com has blocked sending from this account".to_owned());
+        self.blocked = Some(said);
     }
 
     pub fn show_error(&mut self, message: String) {
@@ -1124,6 +1146,26 @@ mod tests {
         app.mail_sent(Instant::now());
         assert!(app.compose.is_none());
         assert_eq!(app.status, Some(Status::Info("Sent".to_owned())));
+    }
+
+    #[test]
+    fn a_blocked_send_explains_itself_and_keeps_the_message_to_retry() {
+        let mut app = in_message_list(&["m0"]);
+        app.update(Action::Reply);
+        key(&mut app, KeyCode::Char('x'));
+        ctrl_s(&mut app);
+
+        app.send_blocked("ErrorMessageSubmissionBlocked: blocked".to_owned());
+
+        assert!(app.blocked.is_some());
+        assert!(app.compose.as_ref().is_some_and(|c| !c.sending));
+        assert_eq!(key(&mut app, KeyCode::Char('y')), None);
+        assert!(app.blocked.is_none(), "any key closes it");
+        assert_eq!(
+            app.compose.as_ref().map(|c| c.body.text()),
+            Some("x".to_owned()),
+            "the key only closed the dialog"
+        );
     }
 
     #[test]

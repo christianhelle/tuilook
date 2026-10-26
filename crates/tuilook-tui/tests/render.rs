@@ -376,3 +376,12 @@ fn a_zoomed_pane_takes_every_click() {
 
     assert_eq!(ui::hit(area, &app, 2, 2).unwrap().pane, Pane::Reader);
 }
+
+#[test]
+fn a_blocked_send_says_what_to_do() {
+    let mut app = sample_app();
+    press(&mut app, "rThanks");
+    app.send_blocked("ErrorMessageSubmissionBlocked: Message submission blocked".to_owned());
+
+    insta::assert_snapshot!(render_tall(&app));
+}

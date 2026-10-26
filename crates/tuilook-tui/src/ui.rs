@@ -99,6 +99,52 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Confirm::Discard) => draw_confirm_discard(frame),
         None => {}
     }
+    if let Some(said) = &app.blocked {
+        draw_blocked(frame, said);
+    }
+}
+
+/// A dialog saying Outlook.com refuses to send for now, and what to do.
+fn draw_blocked(frame: &mut Frame, said: &str) {
+    let lines = vec![
+        Line::raw("Outlook.com has blocked sending from this account,"),
+        Line::raw("usually because recent mail looked like spam to it."),
+        Line::raw("Nothing was sent; your message is still open."),
+        Line::raw(""),
+        Line::from(vec![
+            Span::raw("Unblock it at "),
+            Span::styled("https://account.live.com", Style::new().fg(Color::Cyan)),
+            Span::raw(","),
+        ]),
+        Line::raw("then wait a little and press Ctrl-S to try again."),
+        Line::raw(""),
+        Line::styled(
+            format!("Outlook said: {said}"),
+            Style::new().fg(Color::DarkGray),
+        ),
+        Line::raw(""),
+        Line::styled("Press any key to close", Style::new().fg(Color::DarkGray)),
+    ];
+    let width = frame.area().width.saturating_sub(4).min(64);
+    let inner = usize::from(width.saturating_sub(2)).max(1);
+    // Rows the lines take wrapped, with room for words moved to the next row.
+    let rows: usize = lines
+        .iter()
+        .map(|line| line.width().div_ceil(inner).max(1) + usize::from(line.width() > inner))
+        .sum();
+    let height = u16::try_from(rows).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(width), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+            Block::bordered()
+                .title("Sending blocked")
+                .border_style(Style::new().fg(Color::Red)),
+        ),
+        area,
+    );
 }
 
 fn status_line(app: &AppState) -> Line<'static> {

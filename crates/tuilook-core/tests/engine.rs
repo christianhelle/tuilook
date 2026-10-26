@@ -241,3 +241,18 @@ async fn a_message_that_cannot_be_sent_says_why() {
         Some(Event::SendFailed("no such recipient".to_owned()))
     );
 }
+
+#[tokio::test]
+async fn a_blocked_account_is_reported_as_blocked() {
+    let (commands, mut events) = start(FakeBackend::default());
+
+    commands
+        .send(Command::Send(draft("me@blocked")))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::SendBlocked("spam suspected".to_owned()))
+    );
+}

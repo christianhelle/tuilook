@@ -70,6 +70,9 @@ impl MailBackend for FakeBackend {
         if draft.to.iter().any(|to| to.ends_with("@invalid")) {
             return Err(BackendError::Other("no such recipient".to_owned()));
         }
+        if draft.to.iter().any(|to| to.ends_with("@blocked")) {
+            return Err(BackendError::SendingBlocked("spam suspected".to_owned()));
+        }
         let mut sent = self.sent.lock().expect("no test panics holding it");
         sent.push(draft.clone());
         Ok(())

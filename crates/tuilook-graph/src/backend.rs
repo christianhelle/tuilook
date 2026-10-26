@@ -179,6 +179,12 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
     }
 
     async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
+        self.send_draft(draft).await.map_err(sending_error)
+    }
+}
+
+impl<T: TokenSource> GraphBackend<T> {
+    async fn send_draft(&self, draft: &Draft) -> Result<(), GraphError> {
         let (original, create) = match &draft.kind {
             ComposeKind::New => {
                 let message = json!({
@@ -294,6 +300,42 @@ fn to_message(m: dto::Message, folder: &FolderId) -> Message {
         has_attachments: m.has_attachments.unwrap_or(false),
         preview: m.body_preview.unwrap_or_default(),
     }
+}
+
+/// Graph error codes for an account the mail service will not send from.
+/// Microsoft does not document them for Outlook.com, so these are the codes
+/// Exchange uses for blocked submission and suspended or over-quota senders.
+const BLOCKED_CODES: [&str; 5] = [
+    "submissionblocked",
+    "sendingblocked",
+    "submissionquotaexceeded",
+    "accountsuspend",
+    "accountdisabled",
+];
+
+/// Tells a send the service refused because the account is blocked from
+/// sending apart from any other failure.
+fn sending_error(e: GraphError) -> BackendError {
+    if let GraphError::Status {
+        status,
+        code,
+        message,
+    } = &e
+    {
+        let code_says = BLOCKED_CODES
+            .iter()
+            .any(|blocked| code.to_lowercase().contains(blocked));
+        let forbidden_says = *status == StatusCode::FORBIDDEN && {
+            let message = message.to_lowercase();
+            ["block", "suspend", "spam"]
+                .iter()
+                .any(|word| message.contains(word))
+        };
+        if code_says || forbidden_says {
+            return BackendError::SendingBlocked(format!("{code}: {message}"));
+        }
+    }
+    e.into()
 }
 
 impl From<GraphError> for BackendError {

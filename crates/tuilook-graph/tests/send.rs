@@ -2,7 +2,7 @@ mod support;
 
 use serde_json::json;
 use tuilook_graph::GraphBackend;
-use tuilook_model::{ComposeKind, Draft, MailBackend, MessageId};
+use tuilook_model::{BackendError, ComposeKind, Draft, MailBackend, MessageId};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{body_json, method, path},
@@ -171,4 +171,59 @@ async fn a_forward_goes_to_the_typed_addresses() {
         .send(&draft(ComposeKind::Forward(MessageId("m1".to_owned()))))
         .await
         .unwrap();
+}
+
+fn new_message() -> Draft {
+    Draft {
+        kind: ComposeKind::New,
+        to: vec!["ada@example.com".to_owned()],
+        cc: vec![],
+        subject: "Hello".to_owned(),
+        body: "Hi".to_owned(),
+    }
+}
+
+async fn send_failing_with(status: u16, code: &str, message: &str) -> BackendError {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/sendMail"))
+        .respond_with(
+            ResponseTemplate::new(status)
+                .set_body_json(json!({ "error": { "code": code, "message": message } })),
+        )
+        .mount(&server)
+        .await;
+    let backend = GraphBackend::new(support::client(&server).0);
+    backend.send(&new_message()).await.unwrap_err()
+}
+
+#[tokio::test]
+async fn a_blocked_account_is_told_apart_from_other_failures() {
+    let error = send_failing_with(
+        403,
+        "ErrorMessageSubmissionBlocked",
+        "Message submission blocked",
+    )
+    .await;
+
+    assert_eq!(
+        error,
+        BackendError::SendingBlocked(
+            "ErrorMessageSubmissionBlocked: Message submission blocked".to_owned()
+        )
+    );
+}
+
+#[tokio::test]
+async fn a_refusal_that_says_the_account_is_suspended_counts_as_blocked() {
+    let error = send_failing_with(403, "ErrorAccessDenied", "Account suspended for spam").await;
+
+    assert!(matches!(error, BackendError::SendingBlocked(_)));
+}
+
+#[tokio::test]
+async fn other_failures_are_not_mistaken_for_a_block() {
+    let error = send_failing_with(403, "ErrorAccessDenied", "Access is denied").await;
+
+    assert!(matches!(error, BackendError::Other(_)));
 }

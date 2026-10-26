@@ -63,5 +63,7 @@ pub enum Event {
     Sent,
     /// The message being sent was not; it is still open to try again.
     SendFailed(String),
+    /// The account is blocked from sending; holds what the service said.
+    SendBlocked(String),
     Error(String),
 }

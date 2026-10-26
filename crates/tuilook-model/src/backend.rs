@@ -7,6 +7,10 @@ pub enum BackendError {
     /// The delta link is no longer valid; the folder must be fully resynced.
     #[error("the folder's sync state expired")]
     DeltaExpired,
+    /// The mail service refuses to send from this account, usually because
+    /// it took recent sending for spam. Holds what the service said.
+    #[error("Outlook.com has blocked sending from this account ({0})")]
+    SendingBlocked(String),
     #[error("{0}")]
     Other(String),
 }

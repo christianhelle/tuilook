@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use tuilook_model::{Draft, Event, MailBackend, MessageId, WellKnown};
+use tuilook_model::{BackendError, Draft, Event, MailBackend, MessageId, WellKnown};
 use tuilook_store::Store;
 
 use crate::{load_body, sync_folders, sync_messages};
@@ -88,8 +88,12 @@ async fn send(
     draft: &Draft,
     events: &mpsc::Sender<Event>,
 ) -> Result<(), mpsc::error::SendError<Event>> {
-    if let Err(e) = backend.send(draft).await {
-        return events.send(Event::SendFailed(e.to_string())).await;
+    match backend.send(draft).await {
+        Ok(()) => {}
+        Err(BackendError::SendingBlocked(said)) => {
+            return events.send(Event::SendBlocked(said)).await;
+        }
+        Err(e) => return events.send(Event::SendFailed(e.to_string())).await,
     }
     events.send(Event::Sent).await?;
     let sent_items = match store.folders() {

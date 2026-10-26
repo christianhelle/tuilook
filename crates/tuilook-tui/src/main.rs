@@ -342,6 +342,10 @@ fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Opti
             app.send_failed(&error);
             None
         }
+        Event::SendBlocked(said) => {
+            app.send_blocked(said);
+            None
+        }
         Event::Error(error) => {
             app.show_error(error);
             None
