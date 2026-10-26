@@ -1,0 +1,17 @@
+---
+source: tests/tui_render.rs
+assertion_line: 158
+expression: render(&app)
+---
+"┏ Reading ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃From: Ada <ada@example.com>                                                             ┃"
+"┃Subject: Analytical engine                                                              ┃"
+"┃                                                                                        ┃"
+"┃Notes on the engine                                                                     ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "

@@ -3707,86 +3707,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
-name = "tuilook-auth"
-version = "0.1.0"
-dependencies = [
- "jiff",
- "keyring",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "wiremock",
-]
-
-[[package]]
-name = "tuilook-core"
-version = "0.1.0"
-dependencies = [
- "html2text",
- "jiff",
- "thiserror 2.0.21",
- "tokio",
- "tuilook-model",
- "tuilook-store",
-]
-
-[[package]]
-name = "tuilook-graph"
-version = "0.1.0"
-dependencies = [
- "fastrand",
- "futures",
- "jiff",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "tuilook-auth",
- "tuilook-model",
- "wiremock",
-]
-
-[[package]]
-name = "tuilook-model"
-version = "0.1.0"
-dependencies = [
- "jiff",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "tuilook-store"
-version = "0.1.0"
-dependencies = [
- "jiff",
- "rusqlite",
- "rusqlite_migration",
- "tempfile",
- "thiserror 2.0.21",
- "tuilook-model",
-]
-
-[[package]]
-name = "tuilook-tui"
+name = "tuilook"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "directories",
+ "fastrand",
+ "futures",
+ "html2text",
  "insta",
  "jiff",
+ "keyring",
  "ratatui",
+ "reqwest",
+ "rusqlite",
+ "rusqlite_migration",
  "serde",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
  "tokio",
- "tuilook-auth",
- "tuilook-core",
- "tuilook-graph",
- "tuilook-model",
- "tuilook-store",
+ "wiremock",
 ]
 
 [[package]]

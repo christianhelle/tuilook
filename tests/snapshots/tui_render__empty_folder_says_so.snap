@@ -1,0 +1,17 @@
+---
+source: tests/tui_render.rs
+assertion_line: 81
+expression: render(&app)
+---
+"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"┃>   Inbox (2)   ┃│No messages                       ││                                  │"
+"┃    Sent Items  ┃│                                  ││                                  │"
+"┃    Projects    ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "

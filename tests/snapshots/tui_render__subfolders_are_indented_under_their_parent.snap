@@ -1,0 +1,17 @@
+---
+source: tests/tui_render.rs
+assertion_line: 127
+expression: render(&app)
+---
+"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"┃  ▾ Inbox (2)   ┃│> Ada                             ││From: Ada <ada@example.com>       │"
+"┃>   ▾ Receipts (┃│    Analytical engine             ││Subject: Analytical engine        │"
+"┃        2026    ┃│  Grace                           ││                                  │"
+"┃    Projects    ┃│    Compiler draft                ││Notes on the engine               │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "
