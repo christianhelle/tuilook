@@ -401,3 +401,34 @@ fn a_burst_of_sends_asks_before_the_next() {
 
     insta::assert_snapshot!(render_tall(&app));
 }
+
+fn two_accounts() -> AppState {
+    let mut app = AppState {
+        accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+        ..Default::default()
+    };
+    app.set_account_folders(
+        0,
+        vec![
+            folder("inbox", "Inbox", Some(WellKnown::Inbox), 2),
+            folder("sent", "Sent Items", Some(WellKnown::SentItems), 0),
+        ],
+    );
+    app.set_account_folders(1, vec![folder("work", "Inbox", Some(WellKnown::Inbox), 5)]);
+    app.set_messages(vec![message("m1", "Ada", "Analytical engine", "Notes")]);
+    app
+}
+
+#[test]
+fn each_account_heads_its_own_folders() {
+    insta::assert_snapshot!(render(&two_accounts()));
+}
+
+#[test]
+fn a_message_says_which_account_it_is_sent_from() {
+    let mut app = two_accounts();
+    app.selected_folder = 4;
+    press(&mut app, "c");
+
+    insta::assert_snapshot!(render_tall(&app));
+}

@@ -43,7 +43,11 @@ impl Accounts {
 
     /// Adds `account`, or replaces the one with the same address.
     pub fn upsert(&mut self, account: Account) {
-        match self.0.iter_mut().find(|a| same(&a.address, &account.address)) {
+        match self
+            .0
+            .iter_mut()
+            .find(|a| same(&a.address, &account.address))
+        {
             Some(known) => *known = account,
             None => self.0.push(account),
         }

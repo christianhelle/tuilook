@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashSet},
     time::{Duration, Instant},
 };
 
@@ -98,6 +98,8 @@ pub const PACE_WINDOW: Duration = Duration::from_secs(10 * 60);
 pub struct SyncState {
     /// Whether core is syncing now.
     pub running: bool,
+    /// Accounts whose core has yet to finish the running sync.
+    pub pending: usize,
     /// When the next sync is due, if one is.
     pub next: Option<Instant>,
     /// How often to sync on its own; never when `None`.
@@ -157,10 +159,31 @@ pub struct AppState {
     /// What the mail service said when it blocked sending, shown in a
     /// dialog until the next key.
     pub blocked: Option<String>,
-    /// When recent messages were sent, to notice a burst.
-    pub sent: Vec<Instant>,
+    /// Which account sent recent messages, and when, to notice a burst.
+    pub sent: Vec<(usize, Instant)>,
     /// A message being written, which takes over the screen.
     pub compose: Option<Compose>,
+    /// The signed-in addresses. With more than one, each account heads its
+    /// own folders in the folder pane.
+    pub accounts: Vec<String>,
+    /// Each account's folders as core last reported them, or `None` before
+    /// the first report.
+    pub account_folders: Vec<Option<Vec<Folder>>>,
+    /// The account each of `folders` belongs to.
+    pub folder_account: Vec<usize>,
+}
+
+/// Folder ids of the rows heading each account start with this.
+const ACCOUNT_ROW: &str = "account:";
+
+/// The id of the row heading `address`'s folders.
+pub fn account_row(address: &str) -> FolderId {
+    FolderId(format!("{ACCOUNT_ROW}{address}"))
+}
+
+/// Whether `folder` is the row heading an account, not a real folder.
+pub fn is_account_row(folder: &Folder) -> bool {
+    folder.id.0.starts_with(ACCOUNT_ROW)
 }
 
 impl AppState {
@@ -196,7 +219,8 @@ impl AppState {
             match compose.key(key, self.viewport.compose) {
                 Request::None => {}
                 Request::Send(draft) => {
-                    let sent_lately = self.sent_lately(Instant::now());
+                    let account = compose.account;
+                    let sent_lately = self.sent_lately(account, Instant::now());
                     if sent_lately >= PACE_LIMIT {
                         self.confirm = Some(Confirm::SendAnyway { draft, sent_lately });
                         return None;
@@ -309,7 +333,7 @@ impl AppState {
                 return self.start_sync();
             }
             Action::Help => self.show_help = true,
-            Action::Compose => self.compose = Some(Compose::new(ComposeKind::New, None)),
+            Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::Reply | Action::ReplyAll | Action::Forward => {
                 if let Some(original) = self.selected() {
                     let id = original.id.clone();
@@ -318,7 +342,8 @@ impl AppState {
                         Action::ReplyAll => ComposeKind::ReplyAll(id),
                         _ => ComposeKind::Forward(id),
                     };
-                    self.compose = Some(Compose::new(kind, Some(original)));
+                    let compose = Compose::new(kind, Some(original));
+                    self.start_compose(compose);
                 }
             }
         }
@@ -333,14 +358,30 @@ impl AppState {
         self.selection_changed()
     }
 
-    /// Shows a newly synced folder tree, keeping the selected folder.
+    /// Shows the only account's newly synced folder tree.
     pub fn set_folders(&mut self, folders: Vec<Folder>) -> Option<Effect> {
+        self.set_account_folders(0, folders)
+    }
+
+    /// Shows an account's newly synced folder tree, keeping the selected
+    /// folder.
+    pub fn set_account_folders(&mut self, account: usize, folders: Vec<Folder>) -> Option<Effect> {
+        if self.account_folders.len() <= account {
+            self.account_folders.resize(account + 1, None);
+        }
+        let first = self.account_folders[account].replace(folders).is_none();
+        if first && let Some(address) = self.accounts.get(account) {
+            // An account starts with its folders shown.
+            self.expanded.insert(account_row(address));
+        }
         let previous = self.current_folder().cloned();
+        let (folders, owners) = self.folder_tree();
         self.selected_folder = previous
             .as_ref()
             .and_then(|id| folders.iter().position(|f| &f.id == id))
             .unwrap_or(0);
         self.folders = folders;
+        self.folder_account = owners;
         self.reveal_selected_folder();
         let current = self.current_folder().cloned();
         (current != previous)
@@ -351,6 +392,75 @@ impl AppState {
 
     pub fn current_folder(&self) -> Option<&FolderId> {
         self.folders.get(self.selected_folder).map(|f| &f.id)
+    }
+
+    /// The account of the selected folder, and so of the messages shown.
+    pub fn current_account(&self) -> usize {
+        self.account_of(self.selected_folder)
+    }
+
+    /// The account the folder at `index` belongs to.
+    pub fn account_of(&self, index: usize) -> usize {
+        self.folder_account.get(index).copied().unwrap_or(0)
+    }
+
+    /// The account whose core must perform `effect`. A sync goes to every
+    /// account instead.
+    pub fn account_for(&self, effect: &Effect) -> usize {
+        match effect {
+            Effect::LoadFolder(id) => self
+                .folders
+                .iter()
+                .position(|f| &f.id == id)
+                .map_or(0, |index| self.account_of(index)),
+            Effect::LoadBody(_) | Effect::Delete { .. } | Effect::Sync => self.current_account(),
+            Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
+        }
+    }
+
+    /// Every account's folders as one tree, with the account each is in.
+    /// With several accounts, each heads a row of its own above its folders.
+    fn folder_tree(&self) -> (Vec<Folder>, Vec<usize>) {
+        let several = self.accounts.len() > 1;
+        let mut tree = Vec::new();
+        let mut owners = Vec::new();
+        for (account, folders) in self.account_folders.iter().enumerate() {
+            let folders = folders.as_deref().unwrap_or_default();
+            let Some(address) = self.accounts.get(account).filter(|_| several) else {
+                tree.extend_from_slice(folders);
+                owners.resize(tree.len(), account);
+                continue;
+            };
+            let row = account_row(address);
+            tree.push(Folder {
+                id: row.clone(),
+                parent_id: None,
+                name: address.clone(),
+                well_known: None,
+                unread: 0,
+                total: 0,
+            });
+            // The account's top folders are those whose parent it does not list.
+            let ids: HashSet<&FolderId> = folders.iter().map(|f| &f.id).collect();
+            tree.extend(folders.iter().map(|folder| {
+                let mut folder = folder.clone();
+                if !folder.parent_id.as_ref().is_some_and(|p| ids.contains(p)) {
+                    folder.parent_id = Some(row.clone());
+                }
+                folder
+            }));
+            owners.resize(tree.len(), account);
+        }
+        (tree, owners)
+    }
+
+    /// Opens a message to write from the account being looked at.
+    fn start_compose(&mut self, mut compose: Compose) {
+        compose.account = self.current_account();
+        if self.accounts.len() > 1 {
+            compose.from = self.accounts.get(compose.account).cloned();
+        }
+        self.compose = Some(compose);
     }
 
     /// Shows the current folder's messages after a sync, keeping the
@@ -404,9 +514,11 @@ impl AppState {
         marked.map(|m| m.id.clone()).collect()
     }
 
-    /// Messages sent within [`PACE_WINDOW`] before `now`.
-    pub fn sent_lately(&self, now: Instant) -> usize {
-        let lately = |at: &&Instant| now.saturating_duration_since(**at) < PACE_WINDOW;
+    /// Messages `account` sent within [`PACE_WINDOW`] before `now`.
+    pub fn sent_lately(&self, account: usize, now: Instant) -> usize {
+        let lately = |(from, at): &&(usize, Instant)| {
+            *from == account && now.saturating_duration_since(*at) < PACE_WINDOW
+        };
         self.sent.iter().filter(lately).count()
     }
 
@@ -437,13 +549,13 @@ impl AppState {
         }
     }
 
-    /// Closes the message core sent.
     /// Closes the message core sent, and syncs again shortly: Outlook files
     /// a sent message a few seconds after taking it.
     pub fn mail_sent(&mut self, now: Instant) {
+        let account = self.compose.as_ref().map_or(0, |c| c.account);
         self.sent
-            .retain(|at| now.saturating_duration_since(*at) < PACE_WINDOW);
-        self.sent.push(now);
+            .retain(|(_, at)| now.saturating_duration_since(*at) < PACE_WINDOW);
+        self.sent.push((account, now));
         self.compose = None;
         self.show_info("Sent");
         self.sync.due_by(now + AFTER_SENDING);
@@ -455,6 +567,7 @@ impl AppState {
             return None;
         }
         self.sync.running = true;
+        self.sync.pending = self.accounts.len().max(1);
         self.sync.next = None;
         Some(Effect::Sync)
     }
@@ -465,8 +578,13 @@ impl AppState {
         if due { self.start_sync() } else { None }
     }
 
-    /// Core finished syncing: the next sync is due one interval from now.
+    /// An account's core finished syncing. Once every account has, the next
+    /// sync is due one interval from now.
     pub fn sync_finished(&mut self, now: Instant) {
+        self.sync.pending = self.sync.pending.saturating_sub(1);
+        if self.sync.pending > 0 {
+            return;
+        }
         self.sync.running = false;
         if let Some(every) = self.sync.every {
             self.sync.due_by(now + every);
@@ -1248,7 +1366,7 @@ mod tests {
             app.mail_sent(start);
         }
 
-        assert_eq!(app.sent_lately(start + PACE_WINDOW), 0);
+        assert_eq!(app.sent_lately(0, start + PACE_WINDOW), 0);
         app.mail_sent(start + PACE_WINDOW);
         assert_eq!(app.sent.len(), 1, "old ones are forgotten");
     }

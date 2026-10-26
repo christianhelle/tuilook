@@ -1,0 +1,16 @@
+---
+source: tests/tui_render.rs
+expression: render(&two_accounts())
+---
+"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"┃> ▾ me@outlook.c┃│> Ada                             ││From: Ada <ada@example.com>       │"
+"┃      Inbox (2) ┃│    Analytical engine             ││Subject: Analytical engine        │"
+"┃      Sent Items┃│                                  ││                                  │"
+"┃  ▾ me@work.exam┃│                                  ││Notes                             │"
+"┃      Inbox (5) ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "

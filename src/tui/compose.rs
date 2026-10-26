@@ -63,6 +63,10 @@ pub struct Compose {
     pub field: Field,
     /// Whether the message has gone to core to send, so keys wait.
     pub sending: bool,
+    /// The account it is sent from.
+    pub account: usize,
+    /// The address it is sent from, shown when there are several to send from.
+    pub from: Option<String>,
     register: Register,
     /// The message as it was opened, to tell whether anything was written.
     opened: Draft,
@@ -90,6 +94,8 @@ impl Compose {
             body: Editor::default(),
             field,
             sending: false,
+            account: 0,
+            from: None,
             register: Register::default(),
             opened: Draft {
                 kind: ComposeKind::New,

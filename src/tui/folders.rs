@@ -260,4 +260,124 @@ mod tests {
 
         assert_eq!(names(&app), ["orphan"]);
     }
+
+    /// me@outlook.com has an inbox with receipts in it, me@work.example an
+    /// inbox. Graph lists top folders under a root tuilook does not keep.
+    fn two_accounts() -> AppState {
+        let mut app = AppState {
+            accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+            ..Default::default()
+        };
+        app.set_account_folders(
+            0,
+            vec![
+                folder("inbox", Some("root"), 1),
+                folder("receipts", Some("inbox"), 2),
+            ],
+        );
+        app.set_account_folders(1, vec![folder("work-inbox", Some("root2"), 4)]);
+        app
+    }
+
+    #[test]
+    fn each_account_heads_its_folders() {
+        let app = two_accounts();
+
+        assert_eq!(
+            names(&app),
+            ["me@outlook.com", "inbox", "me@work.example", "work-inbox"]
+        );
+        assert_eq!(app.folder_account, [0, 0, 0, 1, 1]);
+    }
+
+    #[test]
+    fn a_folded_account_counts_the_unread_mail_inside_it() {
+        let mut app = two_accounts();
+        app.selected_folder = 4;
+
+        assert_eq!(
+            app.update(Action::Collapse),
+            load("account:me@work.example")
+        );
+        app.update(Action::Collapse);
+
+        assert_eq!(names(&app), ["me@outlook.com", "inbox", "me@work.example"]);
+        assert_eq!(app.unread_shown(3), 4);
+    }
+
+    #[test]
+    fn a_folded_account_stays_folded_after_a_sync() {
+        let mut app = two_accounts();
+        app.expanded
+            .remove(&FolderId("account:me@outlook.com".to_owned()));
+
+        app.set_account_folders(0, vec![folder("inbox", Some("root"), 1)]);
+
+        assert_eq!(
+            names(&app),
+            ["me@outlook.com", "me@work.example", "work-inbox"]
+        );
+    }
+
+    #[test]
+    fn a_single_account_has_no_row_of_its_own() {
+        let mut app = AppState {
+            accounts: vec!["me@outlook.com".to_owned()],
+            ..Default::default()
+        };
+
+        app.set_account_folders(0, vec![folder("inbox", Some("root"), 1)]);
+
+        assert_eq!(names(&app), ["inbox"]);
+    }
+
+    #[test]
+    fn effects_go_to_the_account_of_the_folder_looked_at() {
+        let mut app = two_accounts();
+        app.selected_folder = 4;
+
+        assert_eq!(app.account_for(&load("inbox").unwrap()), 0);
+        assert_eq!(app.account_for(&load("work-inbox").unwrap()), 1);
+        assert_eq!(
+            app.account_for(&Effect::LoadBody(crate::model::MessageId("m".to_owned()))),
+            1
+        );
+    }
+
+    #[test]
+    fn a_message_is_written_from_the_account_looked_at() {
+        let mut app = two_accounts();
+        app.selected_folder = 4;
+
+        app.update(Action::Compose);
+
+        let compose = app.compose.as_ref().unwrap();
+        assert_eq!(compose.account, 1);
+        assert_eq!(compose.from.as_deref(), Some("me@work.example"));
+    }
+
+    #[test]
+    fn a_sync_is_done_once_every_account_is() {
+        let mut app = two_accounts();
+        let now = std::time::Instant::now();
+
+        app.start_sync();
+        app.sync_finished(now);
+        assert!(app.sync.running, "the other account is still syncing");
+        app.sync_finished(now);
+        assert!(!app.sync.running);
+    }
+
+    #[test]
+    fn each_account_has_its_own_sending_pace() {
+        let mut app = two_accounts();
+        let now = std::time::Instant::now();
+        app.selected_folder = 4;
+        app.update(Action::Compose);
+
+        app.mail_sent(now);
+
+        assert_eq!(app.sent_lately(1, now), 1);
+        assert_eq!(app.sent_lately(0, now), 0);
+    }
 }

@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::tui::{
-    app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
+    app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport, is_account_row},
     compose::{Compose, Field},
     vim::VimMode,
 };
@@ -210,6 +210,8 @@ fn status_line(app: &AppState) -> Line<'static> {
 
 /// Where each part of the message being written goes.
 struct ComposeAreas {
+    /// The account it is sent from, when there are several.
+    from: Rect,
     to: Rect,
     cc: Rect,
     subject: Rect,
@@ -222,7 +224,9 @@ struct ComposeAreas {
 fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
     let inner = Block::bordered().inner(area);
     let note = u16::from(compose.quotes_original());
-    let [to, cc, subject, rule, note, body] = Layout::vertical([
+    let from = u16::from(compose.from.is_some());
+    let [from, to, cc, subject, rule, note, body] = Layout::vertical([
+        Constraint::Length(from),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
@@ -232,6 +236,7 @@ fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
     ])
     .areas(inner);
     ComposeAreas {
+        from,
         to,
         cc,
         subject,
@@ -258,6 +263,14 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
         area,
     );
     let areas = compose_areas(area, compose);
+    if let Some(from) = &compose.from {
+        let label = format!("{:<width$}", "From:", width = usize::from(LABEL_WIDTH));
+        let line = Line::from(vec![
+            Span::styled(label, Style::new().fg(Color::DarkGray)),
+            Span::raw(from.clone()),
+        ]);
+        frame.render_widget(line, areas.from);
+    }
     let fields = [
         (Field::To, "To:", &compose.to, areas.to),
         (Field::Cc, "Cc:", &compose.cc, areas.cc),
@@ -519,7 +532,14 @@ fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
         let mut spans = vec![
             Span::raw("  ".repeat(depths[index])),
             Span::styled(marker, Style::new().fg(Color::DarkGray)),
-            Span::raw(folder.name.clone()),
+            if is_account_row(folder) {
+                Span::styled(
+                    folder.name.clone(),
+                    Style::new().add_modifier(Modifier::BOLD),
+                )
+            } else {
+                Span::raw(folder.name.clone())
+            },
         ];
         let unread = app.unread_shown(index);
         if unread > 0 {
