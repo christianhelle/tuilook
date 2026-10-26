@@ -37,10 +37,25 @@ Then start tuilook:
 tuilook
 ```
 
-To sign out and forget the stored sign-in:
+### More than one account
+
+Run `tuilook login` again and sign in with another account. tuilook opens
+every account at once: each one heads its own folders in the folder pane, and
+all of them sync in the background. A message you write is sent from the
+account whose folder you are in, and the compose screen says which.
+
+To see which accounts are signed in:
 
 ```bash
-tuilook logout
+tuilook accounts
+```
+
+To sign out of an account and forget its cached mail, give its address (or
+enough of the start of it to tell it apart). With only one account, the
+address can be left out:
+
+```bash
+tuilook logout me@outlook.com
 ```
 
 ### Work or school accounts
@@ -56,8 +71,8 @@ your tenant:
 tuilook --tenant organizations --client-id <your-app-id> login
 ```
 
-Use the same options (or the environment variables below) every time you run
-tuilook.
+tuilook remembers the tenant and app registration each account signed in
+with, so the options are only needed for `login`.
 
 ## The screen
 
@@ -168,7 +183,8 @@ only at start and when you press `F5`:
 tuilook --sync-every 300
 ```
 
-To sync every folder once without opening the UI, for example from a script:
+To sync every account's folders once without opening the UI, for example from
+a script:
 
 ```bash
 tuilook sync
@@ -180,24 +196,26 @@ tuilook sync
 | --- | --- | --- | --- |
 | `--demo` | | | Browse a sample mailbox instead of signing in |
 | `--sync-every <seconds>` | `TUILOOK_SYNC_EVERY` | `60` | Seconds between checks for new mail; `0` turns it off |
-| `--tenant <tenant>` | `TUILOOK_TENANT` | `consumers` | `consumers`, `organizations`, `common` or a tenant ID |
+| `--tenant <tenant>` | `TUILOOK_TENANT` | `consumers` | `consumers`, `organizations`, `common` or a tenant ID to sign in to |
 | `--client-id <id>` | `TUILOOK_CLIENT_ID` | tuilook's own | Entra ID app (client) ID to sign in with |
 
 | Command | What it does |
 | --- | --- |
-| `tuilook` | Open the mail client |
-| `tuilook login` | Sign in with a device code |
-| `tuilook logout` | Forget the stored sign-in |
-| `tuilook sync` | Sync every folder once, without the UI |
+| `tuilook` | Open the mail client with every signed-in account |
+| `tuilook login` | Sign in with a device code; run again to add an account |
+| `tuilook logout [address]` | Forget an account's sign-in and cached mail |
+| `tuilook accounts` | List the signed-in accounts |
+| `tuilook sync` | Sync every account's folders once, without the UI |
 
 ## Where tuilook keeps things
 
 - **Sign-in:** the OS keychain (Windows Credential Manager, macOS Keychain or
-  the Secret Service on Linux).
-- **Mail cache:** `cache.db` in tuilook's data folder:
+  the Secret Service on Linux), one entry per account under its address.
+- **Accounts:** `accounts.json` in tuilook's data folder:
   `~/.local/share/tuilook` on Linux, `~/Library/Application Support/tuilook`
-  on macOS, `%APPDATA%\tuilook\data` on Windows. Deleting it is safe; tuilook
-  syncs again.
+  on macOS, `%APPDATA%\tuilook\data` on Windows.
+- **Mail cache:** `<address>/cache.db` in the data folder, one per account.
+  Deleting it is safe; tuilook syncs again.
 - **Last session:** `session.json` in tuilook's cache folder: `~/.cache/tuilook`
   on Linux, `~/Library/Caches/tuilook` on macOS, `%LOCALAPPDATA%\tuilook\cache`
   on Windows.

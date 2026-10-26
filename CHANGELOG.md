@@ -50,5 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keeps the message open to send later.
 - Every request names tuilook in its User-Agent.
 - A README on installing, signing in and using tuilook.
+- Several accounts side by side: run `tuilook login` again to add one. Each
+  account heads its own folders in the folder pane, every account syncs in the
+  background, and a message is sent from the account whose folder is open,
+  shown on a From line while writing. `tuilook accounts` lists the accounts,
+  `tuilook logout <address>` signs out of one, and `tuilook sync` syncs them
+  all. Each account remembers its tenant and client ID, and a sign-in from
+  before this is moved over on first start.
 
 [Unreleased]: https://github.com/christianhelle/tuilook/commits/main
