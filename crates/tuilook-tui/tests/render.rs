@@ -143,3 +143,34 @@ fn viewport_measures_what_each_pane_can_show() {
         }
     );
 }
+
+#[test]
+fn a_zoomed_pane_fills_the_screen() {
+    let mut app = sample_app();
+    app.focus = Pane::Reader;
+    app.zoomed = true;
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn hidden_folders_leave_the_messages_and_reading_pane() {
+    let mut app = sample_app();
+    app.folders_hidden = true;
+    app.focus = Pane::Messages;
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn paging_a_zoomed_pane_moves_by_the_whole_screen() {
+    let mut app = sample_app();
+    app.focus = Pane::Messages;
+    app.zoomed = true;
+
+    let viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 90, 12), &app);
+
+    assert_eq!(viewport.messages, 4);
+    assert_eq!(viewport.folders, 0);
+    assert_eq!(viewport.reader, 0);
+}

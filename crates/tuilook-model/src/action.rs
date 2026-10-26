@@ -16,6 +16,10 @@ pub enum Action {
     Bottom,
     Open,
     Quit,
+    /// Fill the screen with the focused pane, or show every pane again.
+    ToggleZoom,
+    /// Hide or show the folder pane.
+    ToggleFolders,
 }
 
 /// Something core tells the UI happened.

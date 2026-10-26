@@ -46,6 +46,8 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('h') | KeyCode::BackTab => Action::FocusPrevPane,
         KeyCode::Enter => Action::Open,
         KeyCode::Char('q') => Action::Quit,
+        KeyCode::Char('z') => Action::ToggleZoom,
+        KeyCode::Char('b') => Action::ToggleFolders,
         _ => return None,
     };
     Some(action)
@@ -132,7 +134,13 @@ mod tests {
     }
 
     #[test]
+    fn z_zooms_and_b_hides_the_folders() {
+        assert_eq!(press(KeyCode::Char('z')), Some(Action::ToggleZoom));
+        assert_eq!(press(KeyCode::Char('b')), Some(Action::ToggleFolders));
+    }
+
+    #[test]
     fn unbound_keys_do_nothing() {
-        assert_eq!(press(KeyCode::Char('z')), None);
+        assert_eq!(press(KeyCode::Char('x')), None);
     }
 }

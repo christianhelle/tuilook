@@ -54,9 +54,17 @@ pub struct AppState {
     pub viewport: Viewport,
     /// Lines of the reading pane scrolled out of view at the top.
     pub reader_scroll: usize,
+    /// Whether the focused pane fills the screen.
+    pub zoomed: bool,
+    pub folders_hidden: bool,
 }
 
 impl AppState {
+    /// The pane filling the screen, which follows the focus while zoomed.
+    pub fn zoomed_pane(&self) -> Option<Pane> {
+        self.zoomed.then_some(self.focus)
+    }
+
     /// Handles a key press: an open dialog takes it first, then the keymap.
     pub fn on_key(&mut self, key: KeyEvent, keymap: &mut Keymap) -> Option<Effect> {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -70,8 +78,15 @@ impl AppState {
 
     pub fn update(&mut self, action: Action) -> Option<Effect> {
         match action {
-            Action::FocusNextPane => self.focus = self.focus.next(),
-            Action::FocusPrevPane => self.focus = self.focus.prev(),
+            Action::FocusNextPane => self.focus = self.focus.next(self.folders_hidden),
+            Action::FocusPrevPane => self.focus = self.focus.prev(self.folders_hidden),
+            Action::ToggleZoom => self.zoomed = !self.zoomed,
+            Action::ToggleFolders => {
+                self.folders_hidden = !self.folders_hidden;
+                if self.folders_hidden && self.focus == Pane::Folders {
+                    self.focus = Pane::Messages;
+                }
+            }
             Action::Quit => self.should_quit = true,
             Action::SelectNext => return self.move_selection(1),
             Action::SelectPrev => return self.move_selection(-1),
@@ -209,17 +224,20 @@ fn step(index: &mut usize, len: usize, delta: isize) -> bool {
 }
 
 impl Pane {
-    fn next(self) -> Self {
+    /// The next pane in Tab order, skipping the folders while they are hidden.
+    fn next(self, folders_hidden: bool) -> Self {
         match self {
             Self::Folders => Self::Messages,
             Self::Messages => Self::Reader,
+            Self::Reader if folders_hidden => Self::Messages,
             Self::Reader => Self::Folders,
         }
     }
 
-    fn prev(self) -> Self {
+    fn prev(self, folders_hidden: bool) -> Self {
         match self {
             Self::Folders => Self::Reader,
+            Self::Messages if folders_hidden => Self::Reader,
             Self::Messages => Self::Folders,
             Self::Reader => Self::Messages,
         }
@@ -576,6 +594,35 @@ mod tests {
         assert_eq!(app.focus, Pane::Reader);
         app.update(Action::FocusNextPane);
         assert_eq!(app.focus, Pane::Folders);
+    }
+
+    #[test]
+    fn zoom_follows_the_focus_until_toggled_off() {
+        let mut app = in_message_list(&["m1"]);
+
+        app.update(Action::ToggleZoom);
+        assert_eq!(app.zoomed_pane(), Some(Pane::Messages));
+        app.update(Action::FocusNextPane);
+        assert_eq!(app.zoomed_pane(), Some(Pane::Reader));
+        app.update(Action::ToggleZoom);
+        assert_eq!(app.zoomed_pane(), None);
+    }
+
+    #[test]
+    fn hiding_the_folders_moves_focus_off_them_and_tab_skips_them() {
+        let mut app = AppState::default();
+
+        app.update(Action::ToggleFolders);
+        assert_eq!(app.focus, Pane::Messages);
+        app.update(Action::FocusNextPane);
+        app.update(Action::FocusNextPane);
+        assert_eq!(app.focus, Pane::Messages);
+        app.update(Action::FocusPrevPane);
+        assert_eq!(app.focus, Pane::Reader);
+
+        app.update(Action::ToggleFolders);
+        app.update(Action::FocusNextPane);
+        assert_eq!(app.focus, Pane::Folders, "shown again, Tab reaches them");
     }
 
     #[test]

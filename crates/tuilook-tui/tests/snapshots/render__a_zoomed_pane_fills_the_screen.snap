@@ -1,0 +1,17 @@
+---
+source: crates/tuilook-tui/tests/render.rs
+assertion_line: 153
+expression: render(&app)
+---
+"┏ Reading ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃From: Ada <ada@example.com>                                                             ┃"
+"┃Subject: Analytical engine                                                              ┃"
+"┃                                                                                        ┃"
+"┃Notes on the engine                                                                     ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" q quit · Tab/h/l switch pane · j/k move · Enter open                                     "

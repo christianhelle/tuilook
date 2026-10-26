@@ -14,6 +14,8 @@ use crate::app::{AppState, Pane, Status, Viewport};
 /// Each message takes this many rows in the message list.
 const MESSAGE_ROWS: usize = 2;
 
+/// Where each pane goes. A pane that is not shown gets an empty area.
+#[derive(Debug, Default)]
 struct Panes {
     folders: Rect,
     messages: Rect,
@@ -21,20 +23,33 @@ struct Panes {
     status: Rect,
 }
 
-fn panes(area: Rect) -> Panes {
+/// Lays out the screen. Drawing, paging and mouse clicks all use this, so
+/// they agree on where everything is.
+fn panes(area: Rect, app: &AppState) -> Panes {
     let [main, status] = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
-    let [folders, messages, reader] = Layout::horizontal([
-        Constraint::Percentage(20),
-        Constraint::Percentage(40),
-        Constraint::Percentage(40),
-    ])
-    .areas(main);
-    Panes {
-        folders,
-        messages,
-        reader,
+    let mut panes = Panes {
         status,
+        ..Default::default()
+    };
+    match app.zoomed_pane() {
+        Some(Pane::Folders) => panes.folders = main,
+        Some(Pane::Messages) => panes.messages = main,
+        Some(Pane::Reader) => panes.reader = main,
+        None if app.folders_hidden => {
+            [panes.messages, panes.reader] =
+                Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .areas(main);
+        }
+        None => {
+            [panes.folders, panes.messages, panes.reader] = Layout::horizontal([
+                Constraint::Percentage(20),
+                Constraint::Percentage(40),
+                Constraint::Percentage(40),
+            ])
+            .areas(main);
+        }
     }
+    panes
 }
 
 pub fn draw(frame: &mut Frame, app: &AppState) {
@@ -43,11 +58,17 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         messages,
         reader,
         status,
-    } = panes(frame.area());
+    } = panes(frame.area(), app);
 
-    draw_folders(frame, app, folders);
-    draw_messages(frame, app, messages);
-    draw_reader(frame, app, reader);
+    if !folders.is_empty() {
+        draw_folders(frame, app, folders);
+    }
+    if !messages.is_empty() {
+        draw_messages(frame, app, messages);
+    }
+    if !reader.is_empty() {
+        draw_reader(frame, app, reader);
+    }
     let status_line = match &app.status {
         Some(Status::Error(error)) => {
             Line::styled(format!(" {error}"), Style::new().fg(Color::Red))
@@ -136,7 +157,7 @@ fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
 
 /// What each pane can show in `area`, for paging and scroll limits.
 pub fn viewport(area: Rect, app: &AppState) -> Viewport {
-    let panes = panes(area);
+    let panes = panes(area, app);
     // Every pane has a one-cell border all round.
     let inner = |r: Rect| {
         (
