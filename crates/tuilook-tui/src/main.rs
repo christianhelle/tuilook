@@ -2,7 +2,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, bail};
@@ -217,6 +217,7 @@ fn run_ui(
     let result = (|| {
         execute!(io::stdout(), EnableMouseCapture)?;
         while !app.should_quit {
+            app.expire_status(Instant::now());
             terminal.draw(|frame| ui::draw(frame, &app))?;
             let shape = Cursor::of(&app);
             if shape != cursor {

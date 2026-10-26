@@ -119,7 +119,7 @@ fn status_line(app: &AppState) -> Line<'static> {
         Some(Status::Error(error)) => {
             Span::styled(format!(" {error}"), Style::new().fg(Color::Red))
         }
-        Some(Status::Info(info)) => Span::raw(format!(" {info}")),
+        Some(Status::Info(info) | Status::Busy(info)) => Span::raw(format!(" {info}")),
         None if app.compose.is_some() => {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }

@@ -1,4 +1,7 @@
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    time::{Duration, Instant},
+};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tuilook_model::{Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId};
@@ -59,11 +62,25 @@ pub struct Hit {
 /// Rows or lines the mouse wheel moves at a time.
 const WHEEL_STEP: isize = 3;
 
-/// A line for the status bar, shown until the next one replaces it.
+/// A line for the status bar, shown instead of the key hints for a while.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
     Info(String),
     Error(String),
+    /// Work in progress, shown until its outcome replaces it.
+    Busy(String),
+}
+
+impl Status {
+    /// How long it stays before the key hints come back, if it goes by itself.
+    fn lasts(&self) -> Option<Duration> {
+        match self {
+            Status::Info(_) => Some(Duration::from_secs(4)),
+            // Errors stay longer, to be read.
+            Status::Error(_) => Some(Duration::from_secs(8)),
+            Status::Busy(_) => None,
+        }
+    }
 }
 
 /// How much of each pane fits on screen, measured by the UI before each
@@ -94,6 +111,8 @@ pub struct AppState {
     /// The selected message's body, once core has loaded it.
     pub body: Option<String>,
     pub status: Option<Status>,
+    /// When the status was shown, to know when it has gone stale.
+    pub status_since: Option<Instant>,
     pub viewport: Viewport,
     /// Lines of the reading pane scrolled out of view at the top.
     pub reader_scroll: usize,
@@ -134,7 +153,7 @@ impl AppState {
             match compose.key(key, self.viewport.compose) {
                 Request::None => {}
                 Request::Send(draft) => {
-                    self.show_info("Sending…");
+                    self.show_busy("Sending…");
                     return Some(Effect::Send(draft));
                 }
                 Request::Close => self.compose = None,
@@ -326,7 +345,7 @@ impl AppState {
         match confirm {
             Confirm::Delete { ids, permanent } => {
                 let s = if ids.len() == 1 { "" } else { "s" };
-                self.show_info(format!("Deleting {} message{s}…", ids.len()));
+                self.show_busy(format!("Deleting {} message{s}…", ids.len()));
                 Some(Effect::Delete { ids, permanent })
             }
             Confirm::Discard => {
@@ -351,11 +370,32 @@ impl AppState {
     }
 
     pub fn show_error(&mut self, message: String) {
-        self.status = Some(Status::Error(message));
+        self.show(Status::Error(message));
     }
 
     pub fn show_info(&mut self, message: impl Into<String>) {
-        self.status = Some(Status::Info(message.into()));
+        self.show(Status::Info(message.into()));
+    }
+
+    pub fn show_busy(&mut self, message: impl Into<String>) {
+        self.show(Status::Busy(message.into()));
+    }
+
+    fn show(&mut self, status: Status) {
+        self.status = Some(status);
+        self.status_since = Some(Instant::now());
+    }
+
+    /// Drops a status that has been shown long enough, so the key hints
+    /// come back.
+    pub fn expire_status(&mut self, now: Instant) {
+        let lasts = self.status.as_ref().and_then(Status::lasts);
+        if let (Some(lasts), Some(since)) = (lasts, self.status_since)
+            && now.saturating_duration_since(since) >= lasts
+        {
+            self.status = None;
+            self.status_since = None;
+        }
     }
 
     /// Shows a body core loaded, unless the user has moved on.
@@ -942,7 +982,7 @@ mod tests {
             }))
         );
         assert_eq!(app.selected_message, 1, "j and k were typed, not moved");
-        assert_eq!(app.status, Some(Status::Info("Sending…".to_owned())));
+        assert_eq!(app.status, Some(Status::Busy("Sending…".to_owned())));
     }
 
     fn alt_gr(app: &mut AppState, c: char) {
@@ -1089,6 +1129,49 @@ mod tests {
             None
         );
         assert_eq!(app.selected_message, 0);
+    }
+
+    fn after(app: &AppState, seconds: u64) -> Instant {
+        app.status_since.unwrap() + Duration::from_secs(seconds)
+    }
+
+    #[test]
+    fn news_makes_way_for_the_key_hints_after_a_few_seconds() {
+        let mut app = AppState::default();
+        app.show_info("Sent");
+
+        app.expire_status(after(&app, 3));
+        assert_eq!(app.status, Some(Status::Info("Sent".to_owned())));
+        app.expire_status(after(&app, 4));
+        assert_eq!(app.status, None);
+    }
+
+    #[test]
+    fn errors_stay_longer_to_be_read() {
+        let mut app = AppState::default();
+        app.show_error("offline".to_owned());
+
+        app.expire_status(after(&app, 7));
+        assert!(app.status.is_some());
+        app.expire_status(after(&app, 8));
+        assert_eq!(app.status, None);
+    }
+
+    #[test]
+    fn work_in_progress_stays_until_its_outcome_replaces_it() {
+        let mut app = in_message_list(&["m0"]);
+        key(&mut app, KeyCode::Char('d'));
+        key(&mut app, KeyCode::Char('y'));
+
+        app.expire_status(after(&app, 60));
+        assert_eq!(
+            app.status,
+            Some(Status::Busy("Deleting 1 message…".to_owned()))
+        );
+
+        app.messages_deleted(&message_ids(&["m0"]));
+        app.expire_status(after(&app, 4));
+        assert_eq!(app.status, None, "the outcome then goes by itself");
     }
 
     #[test]
