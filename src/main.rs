@@ -498,7 +498,7 @@ fn on_core_event(
         Event::FolderSynced(id) => {
             // Unread counts may have changed along with the messages.
             let effect = app.set_account_folders(account, store.folders()?);
-            if app.current_folder() == Some(&id) {
+            if app.shown_folder().as_ref() == Some(&id) {
                 app.refresh_messages(store.messages_in(&id)?).or(effect)
             } else {
                 effect

@@ -2,8 +2,11 @@
 source: tests/tui_render.rs
 expression: terminal.backend().to_string()
 ---
-"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"┃  ▾ ada@outlook.┃│No messages                       ││                                  │"
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││No messages                       ││                                  │"
+"└────────────────┘│                                  ││                                  │"
+"┏ Accounts ━━━━━━┓│                                  ││                                  │"
+"┃  ▾ ada@outlook.┃│                                  ││                                  │"
 "┃>   ▸ Inbox (6) ┃│                                  ││                                  │"
 "┃      Drafts    ┃│                                  ││                                  │"
 "┃      Sent Items┃│                                  ││                                  │"
@@ -21,8 +24,5 @@ expression: terminal.backend().to_string()
 "┃      HR        ┃│                                  ││                                  │"
 "┃    ▸ Projects (┃│                                  ││                                  │"
 "┃  ▾ ada@universi┃│                                  ││                                  │"
-"┃      Inbox (2) ┃│                                  ││                                  │"
-"┃      Sent Items┃│                                  ││                                  │"
-"┃      Deleted It┃│                                  ││                                  │"
 "┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
 " ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "

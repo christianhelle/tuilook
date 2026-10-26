@@ -4,6 +4,7 @@ pub mod app;
 pub mod compose;
 pub mod demo;
 pub mod editor;
+pub mod favorites;
 pub mod folders;
 pub mod input;
 pub mod keymap;

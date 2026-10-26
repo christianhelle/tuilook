@@ -21,6 +21,8 @@ const MESSAGE_ROWS: usize = 2;
 /// Where each pane goes. A pane that is not shown gets an empty area.
 #[derive(Debug, Default)]
 struct Panes {
+    /// The favorites, above the accounts' folders.
+    favorites: Rect,
     folders: Rect,
     messages: Rect,
     reader: Rect,
@@ -59,11 +61,24 @@ fn panes(area: Rect, app: &AppState) -> Panes {
             .areas(main);
         }
     }
+    if !panes.folders.is_empty() {
+        [panes.favorites, panes.folders] = split_favorites(panes.folders, app);
+    }
     panes
+}
+
+/// Splits the folder pane into the favorites, as tall as they need up to
+/// half the pane, and the accounts' folders below them.
+fn split_favorites(area: Rect, app: &AppState) -> [Rect; 2] {
+    // An empty favorites box still has a row, for the hint.
+    let rows = u16::try_from(app.favorite_count().max(1)).unwrap_or(u16::MAX);
+    let height = rows.saturating_add(2).min(area.height / 2);
+    Layout::vertical([Constraint::Length(height), Constraint::Fill(1)]).areas(area)
 }
 
 pub fn draw(frame: &mut Frame, app: &AppState) {
     let Panes {
+        favorites,
         folders,
         messages,
         reader,
@@ -72,7 +87,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     } = panes(frame.area(), app);
 
     if !folders.is_empty() {
-        draw_folders(frame, app, folders);
+        draw_folders(frame, app, favorites, folders);
     }
     if !messages.is_empty() {
         draw_messages(frame, app, messages);
@@ -406,10 +421,11 @@ pub const COMPOSE_HELP: [(&str, &str); 11] = [
 ];
 
 /// What each key does, shown with `?`.
-pub const HELP: [(&str, &str); 17] = [
+pub const HELP: [(&str, &str); 18] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
     ("Enter", "Open the folder or message"),
     ("→ ←  l h", "Expand or enter a folder, collapse it or go up"),
+    ("*", "Add the folder to Favorites or take it out"),
     ("↑ ↓  j k", "Move, or scroll the message"),
     ("PgUp PgDn Ctrl-B Ctrl-F", "Move or scroll a page"),
     ("Ctrl-U Ctrl-D", "Move or scroll half a page"),
@@ -509,7 +525,11 @@ fn draw_confirm_delete(frame: &mut Frame, count: usize, permanent: bool) {
 }
 
 fn pane_block(app: &AppState, pane: Pane, title: &str) -> Block<'static> {
-    let border = if app.focus == pane {
+    section_block(app.focus == pane, title)
+}
+
+fn section_block(focused: bool, title: &str) -> Block<'static> {
+    let border = if focused {
         BorderType::Thick
     } else {
         BorderType::Plain
@@ -519,10 +539,56 @@ fn pane_block(app: &AppState, pane: Pane, title: &str) -> Block<'static> {
         .title(format!(" {title} "))
 }
 
-fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
+/// The rows shown in the favorites and below them, as indexes into
+/// `folders`.
+fn folder_sections(app: &AppState) -> (Vec<usize>, Vec<usize>) {
+    let favorites = app.favorite_count();
+    app.visible_folders()
+        .into_iter()
+        .partition(|&i| i < favorites)
+}
+
+fn draw_folders(frame: &mut Frame, app: &AppState, favorites: Rect, folders: Rect) {
     let depths = folder_depths(&app.folders);
-    let visible = app.visible_folders();
-    let items = visible.iter().map(|&index| {
+    let (favorite_rows, folder_rows) = folder_sections(app);
+    let in_favorites = app.selected_folder < app.favorite_count();
+    let focused = app.focus == Pane::Folders;
+    let favorites_block = section_block(focused && in_favorites, "Favorites");
+    if favorite_rows.is_empty() {
+        let hint = Line::styled(
+            "* adds the selected folder",
+            Style::new().fg(Color::DarkGray),
+        );
+        frame.render_widget(Paragraph::new(hint).block(favorites_block), favorites);
+    } else {
+        draw_folder_rows(
+            frame,
+            app,
+            &depths,
+            &favorite_rows,
+            favorites_block,
+            favorites,
+        );
+    }
+    let title = match (app.accounts.len() > 1, app.sync.running) {
+        (true, true) => "Accounts ⟳",
+        (true, false) => "Accounts",
+        (false, true) => "Folders ⟳",
+        (false, false) => "Folders",
+    };
+    let block = section_block(focused && !in_favorites, title);
+    draw_folder_rows(frame, app, &depths, &folder_rows, block, folders);
+}
+
+fn draw_folder_rows(
+    frame: &mut Frame,
+    app: &AppState,
+    depths: &[usize],
+    rows: &[usize],
+    block: Block<'static>,
+    area: Rect,
+) {
+    let items = rows.iter().map(|&index| {
         let folder = &app.folders[index];
         let marker = match (app.has_subfolders(index), app.is_expanded(index)) {
             (false, _) => "  ",
@@ -547,18 +613,8 @@ fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
         }
         ListItem::new(Line::from(spans))
     });
-    let list = List::new(items)
-        .block(pane_block(
-            app,
-            Pane::Folders,
-            if app.sync.running {
-                "Folders ⟳"
-            } else {
-                "Folders"
-            },
-        ))
-        .highlight_symbol("> ");
-    let selected = visible.iter().position(|&i| i == app.selected_folder);
+    let list = List::new(items).block(block).highlight_symbol("> ");
+    let selected = rows.iter().position(|&i| i == app.selected_folder);
     let mut state = ListState::default().with_selected(selected);
     frame.render_stateful_widget(list, area, &mut state);
 }
@@ -626,6 +682,7 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
     let panes = panes(area, app);
     let at = Position::new(column, row);
     let (pane, rect) = [
+        (Pane::Folders, panes.favorites),
         (Pane::Folders, panes.folders),
         (Pane::Messages, panes.messages),
         (Pane::Reader, panes.reader),
@@ -638,9 +695,16 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
     let item = match pane {
         Pane::Folders => line.and_then(|line| {
             // Rows are the folders shown; the hit is the folder's index.
-            let visible = app.visible_folders();
-            let selected = visible.iter().position(|&i| i == app.selected_folder)?;
-            visible.get(list_offset(selected, rows) + line).copied()
+            let (favorites, folders) = folder_sections(app);
+            let section = if rect == panes.favorites {
+                favorites
+            } else {
+                folders
+            };
+            // A section without the selection shows its first rows.
+            let selected = section.iter().position(|&i| i == app.selected_folder);
+            let offset = selected.map_or(0, |selected| list_offset(selected, rows));
+            section.get(offset + line).copied()
         }),
         Pane::Messages => line
             .map(|line| {

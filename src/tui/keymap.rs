@@ -49,6 +49,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Enter => Action::Open,
         KeyCode::Char('l') | KeyCode::Right => Action::Expand,
         KeyCode::Char('h') | KeyCode::Left => Action::Collapse,
+        KeyCode::Char('*') => Action::ToggleFavorite,
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('z') => Action::ToggleZoom,
         KeyCode::Char('b') => Action::ToggleFolders,
@@ -186,6 +187,16 @@ mod tests {
         assert_eq!(press(KeyCode::Char('l')), Some(Action::Expand));
         assert_eq!(press(KeyCode::Left), Some(Action::Collapse));
         assert_eq!(press(KeyCode::Char('h')), Some(Action::Collapse));
+    }
+
+    #[test]
+    fn star_adds_or_removes_a_favorite() {
+        // Typing * reports Shift on some keyboards.
+        let star = KeyEvent::new(KeyCode::Char('*'), KeyModifiers::SHIFT);
+        assert_eq!(
+            Keymap::default().action_for(star),
+            Some(Action::ToggleFavorite)
+        );
     }
 
     #[test]

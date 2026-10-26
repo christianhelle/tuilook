@@ -19,6 +19,8 @@ pub enum Action {
     Expand,
     /// Hide the selected folder's subfolders, or go up to its parent.
     Collapse,
+    /// Add the selected folder to the favorites, or take it out.
+    ToggleFavorite,
     Quit,
     /// Fill the screen with the focused pane, or show every pane again.
     ToggleZoom,

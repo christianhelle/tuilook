@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use crate::model::FolderId;
 
-use crate::tui::app::{AppState, Effect};
+use crate::tui::app::{AppState, Effect, favorite_target};
 
 impl AppState {
     /// Indexes into `folders` of the folders shown, in order: the top-level
@@ -95,7 +95,7 @@ impl AppState {
             return None;
         }
         self.selected_folder = index;
-        Some(Effect::LoadFolder(self.folders[index].id.clone()))
+        Some(Effect::LoadFolder(favorite_target(&self.folders[index].id)))
     }
 
     /// Expands every folder above the selected one, so it is shown.

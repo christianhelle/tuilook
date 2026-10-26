@@ -1,15 +1,14 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 234
 expression: render(&app)
 ---
-"┌ Folders ───────┐┏ Messages (2 marked) ━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
-"│>   Inbox (2)   │┃> ● Ada                           ┃│From: Ada <ada@example.com>       │"
-"│    Sent Items  │┃    Analytical engine             ┃│Subject: Analytical engine        │"
-"│    Projects    │┃┌Delete permanently────────────────────────────────┐                  │"
-"│                │┃│Permanently delete 2 messages?                    │ine               │"
-"│                │┃│This cannot be undone.                            │                  │"
-"│                │┃│                                                  │                  │"
+"┌ Favorites ─────┐┏ Messages (2 marked) ━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
+"│* adds the selec│┃> ● Ada                           ┃│From: Ada <ada@example.com>       │"
+"└────────────────┘┃    Analytical engine             ┃│Subject: Analytical engine        │"
+"┌ Folders ───────┐┃┌Delete permanently────────────────────────────────┐                  │"
+"│>   Inbox (2)   │┃│Permanently delete 2 messages?                    │ine               │"
+"│    Sent Items  │┃│This cannot be undone.                            │                  │"
+"│    Projects    │┃│                                                  │                  │"
 "│                │┃│y / Enter delete   Esc or any other key cancel    │                  │"
 "│                │┃└──────────────────────────────────────────────────┘                  │"
 "│                │┃                                  ┃│                                  │"

@@ -171,10 +171,36 @@ pub struct AppState {
     pub account_folders: Vec<Option<Vec<Folder>>>,
     /// The account each of `folders` belongs to.
     pub folder_account: Vec<usize>,
+    /// Folders shown again in the favorites above the accounts, in the
+    /// order they were added.
+    pub favorites: Vec<FolderId>,
 }
 
 /// Folder ids of the rows heading each account start with this.
 const ACCOUNT_ROW: &str = "account:";
+
+/// Folder ids of the rows in the favorites start with this, followed by
+/// the id of the folder they show.
+const FAVORITE_ROW: &str = "favorite:";
+
+/// The id of the favorites row showing folder `id`.
+pub fn favorite_row(id: &FolderId) -> FolderId {
+    FolderId(format!("{FAVORITE_ROW}{}", id.0))
+}
+
+/// Whether `folder` is a row in the favorites.
+pub fn is_favorite_row(folder: &Folder) -> bool {
+    folder.id.0.starts_with(FAVORITE_ROW)
+}
+
+/// The folder whose messages a row shows: the folder itself, or the one a
+/// favorite stands for.
+pub fn favorite_target(row: &FolderId) -> FolderId {
+    match row.0.strip_prefix(FAVORITE_ROW) {
+        Some(id) => FolderId(id.to_owned()),
+        None => row.clone(),
+    }
+}
 
 /// The id of the row heading `address`'s folders.
 pub fn account_row(address: &str) -> FolderId {
@@ -306,6 +332,10 @@ impl AppState {
             Action::Expand if self.focus == Pane::Folders => return self.expand_folder(),
             Action::Collapse if self.focus == Pane::Folders => return self.collapse_folder(),
             Action::Expand | Action::Collapse => {}
+            Action::ToggleFavorite if self.focus == Pane::Folders => {
+                return self.toggle_favorite();
+            }
+            Action::ToggleFavorite => {}
             Action::ToggleMark if self.focus == Pane::Messages => {
                 if let Some(id) = self.selected().map(|m| m.id.clone())
                     && !self.marked.remove(&id)
@@ -374,26 +404,44 @@ impl AppState {
             // An account starts with its folders shown.
             self.expanded.insert(account_row(address));
         }
+        self.rebuild_folders()
+    }
+
+    /// Lays out the folder pane again from the accounts' folders and the
+    /// favorites, keeping the selected row, or failing that the folder it
+    /// showed.
+    pub(crate) fn rebuild_folders(&mut self) -> Option<Effect> {
         let previous = self.current_folder().cloned();
         let (folders, owners) = self.folder_tree();
+        let find = |id: &FolderId| folders.iter().position(|f| &f.id == id);
         self.selected_folder = previous
             .as_ref()
-            .and_then(|id| folders.iter().position(|f| &f.id == id))
+            .and_then(|id| find(id).or_else(|| find(&favorite_target(id))))
             // Otherwise the first real folder, so there is mail to look at.
-            .or_else(|| folders.iter().position(|f| !is_account_row(f)))
+            .or_else(|| {
+                folders
+                    .iter()
+                    .position(|f| !is_account_row(f) && !is_favorite_row(f))
+            })
             .unwrap_or(0);
         self.folders = folders;
         self.folder_account = owners;
         self.reveal_selected_folder();
-        let current = self.current_folder().cloned();
-        (current != previous)
+        let current = self.shown_folder();
+        (current != previous.as_ref().map(favorite_target))
             .then_some(current)
             .flatten()
             .map(Effect::LoadFolder)
     }
 
+    /// The id of the selected row, which for a favorite is not the folder's.
     pub fn current_folder(&self) -> Option<&FolderId> {
         self.folders.get(self.selected_folder).map(|f| &f.id)
+    }
+
+    /// The folder whose messages are shown.
+    pub fn shown_folder(&self) -> Option<FolderId> {
+        self.current_folder().map(favorite_target)
     }
 
     /// The account of the selected folder, and so of the messages shown.
@@ -422,10 +470,10 @@ impl AppState {
 
     /// Every account's folders as one tree, with the account each is in.
     /// With several accounts, each heads a row of its own above its folders.
+    /// The favorites come first.
     fn folder_tree(&self) -> (Vec<Folder>, Vec<usize>) {
         let several = self.accounts.len() > 1;
-        let mut tree = Vec::new();
-        let mut owners = Vec::new();
+        let (mut tree, mut owners) = self.favorite_rows();
         for (account, folders) in self.account_folders.iter().enumerate() {
             let folders = folders.as_deref().unwrap_or_default();
             let Some(address) = self.accounts.get(account).filter(|_| several) else {

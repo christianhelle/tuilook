@@ -1,15 +1,14 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 81
 expression: render(&app)
 ---
-"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"┃>   Inbox (2)   ┃│No messages                       ││                                  │"
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││No messages                       ││                                  │"
+"└────────────────┘│                                  ││                                  │"
+"┏ Folders ━━━━━━━┓│                                  ││                                  │"
+"┃>   Inbox (2)   ┃│                                  ││                                  │"
 "┃    Sent Items  ┃│                                  ││                                  │"
 "┃    Projects    ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
 "┃                ┃│                                  ││                                  │"
 "┃                ┃│                                  ││                                  │"
 "┃                ┃│                                  ││                                  │"

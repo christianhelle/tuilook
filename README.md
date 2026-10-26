@@ -185,7 +185,7 @@ are reading. `Tab` and `Shift-Tab` move between them, or click a pane with the
 mouse. Press `?` at any time to see every key.
 
 tuilook remembers where you were when you quit (folder, message, focused pane,
-zoom and expanded folders) and picks up there next time.
+zoom, expanded folders and favorites) and picks up there next time.
 
 ## Reading mail
 
@@ -195,6 +195,7 @@ zoom and expanded folders) and picks up there next time.
 | `Enter` | Open the folder or message |
 | `j` `k` or `↓` `↑` | Move, or scroll the message |
 | `l` `h` or `→` `←` | Expand a folder, collapse it or go up |
+| `*` | Add the folder to Favorites, or take it out |
 | `PgDn` `PgUp` or `Ctrl-F` `Ctrl-B` | Move or scroll a page |
 | `Ctrl-D` `Ctrl-U` | Move or scroll half a page |
 | `gg` `G` or `Home` `End` | Jump to the first or last |
@@ -206,6 +207,12 @@ zoom and expanded folders) and picks up there next time.
 
 Subfolders start collapsed. A collapsed folder shows the unread count of
 everything inside it.
+
+The folder pane has two parts, as in Outlook: Favorites at the top and your
+accounts' folders below. A favorite works like the folder it stands for. When
+the same folder name is a favorite from more than one account, such as each
+account's Inbox, the favorite also shows the account, as in
+`Inbox - me@outlook.com`.
 
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.

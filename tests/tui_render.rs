@@ -137,11 +137,12 @@ fn a_click_finds_the_folder_drawn_under_it_past_collapsed_ones() {
     let mut app = with_subfolders();
     let area = ratatui::layout::Rect::new(0, 0, 90, 12);
 
-    let hit = ui::hit(area, &app, 4, 2).unwrap();
+    // The empty favorites take the first three rows.
+    let hit = ui::hit(area, &app, 4, 5).unwrap();
     assert_eq!(hit.item, Some(3), "Projects, below the collapsed Inbox");
 
     app.update(tuilook::model::Action::Expand);
-    assert_eq!(ui::hit(area, &app, 4, 2).unwrap().item, Some(1), "Receipts");
+    assert_eq!(ui::hit(area, &app, 4, 5).unwrap().item, Some(1), "Receipts");
 }
 
 #[test]
@@ -165,7 +166,7 @@ fn viewport_measures_what_each_pane_can_show() {
     assert_eq!(
         viewport,
         tuilook::tui::app::Viewport {
-            folders: 9,
+            folders: 6,
             messages: 4,
             reader: 9,
             // From, Subject, blank, "Hi", then the long line wrapped in three
@@ -359,9 +360,14 @@ fn a_click_on_a_border_or_past_the_last_row_hits_no_row() {
         "no message there"
     );
     assert_eq!(
-        ui::hit(area, &app, 2, 2).unwrap().item,
+        ui::hit(area, &app, 2, 5).unwrap().item,
         Some(1),
         "Sent Items"
+    );
+    assert_eq!(
+        ui::hit(area, &app, 2, 1).unwrap().item,
+        None,
+        "the hint in the empty favorites"
     );
     assert_eq!(ui::hit(area, &app, 60, 3).unwrap().pane, Pane::Reader);
     assert_eq!(ui::hit(area, &app, 30, 11), None, "the status bar");
@@ -448,4 +454,44 @@ fn the_demo_has_several_accounts_with_nested_folders() {
     terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
 
     insta::assert_snapshot!(terminal.backend().to_string());
+}
+
+/// Both inboxes and Sent Items in the favorites, with the work inbox selected.
+fn with_favorites() -> AppState {
+    let mut app = two_accounts();
+    app.focus = Pane::Folders;
+    for id in ["inbox", "work", "sent"] {
+        app.selected_folder = app.folders.iter().position(|f| f.id.0 == id).unwrap();
+        app.update(tuilook::model::Action::ToggleFavorite);
+    }
+    app.selected_folder = 1;
+    app.status = None;
+    app
+}
+
+#[test]
+fn favorites_name_the_account_when_names_clash() {
+    let mut terminal = Terminal::new(TestBackend::new(90, 16)).unwrap();
+    terminal
+        .draw(|frame| ui::draw(frame, &with_favorites()))
+        .unwrap();
+
+    insta::assert_snapshot!(terminal.backend().to_string());
+}
+
+#[test]
+fn a_click_in_the_favorites_selects_the_favorite() {
+    let mut app = with_favorites();
+    let area = ratatui::layout::Rect::new(0, 0, 90, 16);
+
+    let hit = ui::hit(area, &app, 4, 1).unwrap();
+    assert_eq!(hit.item, Some(0));
+    app.on_mouse(tuilook::tui::app::Mouse::Click, Some(hit));
+
+    assert_eq!(app.shown_folder(), Some(FolderId("inbox".to_owned())));
+    assert_eq!(
+        ui::hit(area, &app, 4, 6).unwrap().item,
+        Some(3),
+        "the first account, below the favorites"
+    );
 }

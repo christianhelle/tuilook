@@ -1,16 +1,15 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 127
 expression: render(&app)
 ---
-"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"┃  ▾ Inbox (2)   ┃│> Ada                             ││From: Ada <ada@example.com>       │"
-"┃>   ▾ Receipts (┃│    Analytical engine             ││Subject: Analytical engine        │"
-"┃        2026    ┃│  Grace                           ││                                  │"
-"┃    Projects    ┃│    Compiler draft                ││Notes on the engine               │"
-"┃                ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││> Ada                             ││From: Ada <ada@example.com>       │"
+"└────────────────┘│    Analytical engine             ││Subject: Analytical engine        │"
+"┏ Folders ━━━━━━━┓│  Grace                           ││                                  │"
+"┃  ▾ Inbox (2)   ┃│    Compiler draft                ││Notes on the engine               │"
+"┃>   ▾ Receipts (┃│                                  ││                                  │"
+"┃        2026    ┃│                                  ││                                  │"
+"┃    Projects    ┃│                                  ││                                  │"
 "┃                ┃│                                  ││                                  │"
 "┃                ┃│                                  ││                                  │"
 "┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"

@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Ctrl-F`/`Ctrl-B`/`Ctrl-D`/`Ctrl-U`, paging by what fits on screen.
 - Folder tree with subfolders collapsed and expanded by `h`/`l` or `←`/`→`.
   Collapsed folders count the unread mail inside them.
+- Favorites above the accounts in the folder pane: `*` adds the selected
+  folder or takes it out. Favorites with the same name from different accounts
+  also show the account, such as `Inbox - me@outlook.com`. Favorites are kept
+  between runs.
 - `z` zooms the focused pane, and `b` hides or shows the folder pane.
 - `?` shows the keys, both while browsing and while writing a message.
 - Mark messages with Space, all of them with `Ctrl-A`, and clear the marks

@@ -18,6 +18,8 @@ pub struct Snapshot {
     pub folders_hidden: bool,
     /// Folders whose subfolders were shown.
     pub expanded: Vec<String>,
+    /// Folders in the favorites, in order.
+    pub favorites: Vec<String>,
 }
 
 impl Snapshot {
@@ -32,6 +34,7 @@ impl Snapshot {
             zoomed: app.zoomed,
             folders_hidden: app.folders_hidden,
             expanded: app.expanded.iter().map(|id| id.0.clone()).collect(),
+            favorites: app.favorites.iter().map(|id| id.0.clone()).collect(),
         }
     }
 }
@@ -59,6 +62,8 @@ impl AppState {
         };
         self.expanded
             .extend(snapshot.expanded.iter().cloned().map(FolderId));
+        self.favorites = snapshot.favorites.iter().cloned().map(FolderId).collect();
+        self.rebuild_folders();
         let id = FolderId(snapshot.folder.clone()?);
         let index = self.folders.iter().position(|f| f.id == id)?;
         let effect = self.select_folder(index);
@@ -121,6 +126,7 @@ mod tests {
             zoomed: true,
             folders_hidden: true,
             expanded: vec!["a".to_owned()],
+            favorites: vec!["b".to_owned()],
         };
         let mut app = AppState::default();
         let mut b = folder("b");
@@ -129,6 +135,7 @@ mod tests {
 
         let effect = app.restore(&snapshot);
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
+        assert_eq!(app.favorite_count(), 1);
         app.set_messages(vec![message("m1"), message("m2")]);
         let effect = app.select_message("m2");
 
@@ -150,6 +157,21 @@ mod tests {
 
         assert_eq!(app.visible_folders(), [0, 1, 2]);
         assert_eq!(app.selected_folder, 1);
+    }
+
+    #[test]
+    fn a_selected_favorite_is_selected_again() {
+        let mut app = AppState::default();
+        app.set_folders(vec![folder("a"), folder("b")]);
+
+        let effect = app.restore(&Snapshot {
+            folder: Some("favorite:b".to_owned()),
+            favorites: vec!["b".to_owned()],
+            ..Default::default()
+        });
+
+        assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
+        assert_eq!(app.selected_folder, 0);
     }
 
     #[test]

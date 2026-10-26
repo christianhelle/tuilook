@@ -1,15 +1,14 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 244
 expression: terminal.backend().to_string()
 ---
-"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"┃>   In┌Keys──────────────────────────────────────────────────────────────────────┐      │"
-"┃    Se│Tab / Shift-Tab          Next pane / previous pane                        │      │"
-"┃    Pr│Enter                    Open the folder or message                       │      │"
-"┃      │→ ←  l h                 Expand or enter a folder, collapse it or go up   │      │"
-"┃      │↑ ↓  j k                 Move, or scroll the message                      │      │"
-"┃      │PgUp PgDn Ctrl-B Ctrl-F  Move or scroll a page                            │      │"
+"┌ Favor┌Keys──────────────────────────────────────────────────────────────────────┐──────┐"
+"│* adds│Tab / Shift-Tab          Next pane / previous pane                        │      │"
+"└──────│Enter                    Open the folder or message                       │      │"
+"┏ Folde│→ ←  l h                 Expand or enter a folder, collapse it or go up   │      │"
+"┃>   In│*                        Add the folder to Favorites or take it out       │      │"
+"┃    Se│↑ ↓  j k                 Move, or scroll the message                      │      │"
+"┃    Pr│PgUp PgDn Ctrl-B Ctrl-F  Move or scroll a page                            │      │"
 "┃      │Ctrl-U Ctrl-D            Move or scroll half a page                       │      │"
 "┃      │g g  G  Home End         Jump to the first or last                        │      │"
 "┃      │z                        Zoom the pane, or show every pane again          │      │"
