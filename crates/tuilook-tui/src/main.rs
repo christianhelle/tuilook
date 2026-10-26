@@ -29,7 +29,7 @@ use tuilook_tui::{
     compose::Field,
     demo,
     keymap::Keymap,
-    ui,
+    session, ui,
     vim::VimMode,
 };
 
@@ -94,14 +94,14 @@ fn main() -> Result<()> {
         None if cli.demo => {
             let path = std::env::temp_dir().join("tuilook-demo.db");
             remove_db(&path)?;
-            run_ui(&runtime, demo::backend(), &path)
+            run_ui(&runtime, demo::backend(), &path, None)
         }
         None => {
             let backend = graph_backend(&cli)?;
             if KeyringStore::new(ACCOUNT)?.load()?.is_none() {
                 bail!("not signed in; run `tuilook login` first");
             }
-            run_ui(&runtime, backend, &cache_path()?)
+            run_ui(&runtime, backend, &cache_path()?, Some(&session_path()?))
         }
     }
 }
@@ -159,6 +159,14 @@ fn cache_path() -> Result<PathBuf> {
     Ok(dirs.data_dir().join("cache.db"))
 }
 
+/// Where the place the user was when they quit is kept.
+fn session_path() -> Result<PathBuf> {
+    let dirs = directories::ProjectDirs::from("", "", "tuilook")
+        .context("no home directory to keep the session in")?;
+    std::fs::create_dir_all(dirs.cache_dir())?;
+    Ok(dirs.cache_dir().join("session.json"))
+}
+
 /// Deletes a SQLite database along with its WAL files.
 fn remove_db(path: &Path) -> Result<()> {
     for suffix in ["", "-wal", "-shm"] {
@@ -177,6 +185,7 @@ fn run_ui(
     runtime: &tokio::runtime::Runtime,
     backend: impl MailBackend + Send + Sync + 'static,
     path: &Path,
+    session: Option<&Path>,
 ) -> Result<()> {
     let store = Store::open(path)?;
     let (commands, command_rx) = mpsc::channel(32);
@@ -192,6 +201,15 @@ fn run_ui(
     let mut app = AppState::default();
     let effect = app.set_folders(store.folders()?);
     apply(&mut app, &store, &commands, effect)?;
+    if let Some(snapshot) = session.and_then(session::load) {
+        let effect = app.restore(&snapshot);
+        apply(&mut app, &store, &commands, effect)?;
+        let effect = snapshot
+            .message
+            .as_deref()
+            .and_then(|id| app.select_message(id));
+        apply(&mut app, &store, &commands, effect)?;
+    }
 
     let mut keymap = Keymap::default();
     let mut terminal = ratatui::init();
@@ -237,6 +255,10 @@ fn run_ui(
         Ok(())
     })();
     let _ = execute!(io::stdout(), DisableMouseCapture);
+    if let Some(path) = session {
+        // Losing the place to start from next time is not worth failing over.
+        let _ = session::save(path, &session::Snapshot::of(&app));
+    }
     if cursor != Cursor::Default {
         let _ = execute!(io::stdout(), Cursor::Default.style());
     }

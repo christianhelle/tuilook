@@ -3779,6 +3779,8 @@ dependencies = [
  "insta",
  "jiff",
  "ratatui",
+ "serde",
+ "serde_json",
  "tokio",
  "tuilook-auth",
  "tuilook-core",
