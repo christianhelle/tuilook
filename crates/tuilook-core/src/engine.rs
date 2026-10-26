@@ -27,7 +27,10 @@ pub async fn run_engine(
 ) {
     while let Some(command) = commands.recv().await {
         let sent = match command {
-            Command::SyncAll => sync_all(&backend, &mut store, &events).await,
+            Command::SyncAll => match sync_all(&backend, &mut store, &events).await {
+                Ok(()) => events.send(Event::SyncFinished).await,
+                gone => gone,
+            },
             Command::LoadBody(message) => {
                 let event = match load_body(&backend, &mut store, &message).await {
                     Ok(text) => Event::BodyLoaded { message, text },

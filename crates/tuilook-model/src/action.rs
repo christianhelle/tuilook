@@ -48,6 +48,8 @@ pub enum Event {
     FoldersSynced,
     /// A folder's messages in the store changed.
     FolderSynced(FolderId),
+    /// A sync of every folder is done, whether or not each folder made it.
+    SyncFinished,
     BodyLoaded {
         message: MessageId,
         text: String,

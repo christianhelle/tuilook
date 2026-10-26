@@ -66,6 +66,9 @@ struct Cli {
     /// Browse a built-in sample mailbox instead of signing in.
     #[arg(long)]
     demo: bool,
+    /// Seconds between checks for new mail; 0 checks only at start and on F5.
+    #[arg(long, env = "TUILOOK_SYNC_EVERY", default_value_t = 60, global = true)]
+    sync_every: u64,
     #[command(subcommand)]
     command: Option<CliCommand>,
 }
@@ -94,14 +97,20 @@ fn main() -> Result<()> {
         None if cli.demo => {
             let path = std::env::temp_dir().join("tuilook-demo.db");
             remove_db(&path)?;
-            run_ui(&runtime, demo::backend(), &path, None)
+            run_ui(&runtime, demo::backend(), &path, None, sync_every(&cli))
         }
         None => {
             let backend = graph_backend(&cli)?;
             if KeyringStore::new(ACCOUNT)?.load()?.is_none() {
                 bail!("not signed in; run `tuilook login` first");
             }
-            run_ui(&runtime, backend, &cache_path()?, Some(&session_path()?))
+            run_ui(
+                &runtime,
+                backend,
+                &cache_path()?,
+                Some(&session_path()?),
+                sync_every(&cli),
+            )
         }
     }
 }
@@ -152,6 +161,11 @@ async fn sync_once(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
+/// How often to check for new mail, or never when it is 0.
+fn sync_every(cli: &Cli) -> Option<Duration> {
+    (cli.sync_every > 0).then(|| Duration::from_secs(cli.sync_every))
+}
+
 fn cache_path() -> Result<PathBuf> {
     let dirs = directories::ProjectDirs::from("", "", "tuilook")
         .context("no home directory to keep the mail cache in")?;
@@ -186,6 +200,7 @@ fn run_ui(
     backend: impl MailBackend + Send + Sync + 'static,
     path: &Path,
     session: Option<&Path>,
+    sync_every: Option<Duration>,
 ) -> Result<()> {
     let store = Store::open(path)?;
     let (commands, command_rx) = mpsc::channel(32);
@@ -196,9 +211,10 @@ fn run_ui(
         command_rx,
         event_tx,
     ));
-    commands.blocking_send(Command::SyncAll)?;
-
     let mut app = AppState::default();
+    app.sync.every = sync_every;
+    let effect = app.start_sync();
+    apply(&mut app, &store, &commands, effect)?;
     let effect = app.set_folders(store.folders()?);
     apply(&mut app, &store, &commands, effect)?;
     if let Some(snapshot) = session.and_then(session::load) {
@@ -217,7 +233,10 @@ fn run_ui(
     let result = (|| {
         execute!(io::stdout(), EnableMouseCapture)?;
         while !app.should_quit {
-            app.expire_status(Instant::now());
+            let now = Instant::now();
+            app.expire_status(now);
+            let effect = app.sync_if_due(now);
+            apply(&mut app, &store, &commands, effect)?;
             terminal.draw(|frame| ui::draw(frame, &app))?;
             let shape = Cursor::of(&app);
             if shape != cursor {
@@ -297,6 +316,10 @@ impl Cursor {
 fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Option<Effect>> {
     Ok(match event {
         Event::FoldersSynced => app.set_folders(store.folders()?),
+        Event::SyncFinished => {
+            app.sync_finished(Instant::now());
+            None
+        }
         Event::FolderSynced(id) => {
             // Unread counts may have changed along with the messages.
             let effect = app.set_folders(store.folders()?);
@@ -312,7 +335,7 @@ fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Opti
         }
         Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
         Event::Sent => {
-            app.mail_sent();
+            app.mail_sent(Instant::now());
             None
         }
         Event::SendFailed(error) => {
@@ -384,5 +407,14 @@ mod tests {
         let cli = Cli::try_parse_from(["tuilook", "--client-id", "my-own-app"]).unwrap();
 
         assert_eq!(cli.client_id.as_deref(), Some("my-own-app"));
+    }
+
+    #[test]
+    fn checks_for_new_mail_every_minute_unless_told_otherwise() {
+        let cli = Cli::try_parse_from(["tuilook"]).unwrap();
+        assert_eq!(sync_every(&cli), Some(Duration::from_secs(60)));
+
+        let cli = Cli::try_parse_from(["tuilook", "--sync-every", "0"]).unwrap();
+        assert_eq!(sync_every(&cli), None);
     }
 }

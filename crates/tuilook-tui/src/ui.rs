@@ -437,7 +437,15 @@ fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
         ListItem::new(Line::from(spans))
     });
     let list = List::new(items)
-        .block(pane_block(app, Pane::Folders, "Folders"))
+        .block(pane_block(
+            app,
+            Pane::Folders,
+            if app.sync.running {
+                "Folders ⟳"
+            } else {
+                "Folders"
+            },
+        ))
         .highlight_symbol("> ");
     let mut state = ListState::default().with_selected(Some(app.selected_folder));
     frame.render_stateful_widget(list, area, &mut state);

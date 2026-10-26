@@ -44,6 +44,24 @@ async fn sync_all_reports_the_folder_tree_then_each_folder() {
         events.recv().await,
         Some(Event::FolderSynced(FolderId("b".to_owned())))
     );
+    assert_eq!(events.recv().await, Some(Event::SyncFinished));
+}
+
+#[tokio::test]
+async fn a_sync_that_cannot_reach_the_folders_still_finishes() {
+    let backend = FakeBackend {
+        folders_error: Some(BackendError::Other("offline".to_owned())),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    commands.send(Command::SyncAll).await.unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error("offline".to_owned()))
+    );
+    assert_eq!(events.recv().await, Some(Event::SyncFinished));
 }
 
 #[tokio::test]
@@ -101,8 +119,7 @@ async fn load_body_reports_the_body_text() {
     };
     let (commands, mut events) = start(backend);
     commands.send(Command::SyncAll).await.unwrap();
-    events.recv().await;
-    events.recv().await;
+    while events.recv().await != Some(Event::SyncFinished) {}
 
     commands.send(Command::LoadBody(id.clone())).await.unwrap();
 
@@ -193,7 +210,7 @@ async fn sending_reports_it_went_then_syncs_sent_items() {
     let sent = backend.sent.clone();
     let (commands, mut events) = start(backend);
     commands.send(Command::SyncAll).await.unwrap();
-    for _ in 0..3 {
+    for _ in 0..4 {
         events.recv().await;
     }
 

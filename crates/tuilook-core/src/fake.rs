@@ -23,10 +23,15 @@ pub struct FakeBackend {
     pub undeletable: HashSet<MessageId>,
     /// Messages sent so far.
     pub sent: Arc<Mutex<Vec<Draft>>>,
+    /// Why listing folders fails, if it does.
+    pub folders_error: Option<BackendError>,
 }
 
 impl MailBackend for FakeBackend {
     async fn list_folders(&self) -> Result<Vec<Folder>, BackendError> {
+        if let Some(error) = &self.folders_error {
+            return Err(error.clone());
+        }
         Ok(self.folders.clone())
     }
 

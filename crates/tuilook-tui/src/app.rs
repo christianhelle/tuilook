@@ -83,6 +83,27 @@ impl Status {
     }
 }
 
+/// How long after sending to sync again, to show the sent message.
+const AFTER_SENDING: Duration = Duration::from_secs(5);
+
+/// When to sync with the server next.
+#[derive(Debug, Default)]
+pub struct SyncState {
+    /// Whether core is syncing now.
+    pub running: bool,
+    /// When the next sync is due, if one is.
+    pub next: Option<Instant>,
+    /// How often to sync on its own; never when `None`.
+    pub every: Option<Duration>,
+}
+
+impl SyncState {
+    /// Makes a sync due no later than `at`.
+    fn due_by(&mut self, at: Instant) {
+        self.next = Some(self.next.map_or(at, |next| next.min(at)));
+    }
+}
+
 /// How much of each pane fits on screen, measured by the UI before each
 /// update so paging moves by what the user can actually see.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -113,6 +134,7 @@ pub struct AppState {
     pub status: Option<Status>,
     /// When the status was shown, to know when it has gone stale.
     pub status_since: Option<Instant>,
+    pub sync: SyncState,
     pub viewport: Viewport,
     /// Lines of the reading pane scrolled out of view at the top.
     pub reader_scroll: usize,
@@ -245,7 +267,11 @@ impl AppState {
                 }
             }
             Action::Delete | Action::DeletePermanently => {}
-            Action::Refresh => return Some(Effect::Sync),
+            Action::Refresh if self.sync.running => self.show_busy("Syncing…"),
+            Action::Refresh => {
+                self.show_busy("Syncing…");
+                return self.start_sync();
+            }
             Action::Help => self.show_help = true,
             Action::Compose => self.compose = Some(Compose::new(ComposeKind::New, None)),
             Action::Reply | Action::ReplyAll | Action::Forward => {
@@ -356,9 +382,40 @@ impl AppState {
     }
 
     /// Closes the message core sent.
-    pub fn mail_sent(&mut self) {
+    /// Closes the message core sent, and syncs again shortly: Outlook files
+    /// a sent message a few seconds after taking it.
+    pub fn mail_sent(&mut self, now: Instant) {
         self.compose = None;
         self.show_info("Sent");
+        self.sync.due_by(now + AFTER_SENDING);
+    }
+
+    /// Asks core to sync every folder, unless it already is.
+    pub fn start_sync(&mut self) -> Option<Effect> {
+        if self.sync.running {
+            return None;
+        }
+        self.sync.running = true;
+        self.sync.next = None;
+        Some(Effect::Sync)
+    }
+
+    /// Starts a sync when the next one is due and none is running.
+    pub fn sync_if_due(&mut self, now: Instant) -> Option<Effect> {
+        let due = self.sync.next.is_some_and(|next| now >= next);
+        if due { self.start_sync() } else { None }
+    }
+
+    /// Core finished syncing: the next sync is due one interval from now.
+    pub fn sync_finished(&mut self, now: Instant) {
+        self.sync.running = false;
+        if let Some(every) = self.sync.every {
+            self.sync.due_by(now + every);
+        }
+        // An F5 waiting for this gets an answer, unless an error took its place.
+        if self.status == Some(Status::Busy("Syncing…".to_owned())) {
+            self.show_info("Up to date");
+        }
     }
 
     /// Keeps the message open so it can be fixed and sent again.
@@ -1053,7 +1110,7 @@ mod tests {
         assert!(app.compose.as_ref().is_some_and(|c| !c.sending));
 
         ctrl_s(&mut app);
-        app.mail_sent();
+        app.mail_sent(Instant::now());
         assert!(app.compose.is_none());
         assert_eq!(app.status, Some(Status::Info("Sent".to_owned())));
     }
@@ -1172,6 +1229,82 @@ mod tests {
         app.messages_deleted(&message_ids(&["m0"]));
         app.expire_status(after(&app, 4));
         assert_eq!(app.status, None, "the outcome then goes by itself");
+    }
+
+    fn every_minute() -> AppState {
+        let mut app = AppState::default();
+        app.sync.every = Some(Duration::from_secs(60));
+        app
+    }
+
+    #[test]
+    fn mail_is_checked_again_a_minute_after_the_last_sync_finished() {
+        let mut app = every_minute();
+        let start = Instant::now();
+        assert_eq!(app.start_sync(), Some(Effect::Sync));
+        assert_eq!(app.sync_if_due(start + Duration::from_secs(600)), None);
+
+        app.sync_finished(start);
+
+        assert_eq!(app.sync_if_due(start + Duration::from_secs(59)), None);
+        assert_eq!(
+            app.sync_if_due(start + Duration::from_secs(60)),
+            Some(Effect::Sync)
+        );
+        assert_eq!(
+            app.sync_if_due(start + Duration::from_secs(61)),
+            None,
+            "one sync at a time"
+        );
+    }
+
+    #[test]
+    fn without_an_interval_mail_is_checked_only_when_asked() {
+        let mut app = AppState::default();
+        let start = Instant::now();
+        app.start_sync();
+        app.sync_finished(start);
+
+        assert_eq!(app.sync_if_due(start + Duration::from_secs(3600)), None);
+        assert_eq!(app.update(Action::Refresh), Some(Effect::Sync));
+    }
+
+    #[test]
+    fn f5_says_it_is_syncing_then_that_mail_is_up_to_date() {
+        let mut app = AppState::default();
+
+        assert_eq!(app.update(Action::Refresh), Some(Effect::Sync));
+        assert_eq!(app.status, Some(Status::Busy("Syncing…".to_owned())));
+        assert_eq!(app.update(Action::Refresh), None, "already syncing");
+
+        app.sync_finished(Instant::now());
+        assert_eq!(app.status, Some(Status::Info("Up to date".to_owned())));
+    }
+
+    #[test]
+    fn an_error_during_a_requested_sync_is_not_covered_up() {
+        let mut app = AppState::default();
+        app.update(Action::Refresh);
+        app.show_error("offline".to_owned());
+
+        app.sync_finished(Instant::now());
+
+        assert_eq!(app.status, Some(Status::Error("offline".to_owned())));
+    }
+
+    #[test]
+    fn sending_checks_again_soon_so_the_sent_message_shows() {
+        let mut app = every_minute();
+        let start = Instant::now();
+        app.start_sync();
+        app.mail_sent(start);
+        app.sync_finished(start + Duration::from_secs(1));
+
+        assert_eq!(
+            app.sync_if_due(start + Duration::from_secs(5)),
+            Some(Effect::Sync),
+            "well before the minute is up"
+        );
     }
 
     #[test]
