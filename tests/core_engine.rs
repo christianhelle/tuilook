@@ -132,6 +132,46 @@ async fn load_body_reports_the_body_text() {
     );
 }
 
+#[tokio::test]
+async fn mark_read_tells_the_backend_and_reports_the_folder_changed() {
+    let mut inbox = folder("a");
+    inbox.unread = 1;
+    let message = Message {
+        id: MessageId("m1".to_owned()),
+        folder_id: FolderId("a".to_owned()),
+        conversation_id: String::new(),
+        subject: String::new(),
+        from_name: String::new(),
+        from_addr: String::new(),
+        received_at: jiff::Timestamp::UNIX_EPOCH,
+        is_read: false,
+        flagged: false,
+        importance: Importance::Normal,
+        has_attachments: false,
+        preview: String::new(),
+    };
+    let backend = FakeBackend {
+        folders: vec![inbox],
+        messages: [(FolderId("a".to_owned()), vec![message])].into(),
+        ..Default::default()
+    };
+    let read = backend.read.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    commands
+        .send(Command::MarkRead(MessageId("m1".to_owned())))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::FolderSynced(FolderId("a".to_owned())))
+    );
+    assert!(read.lock().unwrap().contains(&MessageId("m1".to_owned())));
+}
+
 fn ids(ids: &[&str]) -> Vec<MessageId> {
     ids.iter().map(|id| MessageId((*id).to_owned())).collect()
 }

@@ -1,4 +1,4 @@
-use crate::model::{BackendError, Draft, Event, MailBackend, MessageId, WellKnown};
+use crate::model::{BackendError, Draft, Event, FolderId, MailBackend, MessageId, WellKnown};
 use crate::store::Store;
 use tokio::sync::mpsc;
 
@@ -15,6 +15,8 @@ pub enum Command {
         ids: Vec<MessageId>,
         permanent: bool,
     },
+    /// Mark a message read, as it is being shown.
+    MarkRead(MessageId),
     Send(Draft),
 }
 
@@ -40,6 +42,17 @@ pub async fn run_engine(
             }
             Command::Delete { ids, permanent } => {
                 delete(&backend, &mut store, &ids, permanent, &events).await
+            }
+            Command::MarkRead(message) => {
+                let event = match mark_read(&backend, &mut store, &message).await {
+                    Ok(Some(folder)) => Some(Event::FolderSynced(folder)),
+                    Ok(None) => None,
+                    Err(e) => Some(Event::Error(format!("could not mark as read: {e}"))),
+                };
+                match event {
+                    Some(event) => events.send(event).await,
+                    None => Ok(()),
+                }
             }
             Command::Send(draft) => send(&backend, &mut store, &draft, &events).await,
         };
@@ -79,6 +92,20 @@ async fn delete(
         events.send(Event::Error(error)).await?;
     }
     Ok(())
+}
+
+/// Marks a message read on the server, then in the store. Returns the folder
+/// whose messages and unread count changed, if one did.
+async fn mark_read(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    message: &MessageId,
+) -> Result<Option<FolderId>, String> {
+    backend
+        .mark_read(message)
+        .await
+        .map_err(|e| e.to_string())?;
+    store.mark_read(message).map_err(|e| e.to_string())
 }
 
 /// Sends a message, then syncs Sent Items so it shows there.

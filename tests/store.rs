@@ -145,6 +145,32 @@ fn refreshing_folders_keeps_their_delta_links() {
 }
 
 #[test]
+fn marking_a_message_read_counts_it_out_of_its_folders_unread() {
+    let mut store = Store::open_in_memory().unwrap();
+    let inbox = FolderId("inbox".to_owned());
+    let mut f = folder("inbox", "Inbox", None);
+    f.unread = 2;
+    store.upsert_folders(&[f]).unwrap();
+    let mut m = message("m1", "inbox", "2026-01-01T09:00:00Z");
+    m.is_read = false;
+    store.upsert_messages(&[m]).unwrap();
+
+    assert_eq!(
+        store.mark_read(&MessageId("m1".to_owned())).unwrap(),
+        Some(inbox.clone())
+    );
+    assert!(store.messages_in(&inbox).unwrap()[0].is_read);
+    assert_eq!(store.folders().unwrap()[0].unread, 1);
+
+    assert_eq!(
+        store.mark_read(&MessageId("m1".to_owned())).unwrap(),
+        None,
+        "already read"
+    );
+    assert_eq!(store.folders().unwrap()[0].unread, 1);
+}
+
+#[test]
 fn deleted_messages_are_gone() {
     let mut store = Store::open_in_memory().unwrap();
     let inbox = FolderId("inbox".to_owned());

@@ -504,10 +504,7 @@ fn on_core_event(
                 effect
             }
         }
-        Event::BodyLoaded { message, text } => {
-            app.body_loaded(message, text);
-            None
-        }
+        Event::BodyLoaded { message, text } => app.body_loaded(message, text),
         Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
         Event::Sent => {
             app.mail_sent(Instant::now());
@@ -540,6 +537,10 @@ fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) 
             Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
             Effect::LoadBody(id) => {
                 commands.blocking_send(Command::LoadBody(id))?;
+                None
+            }
+            Effect::MarkRead(id) => {
+                commands.blocking_send(Command::MarkRead(id))?;
                 None
             }
             Effect::Sync => {

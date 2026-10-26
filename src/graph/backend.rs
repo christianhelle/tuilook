@@ -192,6 +192,12 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(())
     }
 
+    async fn mark_read(&self, message: &MessageId) -> Result<(), BackendError> {
+        let path = format!("/me/messages/{}", message.0);
+        self.client.patch(&path, &json!({ "isRead": true })).await?;
+        Ok(())
+    }
+
     async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
         self.send_draft(draft).await.map_err(sending_error)
     }

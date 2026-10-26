@@ -142,6 +142,28 @@ impl Store {
         Ok(())
     }
 
+    /// Marks a message read, counting it out of its folder's unread mail.
+    /// Returns the folder when the message was there and unread.
+    pub fn mark_read(&mut self, id: &MessageId) -> Result<Option<FolderId>> {
+        let tx = self.conn.transaction()?;
+        let folder = tx
+            .query_row(
+                "UPDATE messages SET is_read = 1 WHERE id = ?1 AND is_read = 0
+                 RETURNING folder_id",
+                [&id.0],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if let Some(folder) = &folder {
+            tx.execute(
+                "UPDATE folders SET unread = unread - 1 WHERE id = ?1 AND unread > 0",
+                [folder],
+            )?;
+        }
+        tx.commit()?;
+        Ok(folder.map(FolderId))
+    }
+
     pub fn delete_messages(&mut self, ids: &[MessageId]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {

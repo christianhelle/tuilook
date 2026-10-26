@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are dropped from the cache with their messages on the next sync.
 - HTML bodies are shown as text, with links as numbered footnotes and images,
   table borders and runs of blank lines left out.
+- A message is marked read, in Outlook too, once the reading pane shows it,
+  and its folder's unread count goes down.
 - Vim-style navigation: `j`/`k`, `gg`/`G`, Home/End, PageUp/PageDown and
   `Ctrl-F`/`Ctrl-B`/`Ctrl-D`/`Ctrl-U`, paging by what fits on screen.
 - Folder tree with subfolders collapsed and expanded by `h`/`l` or `←`/`→`.

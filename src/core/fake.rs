@@ -21,6 +21,8 @@ pub struct FakeBackend {
     pub deleted: Arc<Mutex<Vec<(MessageId, bool)>>>,
     /// Messages that fail to delete.
     pub undeletable: HashSet<MessageId>,
+    /// Messages marked read so far. Later syncs report them as read.
+    pub read: Arc<Mutex<HashSet<MessageId>>>,
     /// Messages sent so far.
     pub sent: Arc<Mutex<Vec<Draft>>>,
     /// Why listing folders fails, if it does.
@@ -44,8 +46,13 @@ impl MailBackend for FakeBackend {
         if let Some(scripted) = self.deltas.get(&key) {
             return scripted.clone();
         }
+        let read = self.read.lock().expect("no test panics holding it");
+        let mut upserted = self.messages.get(folder).cloned().unwrap_or_default();
+        for m in &mut upserted {
+            m.is_read |= read.contains(&m.id);
+        }
         Ok(DeltaPage {
-            upserted: self.messages.get(folder).cloned().unwrap_or_default(),
+            upserted,
             ..Default::default()
         })
     }
@@ -63,6 +70,12 @@ impl MailBackend for FakeBackend {
         }
         let mut deleted = self.deleted.lock().expect("no test panics holding it");
         deleted.push((message.clone(), permanent));
+        Ok(())
+    }
+
+    async fn mark_read(&self, message: &MessageId) -> Result<(), BackendError> {
+        let mut read = self.read.lock().expect("no test panics holding it");
+        read.insert(message.clone());
         Ok(())
     }
 

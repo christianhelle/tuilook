@@ -58,6 +58,12 @@ pub trait MailBackend {
         permanent: bool,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 
+    /// Marks a message as read.
+    fn mark_read(
+        &self,
+        message: &MessageId,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
     /// Sends a message, keeping a copy in Sent Items.
     fn send(&self, draft: &Draft) -> impl Future<Output = Result<(), BackendError>> + Send;
 }

@@ -16,6 +16,8 @@ use crate::tui::{
 pub enum Effect {
     LoadFolder(FolderId),
     LoadBody(MessageId),
+    /// Mark a message read, as the reading pane shows it.
+    MarkRead(MessageId),
     Delete {
         ids: Vec<MessageId>,
         permanent: bool,
@@ -463,7 +465,9 @@ impl AppState {
                 .iter()
                 .position(|f| &f.id == id)
                 .map_or(0, |index| self.account_of(index)),
-            Effect::LoadBody(_) | Effect::Delete { .. } | Effect::Sync => self.current_account(),
+            Effect::LoadBody(_) | Effect::MarkRead(_) | Effect::Delete { .. } | Effect::Sync => {
+                self.current_account()
+            }
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
         }
     }
@@ -692,11 +696,19 @@ impl AppState {
         }
     }
 
-    /// Shows a body core loaded, unless the user has moved on.
-    pub fn body_loaded(&mut self, message: MessageId, text: String) {
-        if self.selected().is_some_and(|m| m.id == message) {
-            self.body = Some(text);
+    /// Shows a body core loaded, unless the user has moved on, and marks
+    /// the message read if it was not.
+    pub fn body_loaded(&mut self, message: MessageId, text: String) -> Option<Effect> {
+        let shown = self.messages.get_mut(self.selected_message)?;
+        if shown.id != message {
+            return None;
         }
+        self.body = Some(text);
+        if shown.is_read {
+            return None;
+        }
+        shown.is_read = true;
+        Some(Effect::MarkRead(message))
     }
 
     fn selected(&self) -> Option<&Message> {
@@ -1035,6 +1047,30 @@ mod tests {
 
         app.body_loaded(MessageId("m2".to_owned()), "fresh".to_owned());
         assert_eq!(app.body.as_deref(), Some("fresh"));
+    }
+
+    #[test]
+    fn showing_an_unread_message_marks_it_read() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        let m1 = MessageId("m1".to_owned());
+
+        let effect = app.body_loaded(m1.clone(), "body".to_owned());
+
+        assert_eq!(effect, Some(Effect::MarkRead(m1.clone())));
+        assert!(app.messages[0].is_read);
+        assert_eq!(app.body_loaded(m1, "again".to_owned()), None);
+    }
+
+    #[test]
+    fn a_stale_body_marks_nothing_read() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.update(Action::SelectNext);
+
+        assert_eq!(
+            app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned()),
+            None
+        );
+        assert!(!app.messages[0].is_read);
     }
 
     #[test]
