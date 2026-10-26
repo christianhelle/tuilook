@@ -10,7 +10,7 @@ use ratatui::{
 use tuilook_model::{ComposeKind, folder_depths};
 
 use crate::{
-    app::{AppState, Confirm, Hit, Pane, Status, Viewport},
+    app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
     compose::{Compose, Field},
     vim::VimMode,
 };
@@ -97,11 +97,43 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
             draw_confirm_delete(frame, ids.len(), *permanent);
         }
         Some(Confirm::Discard) => draw_confirm_discard(frame),
+        Some(Confirm::SendAnyway { sent_lately, .. }) => draw_confirm_burst(frame, *sent_lately),
         None => {}
     }
     if let Some(said) = &app.blocked {
         draw_blocked(frame, said);
     }
+}
+
+/// A dialog asking whether to send one more message in a burst of them.
+fn draw_confirm_burst(frame: &mut Frame, sent: usize) {
+    let lines = vec![
+        Line::raw(format!(
+            "You have sent {sent} messages in the last {} minutes.",
+            PACE_WINDOW.as_secs() / 60
+        )),
+        Line::raw("Outlook.com may block accounts that send in bursts."),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("y / Enter", Style::new().fg(Color::Yellow)),
+            Span::raw(" send anyway   "),
+            Span::styled("Esc", Style::new().fg(Color::Cyan)),
+            Span::raw(" or any other key wait"),
+        ]),
+    ];
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(60), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title("Send another?")
+                .border_style(Style::new().fg(Color::Yellow)),
+        ),
+        area,
+    );
 }
 
 /// A dialog saying Outlook.com refuses to send for now, and what to do.

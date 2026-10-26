@@ -34,6 +34,8 @@ pub enum Confirm {
     },
     /// Close the message being written, losing what is in it.
     Discard,
+    /// Send although several messages went out just before it.
+    SendAnyway { draft: Draft, sent_lately: usize },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -85,6 +87,11 @@ impl Status {
 
 /// How long after sending to sync again, to show the sent message.
 const AFTER_SENDING: Duration = Duration::from_secs(5);
+
+/// Sending more than this many messages within [`PACE_WINDOW`] asks first:
+/// Outlook.com may block an account that sends in bursts.
+pub const PACE_LIMIT: usize = 3;
+pub const PACE_WINDOW: Duration = Duration::from_secs(10 * 60);
 
 /// When to sync with the server next.
 #[derive(Debug, Default)]
@@ -150,6 +157,8 @@ pub struct AppState {
     /// What the mail service said when it blocked sending, shown in a
     /// dialog until the next key.
     pub blocked: Option<String>,
+    /// When recent messages were sent, to notice a burst.
+    pub sent: Vec<Instant>,
     /// A message being written, which takes over the screen.
     pub compose: Option<Compose>,
 }
@@ -177,12 +186,21 @@ impl AppState {
         if let Some(confirm) = self.confirm.take() {
             // y or Enter agrees; any other key cancels and does nothing else.
             let agreed = matches!(key.code, KeyCode::Char('y') | KeyCode::Enter);
-            return agreed.then(|| self.confirmed(confirm)).flatten();
+            if agreed {
+                return self.confirmed(confirm);
+            }
+            self.cancelled(confirm);
+            return None;
         }
         if let Some(compose) = &mut self.compose {
             match compose.key(key, self.viewport.compose) {
                 Request::None => {}
                 Request::Send(draft) => {
+                    let sent_lately = self.sent_lately(Instant::now());
+                    if sent_lately >= PACE_LIMIT {
+                        self.confirm = Some(Confirm::SendAnyway { draft, sent_lately });
+                        return None;
+                    }
                     self.show_busy("Sending…");
                     return Some(Effect::Send(draft));
                 }
@@ -386,6 +404,21 @@ impl AppState {
         marked.map(|m| m.id.clone()).collect()
     }
 
+    /// Messages sent within [`PACE_WINDOW`] before `now`.
+    pub fn sent_lately(&self, now: Instant) -> usize {
+        let lately = |at: &&Instant| now.saturating_duration_since(**at) < PACE_WINDOW;
+        self.sent.iter().filter(lately).count()
+    }
+
+    fn cancelled(&mut self, confirm: Confirm) {
+        if let Confirm::SendAnyway { .. } = confirm {
+            if let Some(compose) = &mut self.compose {
+                compose.sending = false;
+            }
+            self.show_info("Not sent; the message is still open");
+        }
+    }
+
     fn confirmed(&mut self, confirm: Confirm) -> Option<Effect> {
         match confirm {
             Confirm::Delete { ids, permanent } => {
@@ -397,6 +430,10 @@ impl AppState {
                 self.compose = None;
                 None
             }
+            Confirm::SendAnyway { draft, .. } => {
+                self.show_busy("Sending…");
+                Some(Effect::Send(draft))
+            }
         }
     }
 
@@ -404,6 +441,9 @@ impl AppState {
     /// Closes the message core sent, and syncs again shortly: Outlook files
     /// a sent message a few seconds after taking it.
     pub fn mail_sent(&mut self, now: Instant) {
+        self.sent
+            .retain(|at| now.saturating_duration_since(*at) < PACE_WINDOW);
+        self.sent.push(now);
         self.compose = None;
         self.show_info("Sent");
         self.sync.due_by(now + AFTER_SENDING);
@@ -1146,6 +1186,71 @@ mod tests {
         app.mail_sent(Instant::now());
         assert!(app.compose.is_none());
         assert_eq!(app.status, Some(Status::Info("Sent".to_owned())));
+    }
+
+    /// A reply ready to send, after `sends` messages went out just now.
+    fn replying_after(sends: usize) -> AppState {
+        let mut app = in_message_list(&["m0"]);
+        app.messages[0].from_addr = "ada@example.com".to_owned();
+        for _ in 0..sends {
+            app.mail_sent(Instant::now());
+        }
+        app.update(Action::Reply);
+        key(&mut app, KeyCode::Char('x'));
+        app
+    }
+
+    #[test]
+    fn a_few_sends_in_a_row_go_straight_out() {
+        let mut app = replying_after(PACE_LIMIT - 1);
+
+        assert!(matches!(ctrl_s(&mut app), Some(Effect::Send(_))));
+        assert_eq!(app.confirm, None);
+    }
+
+    #[test]
+    fn a_burst_of_sends_asks_first_and_y_sends_anyway() {
+        let mut app = replying_after(PACE_LIMIT);
+
+        assert_eq!(ctrl_s(&mut app), None);
+        assert!(matches!(
+            app.confirm,
+            Some(Confirm::SendAnyway {
+                sent_lately: PACE_LIMIT,
+                ..
+            })
+        ));
+
+        assert!(matches!(
+            key(&mut app, KeyCode::Char('y')),
+            Some(Effect::Send(_))
+        ));
+        assert_eq!(app.status, Some(Status::Busy("Sending…".to_owned())));
+    }
+
+    #[test]
+    fn waiting_instead_keeps_the_message_open_to_send_later() {
+        let mut app = replying_after(PACE_LIMIT);
+        ctrl_s(&mut app);
+
+        assert_eq!(key(&mut app, KeyCode::Esc), None);
+
+        let compose = app.compose.as_ref().unwrap();
+        assert!(!compose.sending);
+        assert_eq!(compose.body.text(), "x");
+    }
+
+    #[test]
+    fn sends_older_than_the_window_do_not_count() {
+        let mut app = AppState::default();
+        let start = Instant::now();
+        for _ in 0..PACE_LIMIT {
+            app.mail_sent(start);
+        }
+
+        assert_eq!(app.sent_lately(start + PACE_WINDOW), 0);
+        app.mail_sent(start + PACE_WINDOW);
+        assert_eq!(app.sent.len(), 1, "old ones are forgotten");
     }
 
     #[test]

@@ -385,3 +385,19 @@ fn a_blocked_send_says_what_to_do() {
 
     insta::assert_snapshot!(render_tall(&app));
 }
+
+#[test]
+fn a_burst_of_sends_asks_before_the_next() {
+    let mut app = sample_app();
+    for _ in 0..tuilook_tui::app::PACE_LIMIT {
+        app.mail_sent(std::time::Instant::now());
+    }
+    press(&mut app, "rThanks");
+    let ctrl_s = KeyEvent::new(
+        KeyCode::Char('s'),
+        ratatui::crossterm::event::KeyModifiers::CONTROL,
+    );
+    app.on_key(ctrl_s, &mut tuilook_tui::keymap::Keymap::default());
+
+    insta::assert_snapshot!(render_tall(&app));
+}

@@ -1,0 +1,21 @@
+---
+source: crates/tuilook-tui/tests/render.rs
+assertion_line: 402
+expression: render_tall(&app)
+---
+"┏ Reply ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃To:      ada@example.com                                                                ┃"
+"┃Cc:                                                                                     ┃"
+"┃Subject: RE: Analytical engine                                                          ┃"
+"┃────────────────────────────────────────────────────────────────────────────────────────┃"
+"┃The original m┌Send another?─────────────────────────────────────────────┐              ┃"
+"┃Thanks        │You have sent 3 messages in the last 10 minutes.          │              ┃"
+"┃              │Outlook.com may block accounts that send in bursts.       │              ┃"
+"┃              │                                                          │              ┃"
+"┃              │y / Enter send anyway   Esc or any other key wait         │              ┃"
+"┃              └──────────────────────────────────────────────────────────┘              ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" INSERT  Sent                                                                             "
