@@ -6,7 +6,7 @@ use std::{
 };
 
 use tuilook_model::{
-    BackendError, Body, DeltaPage, Folder, FolderId, MailBackend, Message, MessageId,
+    BackendError, Body, DeltaPage, Draft, Folder, FolderId, MailBackend, Message, MessageId,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -21,6 +21,8 @@ pub struct FakeBackend {
     pub deleted: Arc<Mutex<Vec<(MessageId, bool)>>>,
     /// Messages that fail to delete.
     pub undeletable: HashSet<MessageId>,
+    /// Messages sent so far.
+    pub sent: Arc<Mutex<Vec<Draft>>>,
 }
 
 impl MailBackend for FakeBackend {
@@ -56,6 +58,15 @@ impl MailBackend for FakeBackend {
         }
         let mut deleted = self.deleted.lock().expect("no test panics holding it");
         deleted.push((message.clone(), permanent));
+        Ok(())
+    }
+
+    async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
+        if draft.to.iter().any(|to| to.ends_with("@invalid")) {
+            return Err(BackendError::Other("no such recipient".to_owned()));
+        }
+        let mut sent = self.sent.lock().expect("no test panics holding it");
+        sent.push(draft.clone());
         Ok(())
     }
 }

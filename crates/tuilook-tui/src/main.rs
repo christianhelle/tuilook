@@ -229,6 +229,14 @@ fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Opti
             None
         }
         Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
+        Event::Sent => {
+            app.show_info("Sent");
+            None
+        }
+        Event::SendFailed(error) => {
+            app.show_error(format!("could not send: {error}"));
+            None
+        }
         Event::Error(error) => {
             app.show_error(error);
             None

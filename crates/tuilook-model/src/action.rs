@@ -47,5 +47,8 @@ pub enum Event {
     },
     /// These messages were deleted and are gone from the store.
     MessagesDeleted(Vec<MessageId>),
+    Sent,
+    /// The message being sent was not; it is still open to try again.
+    SendFailed(String),
     Error(String),
 }

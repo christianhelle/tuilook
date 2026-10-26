@@ -69,6 +69,18 @@ pub struct Flag {
     pub flag_status: String,
 }
 
+/// A reply or forward Graph drafted, with the original quoted in its body.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftMessage {
+    pub id: String,
+    pub body: ItemBody,
+    #[serde(default)]
+    pub to_recipients: Vec<Recipient>,
+    #[serde(default)]
+    pub cc_recipients: Vec<Recipient>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct MessageBody {
     pub body: ItemBody,

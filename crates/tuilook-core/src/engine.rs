@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use tuilook_model::{Event, MailBackend, MessageId};
+use tuilook_model::{Draft, Event, MailBackend, MessageId, WellKnown};
 use tuilook_store::Store;
 
 use crate::{load_body, sync_folders, sync_messages};
@@ -15,6 +15,7 @@ pub enum Command {
         ids: Vec<MessageId>,
         permanent: bool,
     },
+    Send(Draft),
 }
 
 /// Runs until the UI drops its command sender. Owns every write to `store`.
@@ -37,6 +38,7 @@ pub async fn run_engine(
             Command::Delete { ids, permanent } => {
                 delete(&backend, &mut store, &ids, permanent, &events).await
             }
+            Command::Send(draft) => send(&backend, &mut store, &draft, &events).await,
         };
         if sent.is_err() {
             return; // The UI has gone away.
@@ -72,6 +74,33 @@ async fn delete(
             n => format!("deleted {n}, {} failed: {first}", failures.len()),
         };
         events.send(Event::Error(error)).await?;
+    }
+    Ok(())
+}
+
+/// Sends a message, then syncs Sent Items so it shows there.
+async fn send(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    draft: &Draft,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    if let Err(e) = backend.send(draft).await {
+        return events.send(Event::SendFailed(e.to_string())).await;
+    }
+    events.send(Event::Sent).await?;
+    let sent_items = match store.folders() {
+        Ok(folders) => folders
+            .into_iter()
+            .find(|f| f.well_known == Some(WellKnown::SentItems)),
+        Err(e) => return events.send(Event::Error(e.to_string())).await,
+    };
+    if let Some(folder) = sent_items {
+        let event = match sync_messages(backend, store, &folder.id).await {
+            Ok(()) => Event::FolderSynced(folder.id),
+            Err(e) => Event::Error(e.to_string()),
+        };
+        events.send(event).await?;
     }
     Ok(())
 }

@@ -2,10 +2,12 @@
 
 mod action;
 mod backend;
+mod draft;
 mod folder;
 mod message;
 
 pub use action::{Action, Event};
 pub use backend::{BackendError, Body, BodyType, DeltaPage, MailBackend};
+pub use draft::{ComposeKind, Draft, parse_addresses};
 pub use folder::{Folder, FolderId, WellKnown, folder_depths, sort_folders};
 pub use message::{Importance, Message, MessageId, sort_messages};

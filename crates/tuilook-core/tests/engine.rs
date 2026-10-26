@@ -1,8 +1,8 @@
 use tokio::sync::mpsc;
 use tuilook_core::{Command, fake::FakeBackend, run_engine};
 use tuilook_model::{
-    BackendError, Body, BodyType, DeltaPage, Event, Folder, FolderId, Importance, Message,
-    MessageId,
+    BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Event, Folder, FolderId,
+    Importance, Message, MessageId, WellKnown,
 };
 use tuilook_store::Store;
 
@@ -169,5 +169,58 @@ async fn a_message_that_will_not_delete_is_reported_and_the_rest_still_go() {
     assert_eq!(
         events.recv().await,
         Some(Event::Error("deleted 1, 1 failed: m2 is locked".to_owned()))
+    );
+}
+
+fn draft(to: &str) -> Draft {
+    Draft {
+        kind: ComposeKind::New,
+        to: vec![to.to_owned()],
+        cc: vec![],
+        subject: "Hello".to_owned(),
+        body: "Hi".to_owned(),
+    }
+}
+
+#[tokio::test]
+async fn sending_reports_it_went_then_syncs_sent_items() {
+    let mut sent_items = folder("sent");
+    sent_items.well_known = Some(WellKnown::SentItems);
+    let backend = FakeBackend {
+        folders: vec![folder("inbox"), sent_items],
+        ..Default::default()
+    };
+    let sent = backend.sent.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    for _ in 0..3 {
+        events.recv().await;
+    }
+
+    commands
+        .send(Command::Send(draft("ada@example.com")))
+        .await
+        .unwrap();
+
+    assert_eq!(events.recv().await, Some(Event::Sent));
+    assert_eq!(
+        events.recv().await,
+        Some(Event::FolderSynced(FolderId("sent".to_owned())))
+    );
+    assert_eq!(*sent.lock().unwrap(), [draft("ada@example.com")]);
+}
+
+#[tokio::test]
+async fn a_message_that_cannot_be_sent_says_why() {
+    let (commands, mut events) = start(FakeBackend::default());
+
+    commands
+        .send(Command::Send(draft("nobody@invalid")))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::SendFailed("no such recipient".to_owned()))
     );
 }

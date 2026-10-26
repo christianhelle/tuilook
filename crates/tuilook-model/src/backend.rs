@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use crate::{Folder, FolderId, Message, MessageId};
+use crate::{Draft, Folder, FolderId, Message, MessageId};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BackendError {
@@ -53,4 +53,7 @@ pub trait MailBackend {
         message: &MessageId,
         permanent: bool,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
+    /// Sends a message, keeping a copy in Sent Items.
+    fn send(&self, draft: &Draft) -> impl Future<Output = Result<(), BackendError>> + Send;
 }

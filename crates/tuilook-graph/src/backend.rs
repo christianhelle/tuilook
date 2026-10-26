@@ -6,8 +6,8 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 use tuilook_auth::TokenSource;
 use tuilook_model::{
-    BackendError, Body, BodyType, DeltaPage, Folder, FolderId, Importance, MailBackend, Message,
-    MessageId, WellKnown,
+    BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
+    MailBackend, Message, MessageId, WellKnown,
 };
 
 use crate::{
@@ -169,6 +169,97 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         }
         Ok(())
     }
+
+    async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
+        let (original, create) = match &draft.kind {
+            ComposeKind::New => {
+                let message = json!({
+                    "subject": draft.subject,
+                    "body": { "contentType": "Text", "content": draft.body },
+                    "toRecipients": recipients(&draft.to),
+                    "ccRecipients": recipients(&draft.cc),
+                });
+                let mail = json!({ "message": message, "saveToSentItems": true });
+                self.client
+                    .post_no_content("/me/sendMail", Some(&mail))
+                    .await?;
+                return Ok(());
+            }
+            ComposeKind::Reply(id) => (id, "createReply"),
+            ComposeKind::ReplyAll(id) => (id, "createReplyAll"),
+            ComposeKind::Forward(id) => (id, "createForward"),
+        };
+        // Graph drafts the reply so the original is quoted and threaded the
+        // way Outlook does it; tuilook puts the user's text above the quote.
+        let path = format!("/me/messages/{}/{create}", original.0);
+        let created: dto::DraftMessage = self.client.post(&path, &json!({})).await?;
+        let (to, cc) = match draft.kind {
+            ComposeKind::ReplyAll(_) => (
+                merge(&created.to_recipients, &draft.to),
+                merge(&created.cc_recipients, &draft.cc),
+            ),
+            _ => (draft.to.clone(), draft.cc.clone()),
+        };
+        let (content_type, content) = above_quote(&draft.body, &created.body);
+        let changes = json!({
+            "subject": draft.subject,
+            "body": { "contentType": content_type, "content": content },
+            "toRecipients": recipients(&to),
+            "ccRecipients": recipients(&cc),
+        });
+        let path = format!("/me/messages/{}", created.id);
+        self.client.patch(&path, &changes).await?;
+        self.client
+            .post_no_content(&format!("{path}/send"), None)
+            .await?;
+        Ok(())
+    }
+}
+
+fn recipients(addresses: &[String]) -> Vec<serde_json::Value> {
+    addresses
+        .iter()
+        .map(|address| json!({ "emailAddress": { "address": address } }))
+        .collect()
+}
+
+/// The addresses Graph picked, then any the user added.
+fn merge(picked: &[dto::Recipient], added: &[String]) -> Vec<String> {
+    let mut addresses: Vec<String> = picked
+        .iter()
+        .map(|r| r.email_address.address.clone())
+        .collect();
+    for address in added {
+        if !addresses.iter().any(|a| a.eq_ignore_ascii_case(address)) {
+            addresses.push(address.clone());
+        }
+    }
+    addresses
+}
+
+/// Puts plain `text` above the quoted original in a drafted body.
+fn above_quote(text: &str, quoted: &dto::ItemBody) -> (&'static str, String) {
+    if !quoted.content_type.eq_ignore_ascii_case("html") {
+        return ("Text", format!("{text}\n\n{}", quoted.content));
+    }
+    let html = format!("<div>{}</div>", escape_html(text).replace('\n', "<br>"));
+    let content = &quoted.content;
+    // Just inside <body ...>, or at the very start when there is none.
+    let at = content
+        .find("<body")
+        .and_then(|start| content[start..].find('>').map(|end| start + end + 1))
+        .unwrap_or(0);
+    (
+        "HTML",
+        format!("{}{html}{}", &content[..at], &content[at..]),
+    )
+}
+
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn to_message(m: dto::Message, folder: &FolderId) -> Message {
