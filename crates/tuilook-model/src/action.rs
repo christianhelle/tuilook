@@ -28,6 +28,8 @@ pub enum Action {
     Delete,
     /// Delete the marked or selected messages for good, after asking.
     DeletePermanently,
+    /// Sync every folder now.
+    Refresh,
 }
 
 /// Something core tells the UI happened.

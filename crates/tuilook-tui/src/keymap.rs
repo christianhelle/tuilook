@@ -32,6 +32,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
             KeyCode::Char('d') => Action::HalfPageDown,
             KeyCode::Char('u') => Action::HalfPageUp,
             KeyCode::Char('a') => Action::MarkAll,
+            KeyCode::Char('r') => Action::Refresh,
             _ => return None,
         };
         return Some(action);
@@ -53,6 +54,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Esc => Action::ClearMarks,
         KeyCode::Char('d') => Action::Delete,
         KeyCode::Char('D') => Action::DeletePermanently,
+        KeyCode::F(5) => Action::Refresh,
         _ => return None,
     };
     Some(action)
@@ -156,6 +158,12 @@ mod tests {
         assert_eq!(press(KeyCode::Char('d')), Some(Action::Delete));
         assert_eq!(press(KeyCode::Char('D')), Some(Action::DeletePermanently));
         assert_eq!(ctrl('d'), Some(Action::HalfPageDown), "Ctrl-D still pages");
+    }
+
+    #[test]
+    fn f5_and_ctrl_r_refresh() {
+        assert_eq!(press(KeyCode::F(5)), Some(Action::Refresh));
+        assert_eq!(ctrl('r'), Some(Action::Refresh));
     }
 
     #[test]

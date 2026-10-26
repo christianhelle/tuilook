@@ -14,6 +14,8 @@ pub enum Effect {
         ids: Vec<MessageId>,
         permanent: bool,
     },
+    /// Sync every folder.
+    Sync,
 }
 
 /// A question the user must answer before anything else happens.
@@ -141,6 +143,7 @@ impl AppState {
                 }
             }
             Action::Delete | Action::DeletePermanently => {}
+            Action::Refresh => return Some(Effect::Sync),
         }
         None
     }

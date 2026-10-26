@@ -250,6 +250,10 @@ fn apply(
                 commands.blocking_send(Command::LoadBody(id))?;
                 None
             }
+            Effect::Sync => {
+                commands.blocking_send(Command::SyncAll)?;
+                None
+            }
             Effect::Delete { ids, permanent } => {
                 commands.blocking_send(Command::Delete { ids, permanent })?;
                 None
