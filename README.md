@@ -18,8 +18,8 @@ cargo install --git https://github.com/christianhelle/tuilook
 tuilook --demo
 ```
 
-This opens a built-in sample mailbox. Nothing is sent anywhere, so it is a safe
-place to learn the keys.
+This opens three built-in sample accounts with nested folders. Nothing is sent
+anywhere, so it is a safe place to learn the keys.
 
 ## Sign in
 

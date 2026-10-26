@@ -1,0 +1,28 @@
+---
+source: tests/tui_render.rs
+expression: terminal.backend().to_string()
+---
+"┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"┃  ▾ ada@outlook.┃│No messages                       ││                                  │"
+"┃>   ▸ Inbox (6) ┃│                                  ││                                  │"
+"┃      Drafts    ┃│                                  ││                                  │"
+"┃      Sent Items┃│                                  ││                                  │"
+"┃    ▸ Archive   ┃│                                  ││                                  │"
+"┃      Deleted It┃│                                  ││                                  │"
+"┃      Junk Email┃│                                  ││                                  │"
+"┃      Family (1)┃│                                  ││                                  │"
+"┃    ▸ Hobbies (1┃│                                  ││                                  │"
+"┃  ▾ ada@analytic┃│                                  ││                                  │"
+"┃    ▸ Inbox (8) ┃│                                  ││                                  │"
+"┃      Drafts    ┃│                                  ││                                  │"
+"┃      Sent Items┃│                                  ││                                  │"
+"┃      Archive   ┃│                                  ││                                  │"
+"┃      Deleted It┃│                                  ││                                  │"
+"┃      HR        ┃│                                  ││                                  │"
+"┃    ▸ Projects (┃│                                  ││                                  │"
+"┃  ▾ ada@universi┃│                                  ││                                  │"
+"┃      Inbox (2) ┃│                                  ││                                  │"
+"┃      Sent Items┃│                                  ││                                  │"
+"┃      Deleted It┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "

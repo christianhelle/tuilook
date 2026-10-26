@@ -3,10 +3,10 @@ use ratatui::{
     backend::TestBackend,
     crossterm::event::{KeyCode, KeyEvent},
 };
-use tuilook::model::{Folder, FolderId, Importance, Message, MessageId, WellKnown};
+use tuilook::model::{Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders};
 use tuilook::tui::{
     app::{AppState, Pane},
-    ui,
+    demo, ui,
 };
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>, unread: u32) -> Folder {
@@ -431,4 +431,21 @@ fn a_message_says_which_account_it_is_sent_from() {
     press(&mut app, "c");
 
     insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn the_demo_has_several_accounts_with_nested_folders() {
+    let mut app = AppState {
+        accounts: demo::accounts().into_iter().map(|(a, _)| a).collect(),
+        ..Default::default()
+    };
+    for (account, (_, backend)) in demo::accounts().into_iter().enumerate() {
+        let mut folders = backend.folders;
+        sort_folders(&mut folders);
+        app.set_account_folders(account, folders);
+    }
+    let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+
+    insta::assert_snapshot!(terminal.backend().to_string());
 }

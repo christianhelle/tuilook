@@ -57,5 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tuilook logout <address>` signs out of one, and `tuilook sync` syncs them
   all. Each account remembers its tenant and client ID, and a sign-in from
   before this is moved over on first start.
+- `tuilook --demo` shows three sample accounts (personal, work and
+  university) with dozens of messages in nested folders, and starts on the
+  first account's Inbox.
 
 [Unreleased]: https://github.com/christianhelle/tuilook/commits/main

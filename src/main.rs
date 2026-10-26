@@ -113,10 +113,13 @@ fn main() -> Result<()> {
         }
         Some(CliCommand::Sync) => runtime.block_on(sync_once(&cli)),
         None if cli.demo => {
-            let path = std::env::temp_dir().join("tuilook-demo.db");
-            remove_db(&path)?;
-            let demo = vec![("demo".to_owned(), demo::backend(), path)];
-            run_ui(&runtime, demo, None, sync_every(&cli))
+            let mut mailboxes = Vec::new();
+            for (index, (address, backend)) in demo::accounts().into_iter().enumerate() {
+                let path = std::env::temp_dir().join(format!("tuilook-demo-{index}.db"));
+                remove_db(&path)?;
+                mailboxes.push((address, backend, path));
+            }
+            run_ui(&runtime, mailboxes, None, sync_every(&cli))
         }
         None => {
             let accounts = runtime.block_on(signed_in(&cli))?;
