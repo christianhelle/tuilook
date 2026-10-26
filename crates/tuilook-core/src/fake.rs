@@ -1,6 +1,9 @@
 //! In-memory [`MailBackend`] for tests and the offline demo shell.
 
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 
 use tuilook_model::{
     BackendError, Body, DeltaPage, Folder, FolderId, MailBackend, Message, MessageId,
@@ -14,6 +17,10 @@ pub struct FakeBackend {
     /// Answers for a folder's delta sync from a given link. A first sync
     /// (`None`) that is not scripted returns all of the folder's `messages`.
     pub deltas: HashMap<(FolderId, Option<String>), Result<DeltaPage, BackendError>>,
+    /// Messages deleted so far, and whether permanently.
+    pub deleted: Arc<Mutex<Vec<(MessageId, bool)>>>,
+    /// Messages that fail to delete.
+    pub undeletable: HashSet<MessageId>,
 }
 
 impl MailBackend for FakeBackend {
@@ -41,5 +48,14 @@ impl MailBackend for FakeBackend {
             .get(message)
             .cloned()
             .ok_or_else(|| BackendError::Other(format!("no body for {}", message.0)))
+    }
+
+    async fn delete(&self, message: &MessageId, permanent: bool) -> Result<(), BackendError> {
+        if self.undeletable.contains(message) {
+            return Err(BackendError::Other(format!("{} is locked", message.0)));
+        }
+        let mut deleted = self.deleted.lock().expect("no test panics holding it");
+        deleted.push((message.clone(), permanent));
+        Ok(())
     }
 }

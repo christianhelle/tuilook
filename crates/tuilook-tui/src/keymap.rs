@@ -51,6 +51,8 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('b') => Action::ToggleFolders,
         KeyCode::Char(' ') => Action::ToggleMark,
         KeyCode::Esc => Action::ClearMarks,
+        KeyCode::Char('d') => Action::Delete,
+        KeyCode::Char('D') => Action::DeletePermanently,
         _ => return None,
     };
     Some(action)
@@ -147,6 +149,13 @@ mod tests {
         assert_eq!(press(KeyCode::Char(' ')), Some(Action::ToggleMark));
         assert_eq!(ctrl('a'), Some(Action::MarkAll));
         assert_eq!(press(KeyCode::Esc), Some(Action::ClearMarks));
+    }
+
+    #[test]
+    fn d_deletes_and_shift_d_deletes_for_good() {
+        assert_eq!(press(KeyCode::Char('d')), Some(Action::Delete));
+        assert_eq!(press(KeyCode::Char('D')), Some(Action::DeletePermanently));
+        assert_eq!(ctrl('d'), Some(Action::HalfPageDown), "Ctrl-D still pages");
     }
 
     #[test]

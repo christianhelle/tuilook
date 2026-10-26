@@ -46,4 +46,11 @@ pub trait MailBackend {
         &self,
         message: &MessageId,
     ) -> impl Future<Output = Result<Body, BackendError>> + Send;
+
+    /// Deletes a message: to Deleted Items, or for good when `permanent`.
+    fn delete(
+        &self,
+        message: &MessageId,
+        permanent: bool,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
 }

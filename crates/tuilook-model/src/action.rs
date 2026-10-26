@@ -24,6 +24,10 @@ pub enum Action {
     ToggleMark,
     MarkAll,
     ClearMarks,
+    /// Move the marked or selected messages to Deleted Items, after asking.
+    Delete,
+    /// Delete the marked or selected messages for good, after asking.
+    DeletePermanently,
 }
 
 /// Something core tells the UI happened.
@@ -37,5 +41,7 @@ pub enum Event {
         message: MessageId,
         text: String,
     },
+    /// These messages were deleted and are gone from the store.
+    MessagesDeleted(Vec<MessageId>),
     Error(String),
 }

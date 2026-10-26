@@ -228,6 +228,7 @@ fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Opti
             app.body_loaded(message, text);
             None
         }
+        Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
         Event::Error(error) => {
             app.show_error(error);
             None
@@ -247,6 +248,10 @@ fn apply(
             Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
             Effect::LoadBody(id) => {
                 commands.blocking_send(Command::LoadBody(id))?;
+                None
+            }
+            Effect::Delete { ids, permanent } => {
+                commands.blocking_send(Command::Delete { ids, permanent })?;
                 None
             }
         };

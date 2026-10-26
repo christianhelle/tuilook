@@ -183,3 +183,22 @@ fn marked_messages_show_a_dot_and_a_count() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn deleting_asks_first() {
+    let mut app = sample_app();
+    app.focus = Pane::Messages;
+    app.update(tuilook_model::Action::Delete);
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn deleting_for_good_warns_it_cannot_be_undone() {
+    let mut app = sample_app();
+    app.focus = Pane::Messages;
+    app.update(tuilook_model::Action::MarkAll);
+    app.update(tuilook_model::Action::DeletePermanently);
+
+    insta::assert_snapshot!(render(&app));
+}

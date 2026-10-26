@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use jiff::{SignedDuration, Timestamp, Unit};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
+use serde_json::json;
 use tuilook_auth::TokenSource;
 use tuilook_model::{
     BackendError, Body, BodyType, DeltaPage, Folder, FolderId, Importance, MailBackend, Message,
@@ -155,6 +156,18 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             },
             content: response.body.content,
         })
+    }
+
+    async fn delete(&self, message: &MessageId, permanent: bool) -> Result<(), BackendError> {
+        if permanent {
+            let path = format!("/me/messages/{}/permanentDelete", message.0);
+            self.client.post_no_content(&path, None).await?;
+        } else {
+            let path = format!("/me/messages/{}/move", message.0);
+            let target = json!({ "destinationId": WellKnown::DeletedItems.as_graph_name() });
+            self.client.post::<dto::Id>(&path, &target).await?;
+        }
+        Ok(())
     }
 }
 

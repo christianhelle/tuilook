@@ -10,6 +10,19 @@ use crate::keymap::Keymap;
 pub enum Effect {
     LoadFolder(FolderId),
     LoadBody(MessageId),
+    Delete {
+        ids: Vec<MessageId>,
+        permanent: bool,
+    },
+}
+
+/// A question the user must answer before anything else happens.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Confirm {
+    Delete {
+        ids: Vec<MessageId>,
+        permanent: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -61,6 +74,7 @@ pub struct AppState {
     pub folders_hidden: bool,
     /// Messages picked for acting on together, such as deleting.
     pub marked: BTreeSet<MessageId>,
+    pub confirm: Option<Confirm>,
 }
 
 impl AppState {
@@ -74,6 +88,11 @@ impl AppState {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             self.should_quit = true;
             return None;
+        }
+        if let Some(confirm) = self.confirm.take() {
+            // y or Enter agrees; any other key cancels and does nothing else.
+            let agreed = matches!(key.code, KeyCode::Char('y') | KeyCode::Enter);
+            return agreed.then(|| self.confirmed(confirm)).flatten();
         }
         keymap
             .action_for(key)
@@ -114,6 +133,14 @@ impl AppState {
             }
             Action::ClearMarks => self.marked.clear(),
             Action::ToggleMark | Action::MarkAll => {}
+            Action::Delete | Action::DeletePermanently if self.focus != Pane::Folders => {
+                let ids = self.to_act_on();
+                if !ids.is_empty() {
+                    let permanent = action == Action::DeletePermanently;
+                    self.confirm = Some(Confirm::Delete { ids, permanent });
+                }
+            }
+            Action::Delete | Action::DeletePermanently => {}
         }
         None
     }
@@ -162,6 +189,46 @@ impl AppState {
                 let effect = self.set_messages(messages);
                 self.marked = marked;
                 effect
+            }
+        }
+    }
+
+    /// Drops messages core deleted. The selection stays on the same row, so
+    /// the message after a deleted one is selected next.
+    pub fn messages_deleted(&mut self, ids: &[MessageId]) -> Option<Effect> {
+        let selected = self.selected().map(|m| m.id.clone());
+        let gone = |m: &Message| ids.contains(&m.id);
+        let before = self.messages.iter().take(self.selected_message);
+        let index = before.filter(|m| !gone(m)).count();
+        self.messages.retain(|m| !gone(m));
+        self.selected_message = index.min(self.messages.len().saturating_sub(1));
+        for id in ids {
+            self.marked.remove(id);
+        }
+        let s = if ids.len() == 1 { "" } else { "s" };
+        self.show_info(format!("Deleted {} message{s}", ids.len()));
+        if self.selected().map(|m| &m.id) == selected.as_ref() {
+            None
+        } else {
+            self.selection_changed()
+        }
+    }
+
+    /// The marked messages in list order, or else the selected one.
+    pub fn to_act_on(&self) -> Vec<MessageId> {
+        if self.marked.is_empty() {
+            return self.selected().map(|m| m.id.clone()).into_iter().collect();
+        }
+        let marked = self.messages.iter().filter(|m| self.marked.contains(&m.id));
+        marked.map(|m| m.id.clone()).collect()
+    }
+
+    fn confirmed(&mut self, confirm: Confirm) -> Option<Effect> {
+        match confirm {
+            Confirm::Delete { ids, permanent } => {
+                let s = if ids.len() == 1 { "" } else { "s" };
+                self.show_info(format!("Deleting {} message{s}…", ids.len()));
+                Some(Effect::Delete { ids, permanent })
             }
         }
     }
@@ -598,6 +665,113 @@ mod tests {
         let mut app = AppState::default();
 
         assert_eq!(app.update(Action::SelectNext), None);
+    }
+
+    fn key(app: &mut AppState, code: KeyCode) -> Option<Effect> {
+        app.on_key(KeyEvent::from(code), &mut Keymap::default())
+    }
+
+    fn message_ids(ids: &[&str]) -> Vec<MessageId> {
+        ids.iter().map(|id| MessageId((*id).to_owned())).collect()
+    }
+
+    #[test]
+    fn d_asks_and_y_moves_the_selected_message_to_deleted_items() {
+        let mut app = in_message_list(&["m0", "m1"]);
+
+        assert_eq!(key(&mut app, KeyCode::Char('d')), None);
+        assert!(app.confirm.is_some());
+
+        let effect = key(&mut app, KeyCode::Char('y'));
+        assert_eq!(
+            effect,
+            Some(Effect::Delete {
+                ids: message_ids(&["m0"]),
+                permanent: false
+            })
+        );
+        assert_eq!(app.confirm, None);
+    }
+
+    #[test]
+    fn shift_d_deletes_the_marked_messages_for_good_after_enter() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+        app.update(Action::Bottom);
+        app.update(Action::ToggleMark);
+        app.update(Action::Top);
+        app.update(Action::ToggleMark);
+
+        key(&mut app, KeyCode::Char('D'));
+        let effect = key(&mut app, KeyCode::Enter);
+
+        assert_eq!(
+            effect,
+            Some(Effect::Delete {
+                ids: message_ids(&["m0", "m2"]),
+                permanent: true
+            }),
+            "in list order"
+        );
+    }
+
+    #[test]
+    fn any_other_key_cancels_the_delete_and_does_nothing_else() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        key(&mut app, KeyCode::Char('d'));
+
+        assert_eq!(key(&mut app, KeyCode::Char('j')), None);
+
+        assert_eq!(app.confirm, None);
+        assert_eq!(app.selected_message, 0);
+    }
+
+    #[test]
+    fn there_is_nothing_to_delete_in_the_folder_pane_or_an_empty_folder() {
+        let mut app = in_message_list(&["m0"]);
+        app.focus = Pane::Folders;
+        app.update(Action::Delete);
+        assert_eq!(app.confirm, None);
+
+        let mut app = in_message_list(&[]);
+        app.update(Action::Delete);
+        assert_eq!(app.confirm, None);
+    }
+
+    #[test]
+    fn deleted_messages_leave_the_selection_on_the_next_one() {
+        let mut app = in_message_list(&["m0", "m1", "m2", "m3"]);
+        app.update(Action::SelectNext);
+        app.update(Action::SelectNext);
+
+        let effect = app.messages_deleted(&message_ids(&["m0", "m2"]));
+
+        assert_eq!(effect, load_body("m3"));
+        assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m3"));
+        assert_eq!(
+            app.status,
+            Some(Status::Info("Deleted 2 messages".to_owned()))
+        );
+    }
+
+    #[test]
+    fn deleting_other_messages_keeps_the_selected_one() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+        app.update(Action::Bottom);
+        app.update(Action::MarkAll);
+
+        let effect = app.messages_deleted(&message_ids(&["m0"]));
+
+        assert_eq!(effect, None);
+        assert_eq!(app.selected_message, 1);
+        assert_eq!(ids(&app.marked), ["m1", "m2"]);
+    }
+
+    #[test]
+    fn deleting_the_last_message_selects_the_one_before() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.update(Action::Bottom);
+
+        assert_eq!(app.messages_deleted(&message_ids(&["m1"])), load_body("m0"));
     }
 
     #[test]

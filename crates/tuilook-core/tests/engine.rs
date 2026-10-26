@@ -114,3 +114,60 @@ async fn load_body_reports_the_body_text() {
         })
     );
 }
+
+fn ids(ids: &[&str]) -> Vec<MessageId> {
+    ids.iter().map(|id| MessageId((*id).to_owned())).collect()
+}
+
+#[tokio::test]
+async fn delete_asks_the_backend_and_reports_what_went() {
+    let backend = FakeBackend::default();
+    let deleted = backend.deleted.clone();
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::Delete {
+            ids: ids(&["m1", "m2"]),
+            permanent: true,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::MessagesDeleted(ids(&["m1", "m2"])))
+    );
+    assert_eq!(
+        *deleted.lock().unwrap(),
+        [
+            (MessageId("m1".to_owned()), true),
+            (MessageId("m2".to_owned()), true)
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_message_that_will_not_delete_is_reported_and_the_rest_still_go() {
+    let backend = FakeBackend {
+        undeletable: ids(&["m2"]).into_iter().collect(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::Delete {
+            ids: ids(&["m1", "m2"]),
+            permanent: false,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::MessagesDeleted(ids(&["m1"])))
+    );
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error("deleted 1, 1 failed: m2 is locked".to_owned()))
+    );
+}

@@ -5,11 +5,11 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 use tuilook_model::folder_depths;
 
-use crate::app::{AppState, Pane, Status, Viewport};
+use crate::app::{AppState, Confirm, Pane, Status, Viewport};
 
 /// Each message takes this many rows in the message list.
 const MESSAGE_ROWS: usize = 2;
@@ -77,6 +77,51 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         None => Line::from(" q quit · Tab/h/l switch pane · j/k move · Enter open"),
     };
     frame.render_widget(status_line, status);
+
+    if let Some(Confirm::Delete { ids, permanent }) = &app.confirm {
+        draw_confirm_delete(frame, ids.len(), *permanent);
+    }
+}
+
+/// A dialog asking whether to delete the marked or selected messages.
+fn draw_confirm_delete(frame: &mut Frame, count: usize, permanent: bool) {
+    let messages = match count {
+        1 => "1 message".to_owned(),
+        n => format!("{n} messages"),
+    };
+    let mut lines = if permanent {
+        vec![
+            Line::raw(format!("Permanently delete {messages}?")),
+            Line::raw("This cannot be undone."),
+        ]
+    } else {
+        vec![Line::raw(format!("Move {messages} to Deleted Items?"))]
+    };
+    lines.push(Line::raw(""));
+    lines.push(Line::from(vec![
+        Span::styled("y / Enter", Style::new().fg(Color::Red)),
+        Span::raw(" delete   "),
+        Span::styled("Esc", Style::new().fg(Color::Cyan)),
+        Span::raw(" or any other key cancel"),
+    ]));
+    let title = if permanent {
+        "Delete permanently"
+    } else {
+        "Delete"
+    };
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(52), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title(title)
+                .border_style(Style::new().fg(Color::Red)),
+        ),
+        area,
+    );
 }
 
 fn pane_block(app: &AppState, pane: Pane, title: &str) -> Block<'static> {
