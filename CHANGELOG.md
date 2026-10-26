@@ -50,7 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Outlook.com does block sending, explains how to unblock the account and
   keeps the message open to send later.
 - Every request names tuilook in its User-Agent.
-- A README on installing, signing in and using tuilook.
+- A README on installing, signing in and using tuilook, with step-by-step
+  instructions and links to Microsoft's documentation for registering an app
+  and finding the client ID and tenant ID for work or school accounts.
 - Several accounts side by side: run `tuilook login` again to add one. Each
   account heads its own folders in the folder pane, every account syncs in the
   background, and a message is sent from the account whose folder is open,

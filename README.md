@@ -60,19 +60,113 @@ tuilook logout me@outlook.com
 
 ### Work or school accounts
 
-By default tuilook signs in to personal Microsoft accounts (Outlook.com,
-Hotmail, Live). tuilook's own app registration only accepts those, so for a
-Microsoft 365 work or school account, register a public client app in Entra ID
-with the delegated Graph permissions `User.Read`, `Mail.ReadWrite`,
-`Mail.Send`, `MailboxSettings.Read` and `offline_access`, and pass its ID and
-your tenant:
+Microsoft only lets a program read mail if it is registered with Microsoft
+Entra ID (formerly Azure Active Directory). The registration gives it a
+**client ID**, which Microsoft shows on the sign-in and consent screens and
+which organizations use to allow or block apps. It is an ID, not a secret.
+
+tuilook comes with a registration of its own, but it only accepts personal
+Microsoft accounts (Outlook.com, Hotmail, Live). That is why
+`tuilook login` works for those without any options. For a Microsoft 365 work
+or school account, use an app registration in Entra ID and tell tuilook its
+client ID and which tenant (organization) to sign in to.
+
+If your organization's IT already has a registration for mail clients like
+this, ask them for its client ID and tenant ID and skip to
+[signing in](#sign-in-with-your-registration). Otherwise, register one
+yourself:
+
+#### 1. Register an app
+
+Follow Microsoft's guide
+[Register an application in Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app).
+In short:
+
+1. Sign in to the [Microsoft Entra admin center](https://entra.microsoft.com).
+   If you can't register apps in your organization's tenant, you can use the
+   free Default Directory that comes with an Azure account.
+2. Go to **Entra ID** > **App registrations** > **New registration**.
+3. Give it a name, such as `tuilook`.
+4. Under **Supported account types**, pick who may sign in with it. This also
+   decides what to pass as `--tenant` in step 4:
+
+   | Supported account types | `--tenant` |
+   | --- | --- |
+   | Single tenant only | your tenant ID |
+   | Multiple Entra ID tenants | `organizations`, or a tenant ID |
+   | Any Entra ID Tenant + Personal Microsoft accounts | `common`, `organizations` or a tenant ID |
+   | Personal accounts only | `consumers` (tuilook's own registration already covers this) |
+
+5. Select **Register**. No redirect URI is needed.
+
+#### 2. Allow device-code sign-in
+
+tuilook signs in with a code you enter in a browser (the
+[device authorization grant](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)),
+and has no secret of its own, so the registration must allow public client
+flows. See
+[Enable public client flow](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-app-configuration#enable-public-client-flow):
+
+1. In your app registration, select **Authentication**.
+2. Under **Advanced settings**, set **Allow public client flows** to **Yes**.
+3. Select **Save**.
+
+Without this, signing in fails with `AADSTS7000218`
+([what that means](https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/app-integration/confidential-client-application-authentication-error-aadsts7000218)).
+
+#### 3. Add the mail permissions
+
+In your app registration, select **API permissions** > **Add a permission** >
+**Microsoft Graph** > **Delegated permissions**, then add:
+
+- `User.Read` (usually there already), to learn your email address
+- `Mail.ReadWrite`, to read, sync and delete mail
+- `Mail.Send`, to send mail
+- `MailboxSettings.Read`
+- `offline_access`, to stay signed in
+
+Microsoft's guide
+[Add permissions to access Microsoft Graph](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-configure-app-access-web-apis#add-permissions-to-access-microsoft-graph)
+walks through this, and the
+[Graph permissions reference](https://learn.microsoft.com/en-us/graph/permissions-reference)
+says what each one allows.
+
+Many organizations don't let their users approve an app themselves. If
+signing in says an administrator must approve tuilook, an admin needs to
+[grant admin consent](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/grant-admin-consent),
+for example with **Grant admin consent** on the **API permissions** page.
+
+#### 4. Find the client ID and tenant ID
+
+- **Client ID:** on your app registration's **Overview** page, as
+  **Application (client) ID**.
+- **Tenant ID:** on the same page, as **Directory (tenant) ID**. That is the
+  tenant the app is registered in. For an organization you belong to, see
+  [How to find your tenant ID](https://learn.microsoft.com/en-us/entra/fundamentals/how-to-find-tenant)
+  (**Entra ID** > **Overview** > **Properties**). The organization's domain,
+  such as `contoso.com`, works in its place, and so does `organizations` to
+  let Microsoft work out the tenant from the account you sign in with.
+
+#### Sign in with your registration
 
 ```bash
-tuilook --tenant organizations --client-id <your-app-id> login
+tuilook --tenant <tenant-id> --client-id <client-id> login
 ```
 
-tuilook remembers the tenant and app registration each account signed in
-with, so the options are only needed for `login`.
+Or set `TUILOOK_TENANT` and `TUILOOK_CLIENT_ID` instead of passing the
+options. tuilook remembers the tenant and client ID each account signed in
+with, so they are only needed for `login`. Accounts in different
+organizations can each use their own.
+
+#### If device-code sign-in is blocked
+
+Device-code sign-in can be abused for phishing, so many organizations block
+it. Any tenant with Entra ID's
+[security defaults](https://learn.microsoft.com/en-us/entra/fundamentals/security-defaults)
+turned on blocks it, and tenants created from 1 July 2026 have them on from
+the start. Others block it with Conditional Access. If signing in is refused,
+tuilook can't sign in to that organization for now; ask its IT whether
+device-code sign-in can be allowed for you.
 
 ## The screen
 
