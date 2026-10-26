@@ -316,9 +316,9 @@ pub const COMPOSE_HELP: [(&str, &str); 11] = [
 
 /// What each key does, shown with `?`.
 pub const HELP: [(&str, &str); 17] = [
-    ("Tab / Shift-Tab  l h", "Next pane / previous pane"),
+    ("Tab / Shift-Tab", "Next pane / previous pane"),
     ("Enter", "Open the folder or message"),
-    ("→ ←", "Expand or enter a folder, collapse it or go up"),
+    ("→ ←  l h", "Expand or enter a folder, collapse it or go up"),
     ("↑ ↓  j k", "Move, or scroll the message"),
     ("PgUp PgDn Ctrl-B Ctrl-F", "Move or scroll a page"),
     ("Ctrl-U Ctrl-D", "Move or scroll half a page"),

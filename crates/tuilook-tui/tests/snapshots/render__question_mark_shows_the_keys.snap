@@ -5,9 +5,9 @@ expression: terminal.backend().to_string()
 ---
 "┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
 "┃>   In┌Keys──────────────────────────────────────────────────────────────────────┐      │"
-"┃    Se│Tab / Shift-Tab  l h     Next pane / previous pane                        │      │"
+"┃    Se│Tab / Shift-Tab          Next pane / previous pane                        │      │"
 "┃    Pr│Enter                    Open the folder or message                       │      │"
-"┃      │→ ←                      Expand or enter a folder, collapse it or go up   │      │"
+"┃      │→ ←  l h                 Expand or enter a folder, collapse it or go up   │      │"
 "┃      │↑ ↓  j k                 Move, or scroll the message                      │      │"
 "┃      │PgUp PgDn Ctrl-B Ctrl-F  Move or scroll a page                            │      │"
 "┃      │Ctrl-U Ctrl-D            Move or scroll half a page                       │      │"

@@ -44,11 +44,11 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::PageUp => Action::PageUp,
         KeyCode::Char('G') | KeyCode::End => Action::Bottom,
         KeyCode::Home => Action::Top,
-        KeyCode::Char('l') | KeyCode::Tab => Action::FocusNextPane,
-        KeyCode::Char('h') | KeyCode::BackTab => Action::FocusPrevPane,
+        KeyCode::Tab => Action::FocusNextPane,
+        KeyCode::BackTab => Action::FocusPrevPane,
         KeyCode::Enter => Action::Open,
-        KeyCode::Right => Action::Expand,
-        KeyCode::Left => Action::Collapse,
+        KeyCode::Char('l') | KeyCode::Right => Action::Expand,
+        KeyCode::Char('h') | KeyCode::Left => Action::Collapse,
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('z') => Action::ToggleZoom,
         KeyCode::Char('b') => Action::ToggleFolders,
@@ -84,10 +84,8 @@ mod tests {
     }
 
     #[test]
-    fn h_l_and_tab_move_focus_between_panes() {
-        assert_eq!(press(KeyCode::Char('l')), Some(Action::FocusNextPane));
+    fn tab_and_shift_tab_move_focus_between_panes() {
         assert_eq!(press(KeyCode::Tab), Some(Action::FocusNextPane));
-        assert_eq!(press(KeyCode::Char('h')), Some(Action::FocusPrevPane));
         assert_eq!(press(KeyCode::BackTab), Some(Action::FocusPrevPane));
     }
 
@@ -183,11 +181,11 @@ mod tests {
     }
 
     #[test]
-    fn arrows_expand_and_collapse_while_h_and_l_switch_panes() {
+    fn l_and_right_expand_while_h_and_left_collapse() {
         assert_eq!(press(KeyCode::Right), Some(Action::Expand));
+        assert_eq!(press(KeyCode::Char('l')), Some(Action::Expand));
         assert_eq!(press(KeyCode::Left), Some(Action::Collapse));
-        assert_eq!(press(KeyCode::Char('l')), Some(Action::FocusNextPane));
-        assert_eq!(press(KeyCode::Char('h')), Some(Action::FocusPrevPane));
+        assert_eq!(press(KeyCode::Char('h')), Some(Action::Collapse));
     }
 
     #[test]
