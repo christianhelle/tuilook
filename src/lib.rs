@@ -1,5 +1,6 @@
 //! tuilook: a terminal client for Outlook.com mail.
 
+pub mod accounts;
 pub mod auth;
 pub mod core;
 pub mod graph;
