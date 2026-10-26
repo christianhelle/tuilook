@@ -1,12 +1,12 @@
 ---
 source: crates/tuilook-tui/tests/render.rs
-assertion_line: 198
+assertion_line: 224
 expression: render(&app)
 ---
 "┌ Folders ───────┐┏ Messages ━━━━━━━━━━━━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
-"│> Inbox (2)     │┃> Ada                             ┃│From: Ada <ada@example.com>       │"
-"│  Sent Items    │┃    Analytical engine             ┃│Subject: Analytical engine        │"
-"│  Projects      │┃  Grace                           ┃│                                  │"
+"│>   Inbox (2)   │┃> Ada                             ┃│From: Ada <ada@example.com>       │"
+"│    Sent Items  │┃    Analytical engine             ┃│Subject: Analytical engine        │"
+"│    Projects    │┃  Grace                           ┃│                                  │"
 "│                │┃┌Delete────────────────────────────────────────────┐ine               │"
 "│                │┃│Move 1 message to Deleted Items?                  │                  │"
 "│                │┃│                                                  │                  │"

@@ -1,12 +1,12 @@
 ---
 source: crates/tuilook-tui/tests/render.rs
-assertion_line: 208
+assertion_line: 234
 expression: render(&app)
 ---
 "┌ Folders ───────┐┏ Messages (2 marked) ━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
-"│> Inbox (2)     │┃> ● Ada                           ┃│From: Ada <ada@example.com>       │"
-"│  Sent Items    │┃    Analytical engine             ┃│Subject: Analytical engine        │"
-"│  Projects      │┃┌Delete permanently────────────────────────────────┐                  │"
+"│>   Inbox (2)   │┃> ● Ada                           ┃│From: Ada <ada@example.com>       │"
+"│    Sent Items  │┃    Analytical engine             ┃│Subject: Analytical engine        │"
+"│    Projects    │┃┌Delete permanently────────────────────────────────┐                  │"
 "│                │┃│Permanently delete 2 messages?                    │ine               │"
 "│                │┃│This cannot be undone.                            │                  │"
 "│                │┃│                                                  │                  │"

@@ -47,6 +47,8 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('l') | KeyCode::Tab => Action::FocusNextPane,
         KeyCode::Char('h') | KeyCode::BackTab => Action::FocusPrevPane,
         KeyCode::Enter => Action::Open,
+        KeyCode::Right => Action::Expand,
+        KeyCode::Left => Action::Collapse,
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('z') => Action::ToggleZoom,
         KeyCode::Char('b') => Action::ToggleFolders,
@@ -178,6 +180,14 @@ mod tests {
         assert_eq!(press(KeyCode::Char('R')), Some(Action::ReplyAll));
         assert_eq!(press(KeyCode::Char('f')), Some(Action::Forward));
         assert_eq!(ctrl('f'), Some(Action::PageDown), "Ctrl-F still pages");
+    }
+
+    #[test]
+    fn arrows_expand_and_collapse_while_h_and_l_switch_panes() {
+        assert_eq!(press(KeyCode::Right), Some(Action::Expand));
+        assert_eq!(press(KeyCode::Left), Some(Action::Collapse));
+        assert_eq!(press(KeyCode::Char('l')), Some(Action::FocusNextPane));
+        assert_eq!(press(KeyCode::Char('h')), Some(Action::FocusPrevPane));
     }
 
     #[test]

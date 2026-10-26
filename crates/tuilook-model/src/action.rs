@@ -15,6 +15,10 @@ pub enum Action {
     Top,
     Bottom,
     Open,
+    /// Show the selected folder's subfolders, or go into them.
+    Expand,
+    /// Hide the selected folder's subfolders, or go up to its parent.
+    Collapse,
     Quit,
     /// Fill the screen with the focused pane, or show every pane again.
     ToggleZoom,

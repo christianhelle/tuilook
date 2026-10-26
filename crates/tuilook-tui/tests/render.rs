@@ -101,8 +101,8 @@ fn status_bar_shows_the_last_error() {
     insta::assert_snapshot!(render(&app));
 }
 
-#[test]
-fn subfolders_are_indented_under_their_parent() {
+/// Inbox > Receipts > 2026, then Projects.
+fn with_subfolders() -> AppState {
     let mut receipts = folder("receipts", "Receipts", None, 1);
     receipts.parent_id = Some(FolderId("inbox".to_owned()));
     let mut year = folder("2026", "2026", None, 0);
@@ -114,8 +114,34 @@ fn subfolders_are_indented_under_their_parent() {
         year,
         folder("proj", "Projects", None, 0),
     ];
+    app
+}
+
+#[test]
+fn subfolders_are_indented_under_their_parent() {
+    let mut app = with_subfolders();
+    app.update(tuilook_model::Action::Expand);
+    app.update(tuilook_model::Action::Expand);
+    app.update(tuilook_model::Action::Expand);
 
     insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn a_collapsed_folder_counts_the_unread_mail_inside_it() {
+    insta::assert_snapshot!(render(&with_subfolders()));
+}
+
+#[test]
+fn a_click_finds_the_folder_drawn_under_it_past_collapsed_ones() {
+    let mut app = with_subfolders();
+    let area = ratatui::layout::Rect::new(0, 0, 90, 12);
+
+    let hit = ui::hit(area, &app, 4, 2).unwrap();
+    assert_eq!(hit.item, Some(3), "Projects, below the collapsed Inbox");
+
+    app.update(tuilook_model::Action::Expand);
+    assert_eq!(ui::hit(area, &app, 4, 2).unwrap().item, Some(1), "Receipts");
 }
 
 #[test]

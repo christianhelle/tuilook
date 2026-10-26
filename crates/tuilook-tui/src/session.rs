@@ -16,6 +16,8 @@ pub struct Snapshot {
     pub message: Option<String>,
     pub zoomed: bool,
     pub folders_hidden: bool,
+    /// Folders whose subfolders were shown.
+    pub expanded: Vec<String>,
 }
 
 impl Snapshot {
@@ -29,6 +31,7 @@ impl Snapshot {
                 .map(|m| m.id.0.clone()),
             zoomed: app.zoomed,
             folders_hidden: app.folders_hidden,
+            expanded: app.expanded.iter().map(|id| id.0.clone()).collect(),
         }
     }
 }
@@ -54,13 +57,13 @@ impl AppState {
             Pane::Folders if snapshot.folders_hidden => Pane::Messages,
             focus => focus,
         };
+        self.expanded
+            .extend(snapshot.expanded.iter().cloned().map(FolderId));
         let id = FolderId(snapshot.folder.clone()?);
         let index = self.folders.iter().position(|f| f.id == id)?;
-        if index == self.selected_folder {
-            return None;
-        }
-        self.selected_folder = index;
-        Some(Effect::LoadFolder(id))
+        let effect = self.select_folder(index);
+        self.reveal_selected_folder();
+        effect
     }
 
     /// Selects a message in the list by id, if it is there.
@@ -117,9 +120,12 @@ mod tests {
             message: Some("m2".to_owned()),
             zoomed: true,
             folders_hidden: true,
+            expanded: vec!["a".to_owned()],
         };
         let mut app = AppState::default();
-        app.set_folders(vec![folder("a"), folder("b")]);
+        let mut b = folder("b");
+        b.parent_id = Some(FolderId("a".to_owned()));
+        app.set_folders(vec![folder("a"), b]);
 
         let effect = app.restore(&snapshot);
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
@@ -128,6 +134,22 @@ mod tests {
 
         assert_eq!(effect, Some(Effect::LoadBody(MessageId("m2".to_owned()))));
         assert_eq!(Snapshot::of(&app), snapshot);
+    }
+
+    #[test]
+    fn the_restored_folder_is_shown_even_inside_a_collapsed_one() {
+        let mut app = AppState::default();
+        let mut b = folder("b");
+        b.parent_id = Some(FolderId("a".to_owned()));
+        app.set_folders(vec![folder("a"), b, folder("c")]);
+
+        app.restore(&Snapshot {
+            folder: Some("b".to_owned()),
+            ..Default::default()
+        });
+
+        assert_eq!(app.visible_folders(), [0, 1, 2]);
+        assert_eq!(app.selected_folder, 1);
     }
 
     #[test]

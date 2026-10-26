@@ -4,9 +4,9 @@ assertion_line: 73
 expression: render(&app)
 ---
 "┌ Folders ───────┐┏ Messages ━━━━━━━━━━━━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
-"│> Inbox (2)     │┃  Ada                             ┃│From: Grace <grace@example.com>   │"
-"│  Sent Items    │┃    Analytical engine             ┃│Subject: Compiler draft           │"
-"│  Projects      │┃> Grace                           ┃│                                  │"
+"│>   Inbox (2)   │┃  Ada                             ┃│From: Grace <grace@example.com>   │"
+"│    Sent Items  │┃    Analytical engine             ┃│Subject: Compiler draft           │"
+"│    Projects    │┃> Grace                           ┃│                                  │"
 "│                │┃    Compiler draft                ┃│First pass attached               │"
 "│                │┃                                  ┃│                                  │"
 "│                │┃                                  ┃│                                  │"

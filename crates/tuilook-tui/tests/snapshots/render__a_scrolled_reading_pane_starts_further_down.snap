@@ -1,12 +1,12 @@
 ---
 source: crates/tuilook-tui/tests/render.rs
-assertion_line: 128
+assertion_line: 154
 expression: render(&app)
 ---
 "┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"┃> Inbox (2)     ┃│> Ada                             ││Line 3                            │"
-"┃  Sent Items    ┃│    Analytical engine             ││Line 4                            │"
-"┃  Projects      ┃│  Grace                           ││Line 5                            │"
+"┃>   Inbox (2)   ┃│> Ada                             ││Line 3                            │"
+"┃    Sent Items  ┃│    Analytical engine             ││Line 4                            │"
+"┃    Projects    ┃│  Grace                           ││Line 5                            │"
 "┃                ┃│    Compiler draft                ││Line 6                            │"
 "┃                ┃│                                  ││Line 7                            │"
 "┃                ┃│                                  ││Line 8                            │"

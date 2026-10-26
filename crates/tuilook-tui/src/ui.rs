@@ -315,9 +315,10 @@ pub const COMPOSE_HELP: [(&str, &str); 11] = [
 ];
 
 /// What each key does, shown with `?`.
-pub const HELP: [(&str, &str); 16] = [
+pub const HELP: [(&str, &str); 17] = [
     ("Tab / Shift-Tab  l h", "Next pane / previous pane"),
     ("Enter", "Open the folder or message"),
+    ("→ ←", "Expand or enter a folder, collapse it or go up"),
     ("↑ ↓  j k", "Move, or scroll the message"),
     ("PgUp PgDn Ctrl-B Ctrl-F", "Move or scroll a page"),
     ("Ctrl-U Ctrl-D", "Move or scroll half a page"),
@@ -429,10 +430,22 @@ fn pane_block(app: &AppState, pane: Pane, title: &str) -> Block<'static> {
 
 fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
     let depths = folder_depths(&app.folders);
-    let items = app.folders.iter().zip(depths).map(|(f, depth)| {
-        let mut spans = vec![Span::raw("  ".repeat(depth)), Span::raw(f.name.clone())];
-        if f.unread > 0 {
-            spans.push(Span::raw(format!(" ({})", f.unread)));
+    let visible = app.visible_folders();
+    let items = visible.iter().map(|&index| {
+        let folder = &app.folders[index];
+        let marker = match (app.has_subfolders(index), app.is_expanded(index)) {
+            (false, _) => "  ",
+            (true, true) => "▾ ",
+            (true, false) => "▸ ",
+        };
+        let mut spans = vec![
+            Span::raw("  ".repeat(depths[index])),
+            Span::styled(marker, Style::new().fg(Color::DarkGray)),
+            Span::raw(folder.name.clone()),
+        ];
+        let unread = app.unread_shown(index);
+        if unread > 0 {
+            spans.push(Span::raw(format!(" ({unread})")));
         }
         ListItem::new(Line::from(spans))
     });
@@ -447,7 +460,8 @@ fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
             },
         ))
         .highlight_symbol("> ");
-    let mut state = ListState::default().with_selected(Some(app.selected_folder));
+    let selected = visible.iter().position(|&i| i == app.selected_folder);
+    let mut state = ListState::default().with_selected(selected);
     frame.render_stateful_widget(list, area, &mut state);
 }
 
@@ -524,9 +538,12 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
     let line = inner.contains(at).then(|| usize::from(at.y - inner.y));
     let rows = usize::from(inner.height);
     let item = match pane {
-        Pane::Folders => line
-            .map(|line| list_offset(app.selected_folder, rows) + line)
-            .filter(|&item| item < app.folders.len()),
+        Pane::Folders => line.and_then(|line| {
+            // Rows are the folders shown; the hit is the folder's index.
+            let visible = app.visible_folders();
+            let selected = visible.iter().position(|&i| i == app.selected_folder)?;
+            visible.get(list_offset(selected, rows) + line).copied()
+        }),
         Pane::Messages => line
             .map(|line| {
                 list_offset(app.selected_message, rows / MESSAGE_ROWS) + line / MESSAGE_ROWS

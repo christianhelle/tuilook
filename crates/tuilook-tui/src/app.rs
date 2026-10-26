@@ -143,6 +143,8 @@ pub struct AppState {
     pub folders_hidden: bool,
     /// Messages picked for acting on together, such as deleting.
     pub marked: BTreeSet<MessageId>,
+    /// Folders whose subfolders are shown.
+    pub expanded: BTreeSet<FolderId>,
     pub confirm: Option<Confirm>,
     pub show_help: bool,
     /// A message being written, which takes over the screen.
@@ -205,12 +207,13 @@ impl AppState {
             Mouse::Click => {
                 self.focus = pane;
                 let item = item?;
-                let selected = match pane {
-                    Pane::Folders => self.selected_folder,
-                    Pane::Messages => self.selected_message,
-                    Pane::Reader => return None,
-                };
-                self.move_selection(item as isize - selected as isize)
+                match pane {
+                    Pane::Folders => self.select_folder(item),
+                    Pane::Messages => {
+                        self.move_selection(item as isize - self.selected_message as isize)
+                    }
+                    Pane::Reader => None,
+                }
             }
             Mouse::ScrollUp | Mouse::ScrollDown => {
                 let focus = std::mem::replace(&mut self.focus, pane);
@@ -246,6 +249,9 @@ impl AppState {
             Action::Top => return self.move_selection(-isize::MAX),
             Action::Bottom => return self.move_selection(isize::MAX),
             Action::Open => self.open(),
+            Action::Expand if self.focus == Pane::Folders => return self.expand_folder(),
+            Action::Collapse if self.focus == Pane::Folders => return self.collapse_folder(),
+            Action::Expand | Action::Collapse => {}
             Action::ToggleMark if self.focus == Pane::Messages => {
                 if let Some(id) = self.selected().map(|m| m.id.clone())
                     && !self.marked.remove(&id)
@@ -305,6 +311,7 @@ impl AppState {
             .and_then(|id| folders.iter().position(|f| &f.id == id))
             .unwrap_or(0);
         self.folders = folders;
+        self.reveal_selected_folder();
         let current = self.current_folder().cloned();
         (current != previous)
             .then_some(current)
@@ -494,8 +501,12 @@ impl AppState {
     fn move_selection(&mut self, delta: isize) -> Option<Effect> {
         match self.focus {
             Pane::Folders => {
-                let moved = step(&mut self.selected_folder, self.folders.len(), delta);
-                moved.then(|| Effect::LoadFolder(self.folders[self.selected_folder].id.clone()))
+                // Move among the folders shown, past those folded away.
+                let visible = self.visible_folders();
+                let at = visible.iter().position(|&i| i == self.selected_folder)?;
+                let mut to = at;
+                step(&mut to, visible.len(), delta);
+                self.select_folder(visible[to])
             }
             Pane::Messages => {
                 let moved = step(&mut self.selected_message, self.messages.len(), delta);
