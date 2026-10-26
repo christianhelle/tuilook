@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use tuilook_graph::{GraphError, RetryPolicy};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{header, method, path},
+    matchers::{body_json, header, method, path},
 };
 
 #[tokio::test]
@@ -218,4 +218,85 @@ async fn a_body_that_does_not_match_says_which_field_is_wrong() {
         message.contains("invalid type: null, expected a string"),
         "{message}"
     );
+}
+
+#[tokio::test]
+async fn post_sends_json_and_decodes_the_answer() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/messages/m1/move"))
+        .and(header("authorization", "Bearer token-1"))
+        .and(body_json(json!({"destinationId": "deleteditems"})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({"id": "moved"})))
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+
+    let moved: Value = client
+        .post(
+            "/me/messages/m1/move",
+            &json!({"destinationId": "deleteditems"}),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(moved, json!({"id": "moved"}));
+}
+
+#[tokio::test]
+async fn a_post_with_no_body_sends_an_empty_one() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/messages/m1/permanentDelete"))
+        .and(header("content-length", "0"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+
+    client
+        .post_no_content("/me/messages/m1/permanentDelete", None)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_failed_post_is_not_retried_in_case_it_was_done() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(graph_error(503, "ServiceUnavailable"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (client, _, waits) = support::client(&server);
+
+    let result = client
+        .post_no_content("/me/sendMail", Some(&json!({})))
+        .await;
+
+    assert!(matches!(result, Err(GraphError::Status { .. })));
+    assert!(waits.recorded().is_empty());
+}
+
+#[tokio::test]
+async fn a_throttled_post_is_retried() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(graph_error(429, "TooManyRequests").insert_header("Retry-After", "1"))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+
+    client
+        .post_no_content("/me/sendMail", Some(&json!({})))
+        .await
+        .unwrap();
 }

@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode, header::CONTENT_LENGTH};
 use serde::de::DeserializeOwned;
+use serde_json::Value;
 use tokio::sync::Semaphore;
 use tuilook_auth::{AuthError, Sleeper, TokenSource};
 
@@ -83,30 +84,72 @@ impl<T: TokenSource> GraphClient<T> {
         path: &str,
         headers: &[(&str, &str)],
     ) -> Result<R, GraphError> {
-        let url = if path.starts_with("http") {
+        let url = self.url(path);
+        let response = self.request(Method::GET, &url, headers, None).await?;
+        decode(response, url).await
+    }
+
+    /// POSTs `body` to `path` and decodes the answer.
+    pub async fn post<R: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &Value,
+    ) -> Result<R, GraphError> {
+        let url = self.url(path);
+        let response = self.request(Method::POST, &url, &[], Some(body)).await?;
+        decode(response, url).await
+    }
+
+    /// POSTs to `path`, for actions that answer with no content. Without a
+    /// body, an empty one is sent.
+    pub async fn post_no_content(
+        &self,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<(), GraphError> {
+        self.request(Method::POST, &self.url(path), &[], body)
+            .await?;
+        Ok(())
+    }
+
+    /// PATCHes `path` with `body`, ignoring the answer.
+    pub async fn patch(&self, path: &str, body: &Value) -> Result<(), GraphError> {
+        self.request(Method::PATCH, &self.url(path), &[], Some(body))
+            .await?;
+        Ok(())
+    }
+
+    fn url(&self, path: &str) -> String {
+        if path.starts_with("http") {
             path.to_owned()
         } else {
             format!("{}{path}", self.base_url.trim_end_matches('/'))
-        };
+        }
+    }
+
+    /// Sends a request until it succeeds, retrying what is safe to retry.
+    async fn request(
+        &self,
+        method: Method,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Option<&Value>,
+    ) -> Result<reqwest::Response, GraphError> {
         let mut attempt = 0;
         let mut reauthenticated = false;
         loop {
             attempt += 1;
-            let response = self.send(&url, headers).await?;
+            let response = self.send(method.clone(), url, headers, body).await?;
             let status = response.status();
             if status.is_success() {
-                let body = response.text().await?;
-                return serde_json::from_str(&body).map_err(|source| GraphError::Decode {
-                    url: url.clone(),
-                    source,
-                });
+                return Ok(response);
             }
             if status == StatusCode::UNAUTHORIZED && !reauthenticated {
                 reauthenticated = true;
                 self.tokens.invalidate().await;
                 continue;
             }
-            if !is_retryable(status) || attempt >= self.retry.max_attempts {
+            if !is_retryable(&method, status) || attempt >= self.retry.max_attempts {
                 return Err(status_error(response).await);
             }
             let wait = retry_after(&response).unwrap_or_else(|| self.backoff(attempt));
@@ -116,8 +159,10 @@ impl<T: TokenSource> GraphClient<T> {
 
     async fn send(
         &self,
+        method: Method,
         url: &str,
         headers: &[(&str, &str)],
+        body: Option<&Value>,
     ) -> Result<reqwest::Response, GraphError> {
         let _permit = self
             .limit
@@ -125,10 +170,16 @@ impl<T: TokenSource> GraphClient<T> {
             .await
             .expect("semaphore is never closed");
         let token = self.tokens.access_token().await?;
-        let mut request = self.http.get(url).bearer_auth(token);
+        let mut request = self.http.request(method.clone(), url).bearer_auth(token);
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
+        request = match body {
+            Some(body) => request.json(body),
+            // Graph wants a length on every POST, even an empty one.
+            None if method != Method::GET => request.header(CONTENT_LENGTH, 0),
+            None => request,
+        };
         Ok(request.send().await?)
     }
 
@@ -141,9 +192,22 @@ impl<T: TokenSource> GraphClient<T> {
     }
 }
 
-fn is_retryable(status: StatusCode) -> bool {
+/// Throttled requests were never run, so any may be retried. A server error
+/// may come after the work was done, so only reads are retried then: sending
+/// a message twice is worse than reporting the error.
+fn is_retryable(method: &Method, status: StatusCode) -> bool {
     status == StatusCode::TOO_MANY_REQUESTS
-        || (status.is_server_error() && status != StatusCode::NOT_IMPLEMENTED)
+        || (method == Method::GET
+            && status.is_server_error()
+            && status != StatusCode::NOT_IMPLEMENTED)
+}
+
+async fn decode<R: DeserializeOwned>(
+    response: reqwest::Response,
+    url: String,
+) -> Result<R, GraphError> {
+    let body = response.text().await?;
+    serde_json::from_str(&body).map_err(|source| GraphError::Decode { url, source })
 }
 
 fn retry_after(response: &reqwest::Response) -> Option<Duration> {
