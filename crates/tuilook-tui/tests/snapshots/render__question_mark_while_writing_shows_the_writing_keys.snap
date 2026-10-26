@@ -1,0 +1,21 @@
+---
+source: crates/tuilook-tui/tests/render.rs
+assertion_line: 278
+expression: render_tall(&app)
+---
+"┏ Reply ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃To:      ada@example.com                                                                ┃"
+"┃Cc:   ┌Keys──────────────────────────────────────────────────────────────────────┐      ┃"
+"┃Subjec│Tab / Shift-Tab          Next field / previous field                      │      ┃"
+"┃──────│Enter  ↑ ↓               Move between To, Cc and Subject                  │──────┃"
+"┃The or│a, b; c                  Separate several addresses                       │      ┃"
+"┃      │i a I A o O              Type in the body, insert mode                    │      ┃"
+"┃      │Esc                      Back to normal mode                              │      ┃"
+"┃      │h j k l w b e 0 $ gg G   Move in the body                                 │      ┃"
+"┃      │dd cw x p u Ctrl-R v V   Edit vim style                                   │      ┃"
+"┃      │Ctrl-S                   Send                                             │      ┃"
+"┃      │Esc in normal mode       Close, asking first if anything was written      │      ┃"
+"┃      │Ctrl-C                   Quit                                             │      ┃"
+"┃      │                         Press any key to close                           │      ┃"
+"┗━━━━━━└──────────────────────────────────────────────────────────────────────────┘━━━━━━┛"
+" NORMAL  Ctrl-S send · Tab next field · Esc close · ? help                                "

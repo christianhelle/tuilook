@@ -56,6 +56,10 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('D') => Action::DeletePermanently,
         KeyCode::F(5) => Action::Refresh,
         KeyCode::Char('?') => Action::Help,
+        KeyCode::Char('c') => Action::Compose,
+        KeyCode::Char('r') => Action::Reply,
+        KeyCode::Char('R') => Action::ReplyAll,
+        KeyCode::Char('f') => Action::Forward,
         _ => return None,
     };
     Some(action)
@@ -165,6 +169,15 @@ mod tests {
     fn f5_and_ctrl_r_refresh() {
         assert_eq!(press(KeyCode::F(5)), Some(Action::Refresh));
         assert_eq!(ctrl('r'), Some(Action::Refresh));
+    }
+
+    #[test]
+    fn c_writes_r_replies_shift_r_replies_to_all_and_f_forwards() {
+        assert_eq!(press(KeyCode::Char('c')), Some(Action::Compose));
+        assert_eq!(press(KeyCode::Char('r')), Some(Action::Reply));
+        assert_eq!(press(KeyCode::Char('R')), Some(Action::ReplyAll));
+        assert_eq!(press(KeyCode::Char('f')), Some(Action::Forward));
+        assert_eq!(ctrl('f'), Some(Action::PageDown), "Ctrl-F still pages");
     }
 
     #[test]

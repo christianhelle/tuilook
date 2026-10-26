@@ -1,9 +1,12 @@
 use std::collections::BTreeSet;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tuilook_model::{Action, Folder, FolderId, Message, MessageId};
+use tuilook_model::{Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId};
 
-use crate::keymap::Keymap;
+use crate::{
+    compose::{Compose, Request},
+    keymap::Keymap,
+};
 
 /// IO the event loop must perform after an update.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +19,7 @@ pub enum Effect {
     },
     /// Sync every folder.
     Sync,
+    Send(Draft),
 }
 
 /// A question the user must answer before anything else happens.
@@ -25,6 +29,8 @@ pub enum Confirm {
         ids: Vec<MessageId>,
         permanent: bool,
     },
+    /// Close the message being written, losing what is in it.
+    Discard,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -54,6 +60,8 @@ pub struct Viewport {
     pub reader: usize,
     /// Lines the reading pane's content takes once wrapped.
     pub reader_lines: usize,
+    /// Body lines that fit while writing a message.
+    pub compose: usize,
 }
 
 /// Everything the UI shows. Rendering is a pure function of this state.
@@ -78,6 +86,8 @@ pub struct AppState {
     pub marked: BTreeSet<MessageId>,
     pub confirm: Option<Confirm>,
     pub show_help: bool,
+    /// A message being written, which takes over the screen.
+    pub compose: Option<Compose>,
 }
 
 impl AppState {
@@ -100,6 +110,20 @@ impl AppState {
             // y or Enter agrees; any other key cancels and does nothing else.
             let agreed = matches!(key.code, KeyCode::Char('y') | KeyCode::Enter);
             return agreed.then(|| self.confirmed(confirm)).flatten();
+        }
+        if let Some(compose) = &mut self.compose {
+            match compose.key(key, self.viewport.compose) {
+                Request::None => {}
+                Request::Send(draft) => {
+                    self.show_info("Sending…");
+                    return Some(Effect::Send(draft));
+                }
+                Request::Close => self.compose = None,
+                Request::ConfirmDiscard => self.confirm = Some(Confirm::Discard),
+                Request::Help => self.show_help = true,
+                Request::Invalid(why) => self.show_error(why),
+            }
+            return None;
         }
         keymap
             .action_for(key)
@@ -150,6 +174,18 @@ impl AppState {
             Action::Delete | Action::DeletePermanently => {}
             Action::Refresh => return Some(Effect::Sync),
             Action::Help => self.show_help = true,
+            Action::Compose => self.compose = Some(Compose::new(ComposeKind::New, None)),
+            Action::Reply | Action::ReplyAll | Action::Forward => {
+                if let Some(original) = self.selected() {
+                    let id = original.id.clone();
+                    let kind = match action {
+                        Action::Reply => ComposeKind::Reply(id),
+                        Action::ReplyAll => ComposeKind::ReplyAll(id),
+                        _ => ComposeKind::Forward(id),
+                    };
+                    self.compose = Some(Compose::new(kind, Some(original)));
+                }
+            }
         }
         None
     }
@@ -239,7 +275,25 @@ impl AppState {
                 self.show_info(format!("Deleting {} message{s}…", ids.len()));
                 Some(Effect::Delete { ids, permanent })
             }
+            Confirm::Discard => {
+                self.compose = None;
+                None
+            }
         }
+    }
+
+    /// Closes the message core sent.
+    pub fn mail_sent(&mut self) {
+        self.compose = None;
+        self.show_info("Sent");
+    }
+
+    /// Keeps the message open so it can be fixed and sent again.
+    pub fn send_failed(&mut self, error: &str) {
+        if let Some(compose) = &mut self.compose {
+            compose.sending = false;
+        }
+        self.show_error(format!("could not send: {error}"));
     }
 
     pub fn show_error(&mut self, message: String) {
@@ -396,7 +450,7 @@ mod tests {
             folders,
             messages,
             reader,
-            reader_lines: 0,
+            ..Default::default()
         }
     }
 
@@ -793,6 +847,97 @@ mod tests {
         assert_eq!(key(&mut app, KeyCode::Char('j')), None);
         assert!(!app.show_help);
         assert_eq!(app.selected_message, 0, "the key only closed the help");
+    }
+
+    fn ctrl_s(app: &mut AppState) -> Option<Effect> {
+        let key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        app.on_key(key, &mut Keymap::default())
+    }
+
+    #[test]
+    fn r_replies_to_the_selected_message_and_keys_go_to_the_message() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.messages[1].from_addr = "grace@example.com".to_owned();
+        app.update(Action::SelectNext);
+
+        key(&mut app, KeyCode::Char('r'));
+        for c in "Thanks".chars() {
+            key(&mut app, KeyCode::Char(c));
+        }
+        let effect = ctrl_s(&mut app);
+
+        assert_eq!(
+            effect,
+            Some(Effect::Send(Draft {
+                kind: ComposeKind::Reply(MessageId("m1".to_owned())),
+                to: vec!["grace@example.com".to_owned()],
+                cc: vec![],
+                subject: "RE: m1".to_owned(),
+                body: "Thanks".to_owned(),
+            }))
+        );
+        assert_eq!(app.selected_message, 1, "j and k were typed, not moved");
+        assert_eq!(app.status, Some(Status::Info("Sending…".to_owned())));
+    }
+
+    #[test]
+    fn replying_needs_a_selected_message() {
+        let mut app = in_message_list(&[]);
+
+        app.update(Action::Reply);
+        app.update(Action::Forward);
+
+        assert!(app.compose.is_none());
+    }
+
+    #[test]
+    fn sending_without_anyone_to_send_to_shows_why_and_sends_nothing() {
+        let mut app = AppState::default();
+        app.update(Action::Compose);
+
+        assert_eq!(ctrl_s(&mut app), None);
+
+        assert_eq!(
+            app.status,
+            Some(Status::Error("Add someone to send it to".to_owned()))
+        );
+        assert!(app.compose.is_some());
+    }
+
+    #[test]
+    fn a_sent_message_closes_and_a_failed_one_stays_to_try_again() {
+        let mut app = in_message_list(&["m0"]);
+        app.update(Action::Reply);
+        ctrl_s(&mut app);
+
+        app.send_failed("offline");
+        assert_eq!(
+            app.status,
+            Some(Status::Error("could not send: offline".to_owned()))
+        );
+        assert!(app.compose.as_ref().is_some_and(|c| !c.sending));
+
+        ctrl_s(&mut app);
+        app.mail_sent();
+        assert!(app.compose.is_none());
+        assert_eq!(app.status, Some(Status::Info("Sent".to_owned())));
+    }
+
+    #[test]
+    fn closing_a_written_message_asks_first() {
+        let mut app = in_message_list(&["m0"]);
+        app.update(Action::Reply);
+        key(&mut app, KeyCode::Char('x'));
+        key(&mut app, KeyCode::Esc);
+
+        key(&mut app, KeyCode::Esc);
+        assert_eq!(app.confirm, Some(Confirm::Discard));
+        key(&mut app, KeyCode::Char('n'));
+        assert!(app.compose.is_some(), "any other key keeps writing");
+
+        key(&mut app, KeyCode::Esc);
+        key(&mut app, KeyCode::Char('y'));
+        assert!(app.compose.is_none());
     }
 
     #[test]

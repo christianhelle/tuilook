@@ -32,6 +32,13 @@ pub enum Action {
     Refresh,
     /// Show the keys until the next key press.
     Help,
+    /// Write a new message.
+    Compose,
+    /// Answer the selected message's sender.
+    Reply,
+    /// Answer the sender and everyone else on the selected message.
+    ReplyAll,
+    Forward,
 }
 
 /// Something core tells the UI happened.

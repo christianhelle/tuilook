@@ -1,4 +1,8 @@
-use ratatui::{Terminal, backend::TestBackend};
+use ratatui::{
+    Terminal,
+    backend::TestBackend,
+    crossterm::event::{KeyCode, KeyEvent},
+};
 use tuilook_model::{Folder, FolderId, Importance, Message, MessageId, WellKnown};
 use tuilook_tui::{
     app::{AppState, Pane},
@@ -140,6 +144,7 @@ fn viewport_measures_what_each_pane_can_show() {
             reader: 9,
             // From, Subject, blank, "Hi", then the long line wrapped in three
             reader_lines: 7,
+            compose: 0,
         }
     );
 }
@@ -218,4 +223,64 @@ fn the_help_is_wide_enough_for_its_longest_line() {
     let inside = usize::from(ui::HELP_WIDTH) - 2;
 
     assert!(ui::help_line_width(&ui::HELP) <= inside);
+}
+
+fn press(app: &mut AppState, keys: &str) {
+    let mut keymap = tuilook_tui::keymap::Keymap::default();
+    for c in keys.chars() {
+        let code = match c {
+            '⎋' => KeyCode::Esc,
+            '⇥' => KeyCode::Tab,
+            '⏎' => KeyCode::Enter,
+            c => KeyCode::Char(c),
+        };
+        // As the event loop does, measure the screen before each key.
+        app.viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 90, 16), app);
+        app.on_key(KeyEvent::from(code), &mut keymap);
+    }
+}
+
+fn render_tall(app: &AppState) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(90, 16)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, app)).unwrap();
+    terminal.backend().to_string()
+}
+
+#[test]
+fn a_new_message_takes_over_the_screen() {
+    let mut app = sample_app();
+    press(&mut app, "cada@example.com⇥⇥Lunch⇥iShall we?⏎Friday works");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn a_reply_notes_the_original_is_quoted_and_shows_the_vim_mode() {
+    let mut app = sample_app();
+    press(&mut app, "rAgreed⎋");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn closing_a_written_message_asks_first() {
+    let mut app = sample_app();
+    press(&mut app, "rAgreed⎋⎋");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn question_mark_while_writing_shows_the_writing_keys() {
+    let mut app = sample_app();
+    press(&mut app, "r⎋?");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn the_writing_help_fits_too() {
+    let inside = usize::from(ui::HELP_WIDTH) - 2;
+
+    assert!(ui::help_line_width(&ui::COMPOSE_HELP) <= inside);
 }

@@ -1,6 +1,7 @@
 //! The tuilook terminal UI.
 
 pub mod app;
+pub mod compose;
 pub mod demo;
 pub mod editor;
 pub mod input;

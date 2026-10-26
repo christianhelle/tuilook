@@ -1,0 +1,21 @@
+---
+source: crates/tuilook-tui/tests/render.rs
+assertion_line: 254
+expression: render_tall(&app)
+---
+"┏ New message ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃To:      ada@example.com                                                                ┃"
+"┃Cc:                                                                                     ┃"
+"┃Subject: Lunch                                                                          ┃"
+"┃────────────────────────────────────────────────────────────────────────────────────────┃"
+"┃Shall we?                                                                               ┃"
+"┃Friday works                                                                            ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" INSERT  Ctrl-S send · Tab next field · Esc close · ? help                                "

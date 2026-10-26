@@ -1,4 +1,5 @@
 use std::{
+    io,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -7,7 +8,11 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use ratatui::{
-    crossterm::event::{self, Event as TermEvent, KeyEventKind},
+    crossterm::{
+        cursor::SetCursorStyle,
+        event::{self, Event as TermEvent, KeyEventKind},
+        execute,
+    },
     layout::Rect,
 };
 use tokio::sync::mpsc;
@@ -18,9 +23,11 @@ use tuilook_model::{Event, MailBackend};
 use tuilook_store::Store;
 use tuilook_tui::{
     app::{AppState, Effect},
+    compose::Field,
     demo,
     keymap::Keymap,
     ui,
+    vim::VimMode,
 };
 
 /// Delegated Graph scopes; calendar and contacts can be added post-v1.
@@ -185,9 +192,15 @@ fn run_ui(
 
     let mut keymap = Keymap::default();
     let mut terminal = ratatui::init();
+    let mut cursor = Cursor::Default;
     let result = (|| {
         while !app.should_quit {
             terminal.draw(|frame| ui::draw(frame, &app))?;
+            let shape = Cursor::of(&app);
+            if shape != cursor {
+                execute!(io::stdout(), shape.style())?;
+                cursor = shape;
+            }
             while let Ok(event) = events.try_recv() {
                 let effect = on_core_event(&mut app, &store, event)?;
                 apply(&mut app, &store, &commands, effect)?;
@@ -208,8 +221,38 @@ fn run_ui(
         }
         Ok(())
     })();
+    if cursor != Cursor::Default {
+        let _ = execute!(io::stdout(), Cursor::Default.style());
+    }
     ratatui::restore();
     result
+}
+
+/// The cursor's shape: a bar while typing, a block in vim's other modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Cursor {
+    Default,
+    Bar,
+    Block,
+}
+
+impl Cursor {
+    fn of(app: &AppState) -> Self {
+        match &app.compose {
+            None => Cursor::Default,
+            Some(compose) if compose.field != Field::Body => Cursor::Bar,
+            Some(compose) if compose.body.vim.mode == VimMode::Insert => Cursor::Bar,
+            Some(_) => Cursor::Block,
+        }
+    }
+
+    fn style(self) -> SetCursorStyle {
+        match self {
+            Cursor::Default => SetCursorStyle::DefaultUserShape,
+            Cursor::Bar => SetCursorStyle::SteadyBar,
+            Cursor::Block => SetCursorStyle::SteadyBlock,
+        }
+    }
 }
 
 fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Option<Effect>> {
@@ -230,11 +273,11 @@ fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Opti
         }
         Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
         Event::Sent => {
-            app.show_info("Sent");
+            app.mail_sent();
             None
         }
         Event::SendFailed(error) => {
-            app.show_error(format!("could not send: {error}"));
+            app.send_failed(&error);
             None
         }
         Event::Error(error) => {
@@ -260,6 +303,10 @@ fn apply(
             }
             Effect::Sync => {
                 commands.blocking_send(Command::SyncAll)?;
+                None
+            }
+            Effect::Send(draft) => {
+                commands.blocking_send(Command::Send(draft))?;
                 None
             }
             Effect::Delete { ids, permanent } => {
