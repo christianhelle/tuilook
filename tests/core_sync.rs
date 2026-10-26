@@ -144,3 +144,56 @@ async fn an_expired_delta_link_triggers_a_full_resync() {
     assert_eq!(store.messages_in(&inbox).unwrap(), [kept]);
     assert_eq!(store.delta_link(&inbox).unwrap().as_deref(), Some("fresh"));
 }
+
+#[tokio::test]
+async fn a_folder_deleted_on_the_server_is_forgotten_with_its_messages() {
+    let projects = FolderId("f2".to_owned());
+    let mut store = Store::open_in_memory().unwrap();
+    let before = FakeBackend {
+        folders: vec![
+            folder("f1", "Inbox", Some(WellKnown::Inbox)),
+            folder("f2", "Projects", None),
+        ],
+        messages: [(
+            projects.clone(),
+            vec![Message {
+                folder_id: projects.clone(),
+                ..message("m1", "2026-01-01T09:00:00Z")
+            }],
+        )]
+        .into(),
+        ..Default::default()
+    };
+    sync_folders(&before, &mut store).await.unwrap();
+    sync_messages(&before, &mut store, &projects).await.unwrap();
+    let after = FakeBackend {
+        folders: vec![folder("f1", "Inbox", Some(WellKnown::Inbox))],
+        ..Default::default()
+    };
+
+    sync_folders(&after, &mut store).await.unwrap();
+
+    assert_eq!(
+        store.folders().unwrap(),
+        [folder("f1", "Inbox", Some(WellKnown::Inbox))]
+    );
+    assert!(store.messages_in(&projects).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn folders_are_kept_when_listing_them_fails() {
+    let mut store = Store::open_in_memory().unwrap();
+    let backend = FakeBackend {
+        folders: vec![folder("f1", "Inbox", Some(WellKnown::Inbox))],
+        ..Default::default()
+    };
+    sync_folders(&backend, &mut store).await.unwrap();
+    let failing = FakeBackend {
+        folders_error: Some(BackendError::Other("offline".to_owned())),
+        ..Default::default()
+    };
+
+    assert!(sync_folders(&failing, &mut store).await.is_err());
+
+    assert_eq!(store.folders().unwrap().len(), 1);
+}

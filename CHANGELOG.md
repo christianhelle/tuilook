@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tuilook sync` syncs every folder once without the UI, and `tuilook --demo`
   browses a built-in sample mailbox without signing in.
 - Offline cache in SQLite: the UI shows cached mail at once while folders sync
-  in the background with Graph delta queries.
+  in the background with Graph delta queries. Folders deleted on the server
+  are dropped from the cache with their messages on the next sync.
 - HTML bodies are shown as text, with links as numbered footnotes and images,
   table borders and runs of blank lines left out.
 - Vim-style navigation: `j`/`k`, `gg`/`G`, Home/End, PageUp/PageDown and

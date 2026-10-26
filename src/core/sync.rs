@@ -9,10 +9,13 @@ pub enum SyncError {
     Store(#[from] StoreError),
 }
 
-/// Refreshes the folder tree from the backend.
+/// Refreshes the folder tree from the backend, forgetting folders that
+/// have been deleted there.
 pub async fn sync_folders(backend: &impl MailBackend, store: &mut Store) -> Result<(), SyncError> {
     let folders = backend.list_folders().await?;
     store.upsert_folders(&folders)?;
+    let ids: Vec<_> = folders.into_iter().map(|f| f.id).collect();
+    store.retain_folders(&ids)?;
     Ok(())
 }
 

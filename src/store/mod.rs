@@ -79,6 +79,27 @@ impl Store {
         Ok(())
     }
 
+    /// Deletes every folder not in `keep`, and the messages in them.
+    pub fn retain_folders(&mut self, keep: &[FolderId]) -> Result<()> {
+        let keep: HashSet<&str> = keep.iter().map(|id| id.0.as_str()).collect();
+        let tx = self.conn.transaction()?;
+        {
+            let stale: Vec<String> = tx
+                .prepare("SELECT id FROM folders")?
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+                .into_iter()
+                .filter(|id| !keep.contains(id.as_str()))
+                .collect();
+            let mut stmt = tx.prepare("DELETE FROM folders WHERE id = ?1")?;
+            for id in stale {
+                stmt.execute([id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn upsert_messages(&mut self, messages: &[Message]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
