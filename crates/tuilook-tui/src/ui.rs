@@ -2,7 +2,7 @@
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
+    layout::{Constraint, Layout, Position, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Wrap},
@@ -10,7 +10,7 @@ use ratatui::{
 use tuilook_model::{ComposeKind, folder_depths};
 
 use crate::{
-    app::{AppState, Confirm, Pane, Status, Viewport},
+    app::{AppState, Confirm, Hit, Pane, Status, Viewport},
     compose::{Compose, Field},
     vim::VimMode,
 };
@@ -499,6 +499,40 @@ fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
     let body = app.body.as_deref().unwrap_or(&m.preview);
     text.extend(body.lines().map(|l| Line::raw(l.to_owned())));
     Some(Paragraph::new(text).wrap(Wrap { trim: false }))
+}
+
+/// The pane at a point of `area`, and the folder or message row there.
+pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
+    let panes = panes(area, app);
+    let at = Position::new(column, row);
+    let (pane, rect) = [
+        (Pane::Folders, panes.folders),
+        (Pane::Messages, panes.messages),
+        (Pane::Reader, panes.reader),
+    ]
+    .into_iter()
+    .find(|(_, rect)| rect.contains(at))?;
+    let inner = Block::bordered().inner(rect);
+    let line = inner.contains(at).then(|| usize::from(at.y - inner.y));
+    let rows = usize::from(inner.height);
+    let item = match pane {
+        Pane::Folders => line
+            .map(|line| list_offset(app.selected_folder, rows) + line)
+            .filter(|&item| item < app.folders.len()),
+        Pane::Messages => line
+            .map(|line| {
+                list_offset(app.selected_message, rows / MESSAGE_ROWS) + line / MESSAGE_ROWS
+            })
+            .filter(|&item| item < app.messages.len()),
+        Pane::Reader => None,
+    };
+    Some(Hit { pane, item })
+}
+
+/// The first row a list shows. Lists are drawn from a fresh state each time,
+/// so ratatui scrolls only as far as it takes to show the selected row.
+fn list_offset(selected: usize, visible: usize) -> usize {
+    selected.saturating_sub(visible.saturating_sub(1))
 }
 
 /// What each pane can show in `area`, for paging and scroll limits.

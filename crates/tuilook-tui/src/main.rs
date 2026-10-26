@@ -10,7 +10,10 @@ use clap::{Parser, Subcommand};
 use ratatui::{
     crossterm::{
         cursor::SetCursorStyle,
-        event::{self, Event as TermEvent, KeyEventKind},
+        event::{
+            self, DisableMouseCapture, EnableMouseCapture, Event as TermEvent, KeyEventKind,
+            MouseButton, MouseEventKind,
+        },
         execute,
     },
     layout::Rect,
@@ -22,7 +25,7 @@ use tuilook_graph::{GRAPH_V1, GraphBackend, GraphClient};
 use tuilook_model::{Event, MailBackend};
 use tuilook_store::Store;
 use tuilook_tui::{
-    app::{AppState, Effect},
+    app::{AppState, Effect, Mouse},
     compose::Field,
     demo,
     keymap::Keymap,
@@ -194,6 +197,7 @@ fn run_ui(
     let mut terminal = ratatui::init();
     let mut cursor = Cursor::Default;
     let result = (|| {
+        execute!(io::stdout(), EnableMouseCapture)?;
         while !app.should_quit {
             terminal.draw(|frame| ui::draw(frame, &app))?;
             let shape = Cursor::of(&app);
@@ -208,19 +212,31 @@ fn run_ui(
             if !event::poll(Duration::from_millis(100))? {
                 continue;
             }
-            let TermEvent::Key(key) = event::read()? else {
-                continue;
-            };
-            if key.kind != KeyEventKind::Press {
-                continue;
-            }
             let size = terminal.size()?;
-            app.viewport = ui::viewport(Rect::new(0, 0, size.width, size.height), &app);
-            let effect = app.on_key(key, &mut keymap);
+            let area = Rect::new(0, 0, size.width, size.height);
+            app.viewport = ui::viewport(area, &app);
+            let effect = match event::read()? {
+                // Windows also reports key releases.
+                TermEvent::Key(key) if key.kind == KeyEventKind::Press => {
+                    app.on_key(key, &mut keymap)
+                }
+                TermEvent::Mouse(mouse) => {
+                    let action = match mouse.kind {
+                        MouseEventKind::Down(MouseButton::Left) => Mouse::Click,
+                        MouseEventKind::ScrollUp => Mouse::ScrollUp,
+                        MouseEventKind::ScrollDown => Mouse::ScrollDown,
+                        _ => continue,
+                    };
+                    let hit = ui::hit(area, &app, mouse.column, mouse.row);
+                    app.on_mouse(action, hit)
+                }
+                _ => continue,
+            };
             apply(&mut app, &store, &commands, effect)?;
         }
         Ok(())
     })();
+    let _ = execute!(io::stdout(), DisableMouseCapture);
     if cursor != Cursor::Default {
         let _ = execute!(io::stdout(), Cursor::Default.style());
     }

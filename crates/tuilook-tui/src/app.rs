@@ -41,6 +41,24 @@ pub enum Pane {
     Reader,
 }
 
+/// What the mouse did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mouse {
+    Click,
+    ScrollUp,
+    ScrollDown,
+}
+
+/// Where the mouse is: a pane, and the folder or message row under it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hit {
+    pub pane: Pane,
+    pub item: Option<usize>,
+}
+
+/// Rows or lines the mouse wheel moves at a time.
+const WHEEL_STEP: isize = 3;
+
 /// A line for the status bar, shown until the next one replaces it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -128,6 +146,41 @@ impl AppState {
         keymap
             .action_for(key)
             .and_then(|action| self.update(action))
+    }
+
+    /// Handles the mouse at `hit`. A click focuses the pane and selects the
+    /// row; the wheel moves the pane under the pointer without focusing it.
+    pub fn on_mouse(&mut self, mouse: Mouse, hit: Option<Hit>) -> Option<Effect> {
+        if self.show_help {
+            self.show_help = mouse != Mouse::Click;
+            return None;
+        }
+        if self.confirm.is_some() || self.compose.is_some() {
+            return None;
+        }
+        let Hit { pane, item } = hit?;
+        match mouse {
+            Mouse::Click => {
+                self.focus = pane;
+                let item = item?;
+                let selected = match pane {
+                    Pane::Folders => self.selected_folder,
+                    Pane::Messages => self.selected_message,
+                    Pane::Reader => return None,
+                };
+                self.move_selection(item as isize - selected as isize)
+            }
+            Mouse::ScrollUp | Mouse::ScrollDown => {
+                let focus = std::mem::replace(&mut self.focus, pane);
+                let step = match mouse {
+                    Mouse::ScrollUp => -WHEEL_STEP,
+                    _ => WHEEL_STEP,
+                };
+                let effect = self.move_selection(step);
+                self.focus = focus;
+                effect
+            }
+        }
     }
 
     pub fn update(&mut self, action: Action) -> Option<Effect> {
@@ -938,6 +991,62 @@ mod tests {
         key(&mut app, KeyCode::Esc);
         key(&mut app, KeyCode::Char('y'));
         assert!(app.compose.is_none());
+    }
+
+    fn hit(pane: Pane, item: Option<usize>) -> Option<Hit> {
+        Some(Hit { pane, item })
+    }
+
+    #[test]
+    fn a_click_focuses_the_pane_and_selects_the_row() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+        app.focus = Pane::Folders;
+
+        let effect = app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
+
+        assert_eq!(app.focus, Pane::Messages);
+        assert_eq!(effect, load_body("m2"));
+        assert_eq!(app.on_mouse(Mouse::Click, hit(Pane::Reader, None)), None);
+        assert_eq!(app.focus, Pane::Reader);
+    }
+
+    #[test]
+    fn the_wheel_moves_the_pane_under_the_pointer_without_focusing_it() {
+        let mut app = in_message_list(&["m0", "m1", "m2", "m3", "m4"]);
+        app.focus = Pane::Reader;
+
+        let effect = app.on_mouse(Mouse::ScrollDown, hit(Pane::Messages, None));
+
+        assert_eq!(effect, load_body("m3"));
+        assert_eq!(app.focus, Pane::Reader);
+        app.on_mouse(Mouse::ScrollUp, hit(Pane::Messages, Some(0)));
+        assert_eq!(app.selected_message, 0);
+    }
+
+    #[test]
+    fn a_click_only_closes_the_help() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.show_help = true;
+
+        assert_eq!(
+            app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(1))),
+            None
+        );
+
+        assert!(!app.show_help);
+        assert_eq!(app.selected_message, 0);
+    }
+
+    #[test]
+    fn the_mouse_waits_while_a_dialog_or_message_is_open() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.update(Action::Delete);
+
+        assert_eq!(
+            app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(1))),
+            None
+        );
+        assert_eq!(app.selected_message, 0);
     }
 
     #[test]

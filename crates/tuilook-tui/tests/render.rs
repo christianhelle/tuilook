@@ -284,3 +284,69 @@ fn the_writing_help_fits_too() {
 
     assert!(ui::help_line_width(&ui::COMPOSE_HELP) <= inside);
 }
+
+#[test]
+fn a_click_finds_the_message_drawn_under_it_in_a_scrolled_list() {
+    let mut app = sample_app();
+    let names: Vec<String> = (0..10).map(|i| format!("Sender{i}")).collect();
+    app.set_messages(
+        names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| message(&format!("m{i}"), name, "Subject", ""))
+            .collect(),
+    );
+    app.focus = Pane::Messages;
+    for _ in 0..7 {
+        app.update(tuilook_model::Action::SelectNext);
+    }
+    let area = ratatui::layout::Rect::new(0, 0, 90, 12);
+    let screen = render(&app);
+    // The message pane starts at column 17; its first message row is screen row 1.
+    let first_row = screen.lines().nth(1).unwrap();
+
+    let hit = ui::hit(area, &app, 30, 1).unwrap();
+
+    assert_eq!(hit.pane, Pane::Messages);
+    let item = hit.item.unwrap();
+    assert!(
+        first_row.contains(&names[item]),
+        "{first_row} shows Sender{item}"
+    );
+    assert_eq!(
+        ui::hit(area, &app, 30, 2).unwrap().item,
+        Some(item),
+        "its subject line"
+    );
+    assert_eq!(ui::hit(area, &app, 30, 3).unwrap().item, Some(item + 1));
+}
+
+#[test]
+fn a_click_on_a_border_or_past_the_last_row_hits_no_row() {
+    let app = sample_app();
+    let area = ratatui::layout::Rect::new(0, 0, 90, 12);
+
+    assert_eq!(ui::hit(area, &app, 30, 0).unwrap().item, None, "the border");
+    assert_eq!(
+        ui::hit(area, &app, 30, 8).unwrap().item,
+        None,
+        "no message there"
+    );
+    assert_eq!(
+        ui::hit(area, &app, 2, 2).unwrap().item,
+        Some(1),
+        "Sent Items"
+    );
+    assert_eq!(ui::hit(area, &app, 60, 3).unwrap().pane, Pane::Reader);
+    assert_eq!(ui::hit(area, &app, 30, 11), None, "the status bar");
+}
+
+#[test]
+fn a_zoomed_pane_takes_every_click() {
+    let mut app = sample_app();
+    app.focus = Pane::Reader;
+    app.zoomed = true;
+    let area = ratatui::layout::Rect::new(0, 0, 90, 12);
+
+    assert_eq!(ui::hit(area, &app, 2, 2).unwrap().pane, Pane::Reader);
+}
