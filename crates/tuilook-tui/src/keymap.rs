@@ -55,6 +55,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('d') => Action::Delete,
         KeyCode::Char('D') => Action::DeletePermanently,
         KeyCode::F(5) => Action::Refresh,
+        KeyCode::Char('?') => Action::Help,
         _ => return None,
     };
     Some(action)

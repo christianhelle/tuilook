@@ -1,5 +1,6 @@
 ---
 source: crates/tuilook-tui/tests/render.rs
+assertion_line: 77
 expression: render(&app)
 ---
 "┏ Folders ━━━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
@@ -13,4 +14,4 @@ expression: render(&app)
 "┃                ┃│                                  ││                                  │"
 "┃                ┃│                                  ││                                  │"
 "┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
-" q quit · Tab/h/l switch pane · j/k move · Enter open                                     "
+" ? help · Tab switch pane · Enter open · d delete · z zoom · q quit                       "

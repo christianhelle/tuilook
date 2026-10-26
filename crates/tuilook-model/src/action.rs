@@ -30,6 +30,8 @@ pub enum Action {
     DeletePermanently,
     /// Sync every folder now.
     Refresh,
+    /// Show the keys until the next key press.
+    Help,
 }
 
 /// Something core tells the UI happened.

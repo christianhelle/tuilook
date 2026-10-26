@@ -202,3 +202,20 @@ fn deleting_for_good_warns_it_cannot_be_undone() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn question_mark_shows_the_keys() {
+    let mut app = sample_app();
+    app.update(tuilook_model::Action::Help);
+    let mut terminal = Terminal::new(TestBackend::new(90, 20)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+
+    insta::assert_snapshot!(terminal.backend().to_string());
+}
+
+#[test]
+fn the_help_is_wide_enough_for_its_longest_line() {
+    let inside = usize::from(ui::HELP_WIDTH) - 2;
+
+    assert!(ui::help_line_width(&ui::HELP) <= inside);
+}

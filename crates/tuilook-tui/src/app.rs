@@ -77,6 +77,7 @@ pub struct AppState {
     /// Messages picked for acting on together, such as deleting.
     pub marked: BTreeSet<MessageId>,
     pub confirm: Option<Confirm>,
+    pub show_help: bool,
 }
 
 impl AppState {
@@ -89,6 +90,10 @@ impl AppState {
     pub fn on_key(&mut self, key: KeyEvent, keymap: &mut Keymap) -> Option<Effect> {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             self.should_quit = true;
+            return None;
+        }
+        if self.show_help {
+            self.show_help = false;
             return None;
         }
         if let Some(confirm) = self.confirm.take() {
@@ -144,6 +149,7 @@ impl AppState {
             }
             Action::Delete | Action::DeletePermanently => {}
             Action::Refresh => return Some(Effect::Sync),
+            Action::Help => self.show_help = true,
         }
         None
     }
@@ -775,6 +781,18 @@ mod tests {
         app.update(Action::Bottom);
 
         assert_eq!(app.messages_deleted(&message_ids(&["m1"])), load_body("m0"));
+    }
+
+    #[test]
+    fn question_mark_shows_help_until_the_next_key() {
+        let mut app = in_message_list(&["m0", "m1"]);
+
+        key(&mut app, KeyCode::Char('?'));
+        assert!(app.show_help);
+
+        assert_eq!(key(&mut app, KeyCode::Char('j')), None);
+        assert!(!app.show_help);
+        assert_eq!(app.selected_message, 0, "the key only closed the help");
     }
 
     #[test]

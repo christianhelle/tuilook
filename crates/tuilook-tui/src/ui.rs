@@ -74,13 +74,73 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
             Line::styled(format!(" {error}"), Style::new().fg(Color::Red))
         }
         Some(Status::Info(info)) => Line::raw(format!(" {info}")),
-        None => Line::from(" q quit · Tab/h/l switch pane · j/k move · Enter open"),
+        None => Line::from(" ? help · Tab switch pane · Enter open · d delete · z zoom · q quit"),
     };
     frame.render_widget(status_line, status);
 
+    if app.show_help {
+        draw_help(frame, &HELP);
+    }
     if let Some(Confirm::Delete { ids, permanent }) = &app.confirm {
         draw_confirm_delete(frame, ids.len(), *permanent);
     }
+}
+
+/// What each key does, shown with `?`.
+pub const HELP: [(&str, &str); 15] = [
+    ("Tab / Shift-Tab  l h", "Next pane / previous pane"),
+    ("Enter", "Open the folder or message"),
+    ("↑ ↓  j k", "Move, or scroll the message"),
+    ("PgUp PgDn Ctrl-B Ctrl-F", "Move or scroll a page"),
+    ("Ctrl-U Ctrl-D", "Move or scroll half a page"),
+    ("g g  G  Home End", "Jump to the first or last"),
+    ("z", "Zoom the pane, or show every pane again"),
+    ("b", "Hide or show the folders"),
+    (
+        "Space, Ctrl-A",
+        "Mark a message, mark them all (Esc clears)",
+    ),
+    ("d", "Move the marked or selected to Deleted Items"),
+    ("D", "Delete the marked or selected for good"),
+    ("F5  Ctrl-R", "Sync every folder now"),
+    ("?", "Show this help"),
+    ("q  Ctrl-C", "Quit"),
+    ("", "Press any key to close"),
+];
+
+/// Width of the key column in the help.
+const HELP_KEYS: usize = 25;
+
+/// Width of the help dialog, borders included.
+pub const HELP_WIDTH: u16 = 76;
+
+fn draw_help(frame: &mut Frame, help: &[(&str, &str)]) {
+    let lines: Vec<Line> = help
+        .iter()
+        .map(|(keys, action)| {
+            Line::from(vec![
+                Span::styled(format!("{keys:<HELP_KEYS$}"), Style::new().fg(Color::Cyan)),
+                Span::raw(*action),
+            ])
+        })
+        .collect();
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(HELP_WIDTH), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Keys")),
+        area,
+    );
+}
+
+/// Characters the longest help line takes, to check it fits.
+pub fn help_line_width(help: &[(&str, &str)]) -> usize {
+    help.iter()
+        .map(|(_, action)| HELP_KEYS + action.chars().count())
+        .max()
+        .unwrap_or(0)
 }
 
 /// A dialog asking whether to delete the marked or selected messages.

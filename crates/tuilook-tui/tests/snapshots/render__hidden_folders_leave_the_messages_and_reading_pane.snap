@@ -14,4 +14,4 @@ expression: render(&app)
 "┃                                           ┃│                                           │"
 "┃                                           ┃│                                           │"
 "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└───────────────────────────────────────────┘"
-" q quit · Tab/h/l switch pane · j/k move · Enter open                                     "
+" ? help · Tab switch pane · Enter open · d delete · z zoom · q quit                       "
