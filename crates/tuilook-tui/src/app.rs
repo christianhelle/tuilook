@@ -116,6 +116,7 @@ impl AppState {
 
     /// Handles a key press: an open dialog takes it first, then the keymap.
     pub fn on_key(&mut self, key: KeyEvent, keymap: &mut Keymap) -> Option<Effect> {
+        let key = alt_gr_as_text(key);
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             self.should_quit = true;
             return None;
@@ -418,6 +419,17 @@ impl AppState {
             }
         }
     }
+}
+
+/// Windows reports a character typed with AltGr, such as `@` on a Danish
+/// keyboard (AltGr+2), as Ctrl+Alt and the character. Without this it would
+/// look like a Ctrl shortcut, and nothing would be typed.
+fn alt_gr_as_text(mut key: KeyEvent) -> KeyEvent {
+    let alt_gr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+    if matches!(key.code, KeyCode::Char(_)) && key.modifiers.contains(alt_gr) {
+        key.modifiers.remove(alt_gr);
+    }
+    key
 }
 
 /// Moves `index` by `delta` within `0..len`. Returns whether it moved.
@@ -931,6 +943,36 @@ mod tests {
         );
         assert_eq!(app.selected_message, 1, "j and k were typed, not moved");
         assert_eq!(app.status, Some(Status::Info("Sending…".to_owned())));
+    }
+
+    fn alt_gr(app: &mut AppState, c: char) {
+        let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL | KeyModifiers::ALT);
+        app.on_key(key, &mut Keymap::default());
+    }
+
+    #[test]
+    fn alt_gr_characters_are_typed_in_the_header_and_the_body() {
+        let mut app = AppState::default();
+        app.update(Action::Compose);
+
+        for c in "ada".chars() {
+            key(&mut app, KeyCode::Char(c));
+        }
+        alt_gr(&mut app, '@');
+        for c in "example.com".chars() {
+            key(&mut app, KeyCode::Char(c));
+        }
+        key(&mut app, KeyCode::Tab);
+        key(&mut app, KeyCode::Tab);
+        key(&mut app, KeyCode::Tab);
+        key(&mut app, KeyCode::Char('i'));
+        for c in ['{', '€', '}', '|', '\\'] {
+            alt_gr(&mut app, c);
+        }
+
+        let compose = app.compose.as_ref().unwrap();
+        assert_eq!(compose.to.text(), "ada@example.com");
+        assert_eq!(compose.body.text(), "{€}|\\");
     }
 
     #[test]
