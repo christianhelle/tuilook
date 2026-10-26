@@ -47,6 +47,20 @@ impl<T: TokenSource> GraphBackend<T> {
         self
     }
 
+    /// The signed-in mailbox's email address. Personal accounts may have no
+    /// `mail`, so the sign-in name stands in for it.
+    pub async fn address(&self) -> Result<Option<String>, GraphError> {
+        let user: dto::User = self
+            .client
+            .get("/me?$select=mail,userPrincipalName", &[])
+            .await?;
+        Ok(user
+            .mail
+            .filter(|address| !address.is_empty())
+            .or(user.user_principal_name)
+            .filter(|address| !address.is_empty()))
+    }
+
     /// Maps folder ids to the well-known role Graph gives them. Mailboxes
     /// without a folder (often Archive) answer 404, which is skipped.
     async fn well_known_ids(&self) -> Result<HashMap<String, WellKnown>, GraphError> {

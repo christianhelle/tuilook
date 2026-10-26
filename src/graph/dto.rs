@@ -12,6 +12,14 @@ pub struct Page<T> {
     pub delta_link: Option<String>,
 }
 
+/// Who is signed in.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct User {
+    pub mail: Option<String>,
+    pub user_principal_name: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailFolder {
