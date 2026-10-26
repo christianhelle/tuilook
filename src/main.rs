@@ -19,7 +19,10 @@ use ratatui::{
     layout::Rect,
 };
 use tokio::sync::mpsc;
-use tuilook::auth::{KeyringStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider};
+use tuilook::accounts::{Account, Accounts};
+use tuilook::auth::{
+    KeyringStore, MemoryStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider,
+};
 use tuilook::core::{Command, run_engine, sync_folders, sync_messages};
 use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
 use tuilook::model::{Event, MailBackend};
@@ -42,8 +45,9 @@ const SCOPES: [&str; 5] = [
     "MailboxSettings.Read",
 ];
 
-/// Keychain account the refresh token is stored under.
-const ACCOUNT: &str = "default";
+/// Keychain account the refresh token was stored under before tuilook knew
+/// several accounts; now each is stored under its address.
+const LEGACY_ACCOUNT: &str = "default";
 
 /// tuilook's own Entra ID app registration (a public client; not a secret).
 const DEFAULT_CLIENT_ID: &str = "5de297ab-80a5-4cfc-bdea-38e33b917993";
@@ -51,11 +55,13 @@ const DEFAULT_CLIENT_ID: &str = "5de297ab-80a5-4cfc-bdea-38e33b917993";
 #[derive(Parser)]
 #[command(version, about = "A terminal mail client for Microsoft 365")]
 struct Cli {
-    /// Entra ID application (client) ID; use your own if your tenant blocks tuilook's.
+    /// Entra ID application (client) ID to sign in with; use your own if your
+    /// tenant blocks tuilook's. Each account remembers the one it signed in with.
     #[arg(long, env = "TUILOOK_CLIENT_ID", default_value = DEFAULT_CLIENT_ID, global = true)]
     client_id: Option<String>,
     /// Tenant to sign in to: consumers (personal accounts), organizations, common
     /// or a tenant ID. The default app registration only accepts consumers.
+    /// Each account remembers the one it signed in to.
     #[arg(
         long,
         env = "TUILOOK_TENANT",
@@ -75,39 +81,62 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum CliCommand {
-    /// Sign in with a device code.
+    /// Sign in with a device code. Run it again to add another account.
     Login,
-    /// Forget the stored sign-in.
-    Logout,
-    /// Sync all folders once, without the UI.
+    /// Forget an account's sign-in and cached mail.
+    Logout {
+        /// The account's address, or the start of it. Needed when signed in
+        /// to several accounts.
+        account: Option<String>,
+    },
+    /// List the signed-in accounts.
+    Accounts,
+    /// Sync every account's folders once, without the UI.
     Sync,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let runtime = tokio::runtime::Runtime::new()?;
-    match cli.command {
+    match &cli.command {
         Some(CliCommand::Login) => runtime.block_on(login(&cli)),
-        Some(CliCommand::Logout) => {
-            KeyringStore::new(ACCOUNT)?.clear()?;
-            println!("Signed out.");
+        Some(CliCommand::Logout { account }) => runtime.block_on(logout(&cli, account.as_deref())),
+        Some(CliCommand::Accounts) => {
+            let accounts = runtime.block_on(signed_in(&cli))?;
+            if accounts.0.is_empty() {
+                println!("Not signed in.");
+            }
+            for account in accounts.0 {
+                println!("{}", account.address);
+            }
             Ok(())
         }
         Some(CliCommand::Sync) => runtime.block_on(sync_once(&cli)),
         None if cli.demo => {
             let path = std::env::temp_dir().join("tuilook-demo.db");
             remove_db(&path)?;
-            run_ui(&runtime, demo::backend(), &path, None, sync_every(&cli))
+            let demo = vec![("demo".to_owned(), demo::backend(), path)];
+            run_ui(&runtime, demo, None, sync_every(&cli))
         }
         None => {
-            let backend = graph_backend(&cli)?;
-            if KeyringStore::new(ACCOUNT)?.load()?.is_none() {
+            let accounts = runtime.block_on(signed_in(&cli))?;
+            if accounts.0.is_empty() {
                 bail!("not signed in; run `tuilook login` first");
             }
+            let mailboxes = accounts
+                .0
+                .iter()
+                .map(|account| {
+                    Ok((
+                        account.address.clone(),
+                        graph_backend(account)?,
+                        cache_path(&account.address)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
             run_ui(
                 &runtime,
-                backend,
-                &cache_path()?,
+                mailboxes,
                 Some(&session_path()?),
                 sync_every(&cli),
             )
@@ -115,48 +144,152 @@ fn main() -> Result<()> {
     }
 }
 
-fn token_provider(cli: &Cli) -> Result<TokenProvider> {
-    let Some(client_id) = cli.client_id.clone().filter(|id| !id.is_empty()) else {
-        bail!(
+fn client_id(cli: &Cli) -> Result<String> {
+    match cli.client_id.clone().filter(|id| !id.is_empty()) {
+        Some(client_id) => Ok(client_id),
+        None => bail!(
             "no client ID: register a public client app in Entra ID, then pass \
              --client-id or set TUILOOK_CLIENT_ID"
-        );
-    };
-    let oauth = OAuthClient::new(OAuthConfig {
+        ),
+    }
+}
+
+fn oauth(tenant: &str, client_id: &str) -> OAuthClient {
+    OAuthClient::new(OAuthConfig {
         authority: "https://login.microsoftonline.com".to_owned(),
+        tenant: tenant.to_owned(),
+        client_id: client_id.to_owned(),
+        scopes: SCOPES.map(str::to_owned).to_vec(),
+    })
+}
+
+fn graph_backend(account: &Account) -> Result<GraphBackend<Arc<TokenProvider>>> {
+    let secrets = Arc::new(KeyringStore::new(&account.address)?);
+    let tokens = TokenProvider::new(oauth(&account.tenant, &account.client_id), secrets);
+    Ok(backend_over(tokens))
+}
+
+fn backend_over(tokens: TokenProvider) -> GraphBackend<Arc<TokenProvider>> {
+    GraphBackend::new(GraphClient::new(GRAPH_V1, Arc::new(tokens)))
+}
+
+/// Signs in, keeping the refresh token in memory until Graph says whose it is.
+async fn login(cli: &Cli) -> Result<()> {
+    let mut accounts = signed_in(cli).await?;
+    let client_id = client_id(cli)?;
+    let memory = Arc::new(MemoryStore::default());
+    let tokens = TokenProvider::new(oauth(&cli.tenant, &client_id), memory.clone());
+    tokens.login(|code| println!("{}", code.message)).await?;
+    let address = backend_over(tokens)
+        .address()
+        .await?
+        .context("Microsoft did not say which account signed in")?;
+    let refresh_token = memory
+        .load()?
+        .context("Microsoft did not let tuilook stay signed in (no refresh token)")?;
+    KeyringStore::new(&address)?.save(&refresh_token)?;
+    accounts.upsert(Account {
+        address: address.clone(),
         tenant: cli.tenant.clone(),
         client_id,
-        scopes: SCOPES.map(str::to_owned).to_vec(),
     });
-    Ok(TokenProvider::new(
-        oauth,
-        Arc::new(KeyringStore::new(ACCOUNT)?),
-    ))
-}
-
-fn graph_backend(cli: &Cli) -> Result<GraphBackend<Arc<TokenProvider>>> {
-    let tokens = Arc::new(token_provider(cli)?);
-    Ok(GraphBackend::new(GraphClient::new(GRAPH_V1, tokens)))
-}
-
-async fn login(cli: &Cli) -> Result<()> {
-    token_provider(cli)?
-        .login(|code| println!("{}", code.message))
-        .await?;
-    println!("Signed in.");
+    accounts.save(&accounts_path()?)?;
+    println!("Signed in as {address}.");
     Ok(())
 }
 
+async fn logout(cli: &Cli, query: Option<&str>) -> Result<()> {
+    let mut accounts = signed_in(cli).await?;
+    let account = match (query, &accounts.0[..]) {
+        (Some(query), _) => accounts.find(query)?.clone(),
+        (None, [only]) => only.clone(),
+        (None, []) => {
+            println!("Not signed in.");
+            return Ok(());
+        }
+        (None, _) => bail!("signed in to several accounts; say which: `tuilook logout <address>`"),
+    };
+    KeyringStore::new(&account.address)?.clear()?;
+    accounts.remove(&account.address);
+    accounts.save(&accounts_path()?)?;
+    match std::fs::remove_dir_all(account_dir(&account.address)?) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+        _ => {}
+    }
+    println!("Signed out of {}.", account.address);
+    Ok(())
+}
+
+/// The signed-in accounts, after moving a sign-in from an older tuilook.
+async fn signed_in(cli: &Cli) -> Result<Accounts> {
+    let path = accounts_path()?;
+    if path.exists() {
+        return Ok(Accounts::load(&path)?);
+    }
+    let accounts = migrate_legacy(cli).await?;
+    if !accounts.0.is_empty() {
+        accounts.save(&path)?;
+        KeyringStore::new(LEGACY_ACCOUNT)?.clear()?;
+    }
+    Ok(accounts)
+}
+
+/// Files the one sign-in and cache of an older tuilook under the address
+/// they belong to.
+async fn migrate_legacy(cli: &Cli) -> Result<Accounts> {
+    let Some(refresh_token) = KeyringStore::new(LEGACY_ACCOUNT)?.load()? else {
+        return Ok(Accounts::default());
+    };
+    let client_id = client_id(cli)?;
+    let memory = Arc::new(MemoryStore::default());
+    memory.save(&refresh_token)?;
+    let tokens = TokenProvider::new(oauth(&cli.tenant, &client_id), memory.clone());
+    let address = backend_over(tokens)
+        .address()
+        .await
+        .context("finding out which account the existing sign-in is")?
+        .context("Microsoft did not say which account the existing sign-in is")?;
+    // Asking may have rotated the refresh token.
+    let refresh_token = memory.load()?.unwrap_or(refresh_token);
+    KeyringStore::new(&address)?.save(&refresh_token)?;
+    let old = data_dir()?.join("cache.db");
+    let new = cache_path(&address)?;
+    for suffix in ["", "-wal", "-shm"] {
+        let mut from = old.as_os_str().to_owned();
+        from.push(suffix);
+        let mut to = new.as_os_str().to_owned();
+        to.push(suffix);
+        match std::fs::rename(&from, &to) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
+        }
+    }
+    Ok(Accounts(vec![Account {
+        address,
+        tenant: cli.tenant.clone(),
+        client_id,
+    }]))
+}
+
 async fn sync_once(cli: &Cli) -> Result<()> {
-    let backend = graph_backend(cli)?;
-    let mut store = Store::open(&cache_path()?)?;
-    sync_folders(&backend, &mut store).await?;
-    for folder in store.folders()? {
-        sync_messages(&backend, &mut store, &folder.id)
+    let accounts = signed_in(cli).await?;
+    if accounts.0.is_empty() {
+        bail!("not signed in; run `tuilook login` first");
+    }
+    for account in &accounts.0 {
+        let backend = graph_backend(account)?;
+        let mut store = Store::open(&cache_path(&account.address)?)?;
+        let address = &account.address;
+        sync_folders(&backend, &mut store)
             .await
-            .with_context(|| format!("syncing {}", folder.name))?;
-        let count = store.messages_in(&folder.id)?.len();
-        println!("{}: {count} messages", folder.name);
+            .with_context(|| format!("syncing {address}"))?;
+        for folder in store.folders()? {
+            sync_messages(&backend, &mut store, &folder.id)
+                .await
+                .with_context(|| format!("syncing {address} / {}", folder.name))?;
+            let count = store.messages_in(&folder.id)?.len();
+            println!("{address} / {}: {count} messages", folder.name);
+        }
     }
     Ok(())
 }
@@ -166,11 +299,26 @@ fn sync_every(cli: &Cli) -> Option<Duration> {
     (cli.sync_every > 0).then(|| Duration::from_secs(cli.sync_every))
 }
 
-fn cache_path() -> Result<PathBuf> {
+fn data_dir() -> Result<PathBuf> {
     let dirs = directories::ProjectDirs::from("", "", "tuilook")
         .context("no home directory to keep the mail cache in")?;
     std::fs::create_dir_all(dirs.data_dir())?;
-    Ok(dirs.data_dir().join("cache.db"))
+    Ok(dirs.data_dir().to_owned())
+}
+
+fn accounts_path() -> Result<PathBuf> {
+    Ok(data_dir()?.join("accounts.json"))
+}
+
+/// Where an account's cached mail is kept.
+fn account_dir(address: &str) -> Result<PathBuf> {
+    Ok(data_dir()?.join(address))
+}
+
+fn cache_path(address: &str) -> Result<PathBuf> {
+    let dir = account_dir(address)?;
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join("cache.db"))
 }
 
 /// Where the place the user was when they quit is kept.
@@ -194,37 +342,52 @@ fn remove_db(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Renders from the cache at once while core syncs in the background.
-fn run_ui(
+/// One account's cache, and the core that syncs it.
+struct Mailbox {
+    store: Store,
+    commands: mpsc::Sender<Command>,
+}
+
+/// Renders from the caches at once while core syncs every account in the
+/// background. `accounts` holds each account's address, backend and cache.
+fn run_ui<B: MailBackend + Send + Sync + 'static>(
     runtime: &tokio::runtime::Runtime,
-    backend: impl MailBackend + Send + Sync + 'static,
-    path: &Path,
+    accounts: Vec<(String, B, PathBuf)>,
     session: Option<&Path>,
     sync_every: Option<Duration>,
 ) -> Result<()> {
-    let store = Store::open(path)?;
-    let (commands, command_rx) = mpsc::channel(32);
-    let (event_tx, mut events) = mpsc::channel(32);
-    runtime.spawn(run_engine(
-        backend,
-        Store::open(path)?,
-        command_rx,
-        event_tx,
-    ));
     let mut app = AppState::default();
+    let mut mailboxes = Vec::new();
+    let mut events = Vec::new();
+    for (address, backend, path) in accounts {
+        let (commands, command_rx) = mpsc::channel(32);
+        let (event_tx, event_rx) = mpsc::channel(32);
+        runtime.spawn(run_engine(
+            backend,
+            Store::open(&path)?,
+            command_rx,
+            event_tx,
+        ));
+        let store = Store::open(&path)?;
+        app.accounts.push(address);
+        mailboxes.push(Mailbox { store, commands });
+        events.push(event_rx);
+    }
     app.sync.every = sync_every;
     let effect = app.start_sync();
-    apply(&mut app, &store, &commands, effect)?;
-    let effect = app.set_folders(store.folders()?);
-    apply(&mut app, &store, &commands, effect)?;
+    apply(&mut app, &mailboxes, effect)?;
+    for (account, mailbox) in mailboxes.iter().enumerate() {
+        let effect = app.set_account_folders(account, mailbox.store.folders()?);
+        apply(&mut app, &mailboxes, effect)?;
+    }
     if let Some(snapshot) = session.and_then(session::load) {
         let effect = app.restore(&snapshot);
-        apply(&mut app, &store, &commands, effect)?;
+        apply(&mut app, &mailboxes, effect)?;
         let effect = snapshot
             .message
             .as_deref()
             .and_then(|id| app.select_message(id));
-        apply(&mut app, &store, &commands, effect)?;
+        apply(&mut app, &mailboxes, effect)?;
     }
 
     let mut keymap = Keymap::default();
@@ -236,16 +399,19 @@ fn run_ui(
             let now = Instant::now();
             app.expire_status(now);
             let effect = app.sync_if_due(now);
-            apply(&mut app, &store, &commands, effect)?;
+            apply(&mut app, &mailboxes, effect)?;
             terminal.draw(|frame| ui::draw(frame, &app))?;
             let shape = Cursor::of(&app);
             if shape != cursor {
                 execute!(io::stdout(), shape.style())?;
                 cursor = shape;
             }
-            while let Ok(event) = events.try_recv() {
-                let effect = on_core_event(&mut app, &store, event)?;
-                apply(&mut app, &store, &commands, effect)?;
+            for (account, events) in events.iter_mut().enumerate() {
+                while let Ok(event) = events.try_recv() {
+                    let store = &mailboxes[account].store;
+                    let effect = on_core_event(&mut app, account, store, event)?;
+                    apply(&mut app, &mailboxes, effect)?;
+                }
             }
             if !event::poll(Duration::from_millis(100))? {
                 continue;
@@ -270,7 +436,7 @@ fn run_ui(
                 }
                 _ => continue,
             };
-            apply(&mut app, &store, &commands, effect)?;
+            apply(&mut app, &mailboxes, effect)?;
         }
         Ok(())
     })();
@@ -313,16 +479,22 @@ impl Cursor {
     }
 }
 
-fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Option<Effect>> {
+/// Shows what an account's core did.
+fn on_core_event(
+    app: &mut AppState,
+    account: usize,
+    store: &Store,
+    event: Event,
+) -> Result<Option<Effect>> {
     Ok(match event {
-        Event::FoldersSynced => app.set_folders(store.folders()?),
+        Event::FoldersSynced => app.set_account_folders(account, store.folders()?),
         Event::SyncFinished => {
             app.sync_finished(Instant::now());
             None
         }
         Event::FolderSynced(id) => {
             // Unread counts may have changed along with the messages.
-            let effect = app.set_folders(store.folders()?);
+            let effect = app.set_account_folders(account, store.folders()?);
             if app.current_folder() == Some(&id) {
                 app.refresh_messages(store.messages_in(&id)?).or(effect)
             } else {
@@ -347,20 +519,20 @@ fn on_core_event(app: &mut AppState, store: &Store, event: Event) -> Result<Opti
             None
         }
         Event::Error(error) => {
-            app.show_error(error);
+            match app.accounts.get(account).filter(|_| app.accounts.len() > 1) {
+                Some(address) => app.show_error(format!("{address}: {error}")),
+                None => app.show_error(error),
+            }
             None
         }
     })
 }
 
-/// Performs the IO an update asked for, and any it leads to.
-fn apply(
-    app: &mut AppState,
-    store: &Store,
-    commands: &mpsc::Sender<Command>,
-    mut effect: Option<Effect>,
-) -> Result<()> {
+/// Performs the IO an update asked for, in the account it is for, and any
+/// IO it leads to.
+fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) -> Result<()> {
     while let Some(next) = effect {
+        let Mailbox { store, commands } = &mailboxes[app.account_for(&next)];
         effect = match next {
             Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
             Effect::LoadBody(id) => {
@@ -368,7 +540,9 @@ fn apply(
                 None
             }
             Effect::Sync => {
-                commands.blocking_send(Command::SyncAll)?;
+                for mailbox in mailboxes {
+                    mailbox.commands.blocking_send(Command::SyncAll)?;
+                }
                 None
             }
             Effect::Send(draft) => {
