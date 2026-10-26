@@ -9,7 +9,7 @@ use ratatui::{
 };
 use tuilook_model::folder_depths;
 
-use crate::app::{AppState, Pane, Viewport};
+use crate::app::{AppState, Pane, Status, Viewport};
 
 /// Each message takes this many rows in the message list.
 const MESSAGE_ROWS: usize = 2;
@@ -49,7 +49,10 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     draw_messages(frame, app, messages);
     draw_reader(frame, app, reader);
     let status_line = match &app.status {
-        Some(error) => Line::styled(format!(" {error}"), Style::new().fg(Color::Red)),
+        Some(Status::Error(error)) => {
+            Line::styled(format!(" {error}"), Style::new().fg(Color::Red))
+        }
+        Some(Status::Info(info)) => Line::raw(format!(" {info}")),
         None => Line::from(" q quit · Tab/h/l switch pane · j/k move · Enter open"),
     };
     frame.render_widget(status_line, status);

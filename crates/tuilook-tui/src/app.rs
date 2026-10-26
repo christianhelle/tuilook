@@ -1,4 +1,7 @@
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tuilook_model::{Action, Folder, FolderId, Message, MessageId};
+
+use crate::keymap::Keymap;
 
 /// IO the event loop must perform after an update.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +16,13 @@ pub enum Pane {
     Folders,
     Messages,
     Reader,
+}
+
+/// A line for the status bar, shown until the next one replaces it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Status {
+    Info(String),
+    Error(String),
 }
 
 /// How much of each pane fits on screen, measured by the UI before each
@@ -40,14 +50,24 @@ pub struct AppState {
     pub selected_message: usize,
     /// The selected message's body, once core has loaded it.
     pub body: Option<String>,
-    /// Shown in the status bar until the next error replaces it.
-    pub status: Option<String>,
+    pub status: Option<Status>,
     pub viewport: Viewport,
     /// Lines of the reading pane scrolled out of view at the top.
     pub reader_scroll: usize,
 }
 
 impl AppState {
+    /// Handles a key press: an open dialog takes it first, then the keymap.
+    pub fn on_key(&mut self, key: KeyEvent, keymap: &mut Keymap) -> Option<Effect> {
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            self.should_quit = true;
+            return None;
+        }
+        keymap
+            .action_for(key)
+            .and_then(|action| self.update(action))
+    }
+
     pub fn update(&mut self, action: Action) -> Option<Effect> {
         match action {
             Action::FocusNextPane => self.focus = self.focus.next(),
@@ -107,7 +127,11 @@ impl AppState {
     }
 
     pub fn show_error(&mut self, message: String) {
-        self.status = Some(message);
+        self.status = Some(Status::Error(message));
+    }
+
+    pub fn show_info(&mut self, message: impl Into<String>) {
+        self.status = Some(Status::Info(message.into()));
     }
 
     /// Shows a body core loaded, unless the user has moved on.

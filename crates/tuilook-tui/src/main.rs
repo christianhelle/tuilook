@@ -201,12 +201,10 @@ fn run_ui(
             if key.kind != KeyEventKind::Press {
                 continue;
             }
-            if let Some(action) = keymap.action_for(key) {
-                let size = terminal.size()?;
-                app.viewport = ui::viewport(Rect::new(0, 0, size.width, size.height), &app);
-                let effect = app.update(action);
-                apply(&mut app, &store, &commands, effect)?;
-            }
+            let size = terminal.size()?;
+            app.viewport = ui::viewport(Rect::new(0, 0, size.width, size.height), &app);
+            let effect = app.on_key(key, &mut keymap);
+            apply(&mut app, &store, &commands, effect)?;
         }
         Ok(())
     })();
