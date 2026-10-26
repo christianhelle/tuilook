@@ -379,6 +379,8 @@ impl AppState {
         self.selected_folder = previous
             .as_ref()
             .and_then(|id| folders.iter().position(|f| &f.id == id))
+            // Otherwise the first real folder, so there is mail to look at.
+            .or_else(|| folders.iter().position(|f| !is_account_row(f)))
             .unwrap_or(0);
         self.folders = folders;
         self.folder_account = owners;

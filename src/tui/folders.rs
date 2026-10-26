@@ -308,8 +308,8 @@ mod tests {
     #[test]
     fn a_folded_account_stays_folded_after_a_sync() {
         let mut app = two_accounts();
-        app.expanded
-            .remove(&FolderId("account:me@outlook.com".to_owned()));
+        app.selected_folder = 0;
+        app.update(Action::Collapse);
 
         app.set_account_folders(0, vec![folder("inbox", Some("root"), 1)]);
 
@@ -317,6 +317,13 @@ mod tests {
             names(&app),
             ["me@outlook.com", "me@work.example", "work-inbox"]
         );
+    }
+
+    #[test]
+    fn the_first_real_folder_is_selected_to_start() {
+        let app = two_accounts();
+
+        assert_eq!(selected(&app), "inbox");
     }
 
     #[test]
