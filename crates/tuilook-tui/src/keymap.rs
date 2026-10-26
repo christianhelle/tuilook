@@ -31,6 +31,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
             KeyCode::Char('b') => Action::PageUp,
             KeyCode::Char('d') => Action::HalfPageDown,
             KeyCode::Char('u') => Action::HalfPageUp,
+            KeyCode::Char('a') => Action::MarkAll,
             _ => return None,
         };
         return Some(action);
@@ -48,6 +49,8 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('z') => Action::ToggleZoom,
         KeyCode::Char('b') => Action::ToggleFolders,
+        KeyCode::Char(' ') => Action::ToggleMark,
+        KeyCode::Esc => Action::ClearMarks,
         _ => return None,
     };
     Some(action)
@@ -137,6 +140,13 @@ mod tests {
     fn z_zooms_and_b_hides_the_folders() {
         assert_eq!(press(KeyCode::Char('z')), Some(Action::ToggleZoom));
         assert_eq!(press(KeyCode::Char('b')), Some(Action::ToggleFolders));
+    }
+
+    #[test]
+    fn space_marks_ctrl_a_marks_all_and_esc_clears() {
+        assert_eq!(press(KeyCode::Char(' ')), Some(Action::ToggleMark));
+        assert_eq!(ctrl('a'), Some(Action::MarkAll));
+        assert_eq!(press(KeyCode::Esc), Some(Action::ClearMarks));
     }
 
     #[test]

@@ -107,7 +107,11 @@ fn draw_folders(frame: &mut Frame, app: &AppState, area: Rect) {
 }
 
 fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
-    let block = pane_block(app, Pane::Messages, "Messages");
+    let title = match app.marked.len() {
+        0 => "Messages".to_owned(),
+        marked => format!("Messages ({marked} marked)"),
+    };
+    let block = pane_block(app, Pane::Messages, &title);
     if app.messages.is_empty() {
         frame.render_widget(Paragraph::new("No messages").block(block), area);
         return;
@@ -118,8 +122,13 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         } else {
             Style::new().add_modifier(Modifier::BOLD)
         };
+        let mark = if app.marked.contains(&m.id) {
+            Span::styled("● ", Style::new().fg(Color::Yellow))
+        } else {
+            Span::raw("")
+        };
         ListItem::new(vec![
-            Line::styled(m.from_name.clone(), style),
+            Line::from(vec![mark, Span::styled(m.from_name.clone(), style)]),
             Line::raw(format!("  {}", m.subject)),
         ])
     });

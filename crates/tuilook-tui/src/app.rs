@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tuilook_model::{Action, Folder, FolderId, Message, MessageId};
 
@@ -57,6 +59,8 @@ pub struct AppState {
     /// Whether the focused pane fills the screen.
     pub zoomed: bool,
     pub folders_hidden: bool,
+    /// Messages picked for acting on together, such as deleting.
+    pub marked: BTreeSet<MessageId>,
 }
 
 impl AppState {
@@ -97,12 +101,26 @@ impl AppState {
             Action::Top => return self.move_selection(-isize::MAX),
             Action::Bottom => return self.move_selection(isize::MAX),
             Action::Open => self.open(),
+            Action::ToggleMark if self.focus == Pane::Messages => {
+                if let Some(id) = self.selected().map(|m| m.id.clone())
+                    && !self.marked.remove(&id)
+                {
+                    self.marked.insert(id);
+                }
+                return self.move_selection(1);
+            }
+            Action::MarkAll if self.focus == Pane::Messages => {
+                self.marked = self.messages.iter().map(|m| m.id.clone()).collect();
+            }
+            Action::ClearMarks => self.marked.clear(),
+            Action::ToggleMark | Action::MarkAll => {}
         }
         None
     }
 
     /// Shows a newly loaded folder's messages, selecting the first.
     pub fn set_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
+        self.marked.clear();
         self.messages = messages;
         self.selected_message = 0;
         self.selection_changed()
@@ -131,13 +149,20 @@ impl AppState {
     /// selected message when it is still there.
     pub fn refresh_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
         let selected = self.selected().map(|m| m.id.clone());
+        self.marked
+            .retain(|id| messages.iter().any(|m| &m.id == id));
         match selected.and_then(|id| messages.iter().position(|m| m.id == id)) {
             Some(index) => {
                 self.messages = messages;
                 self.selected_message = index;
                 None
             }
-            None => self.set_messages(messages),
+            None => {
+                let marked = std::mem::take(&mut self.marked);
+                let effect = self.set_messages(messages);
+                self.marked = marked;
+                effect
+            }
         }
     }
 
@@ -594,6 +619,56 @@ mod tests {
         assert_eq!(app.focus, Pane::Reader);
         app.update(Action::FocusNextPane);
         assert_eq!(app.focus, Pane::Folders);
+    }
+
+    fn ids(marked: &BTreeSet<MessageId>) -> Vec<&str> {
+        marked.iter().map(|id| id.0.as_str()).collect()
+    }
+
+    #[test]
+    fn space_marks_the_message_and_moves_down() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+
+        assert_eq!(app.update(Action::ToggleMark), load_body("m1"));
+        app.update(Action::ToggleMark);
+        assert_eq!(ids(&app.marked), ["m0", "m1"]);
+
+        app.update(Action::SelectPrev);
+        app.update(Action::ToggleMark);
+        assert_eq!(ids(&app.marked), ["m0"], "a second Space unmarks");
+    }
+
+    #[test]
+    fn ctrl_a_marks_every_message_and_esc_clears_them() {
+        let mut app = in_message_list(&["m0", "m1"]);
+
+        app.update(Action::MarkAll);
+        assert_eq!(ids(&app.marked), ["m0", "m1"]);
+        app.update(Action::ClearMarks);
+        assert!(app.marked.is_empty());
+    }
+
+    #[test]
+    fn marks_go_with_the_folder_but_survive_a_sync() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+        app.update(Action::MarkAll);
+
+        app.refresh_messages(vec![message("m1"), message("m2")]);
+        assert_eq!(ids(&app.marked), ["m1", "m2"]);
+
+        app.set_messages(vec![message("x")]);
+        assert!(app.marked.is_empty());
+    }
+
+    #[test]
+    fn marking_only_works_in_the_message_list() {
+        let mut app = in_message_list(&["m0"]);
+        app.focus = Pane::Folders;
+
+        app.update(Action::ToggleMark);
+        app.update(Action::MarkAll);
+
+        assert!(app.marked.is_empty());
     }
 
     #[test]

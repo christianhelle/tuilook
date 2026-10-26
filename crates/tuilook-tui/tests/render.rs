@@ -174,3 +174,12 @@ fn paging_a_zoomed_pane_moves_by_the_whole_screen() {
     assert_eq!(viewport.folders, 0);
     assert_eq!(viewport.reader, 0);
 }
+
+#[test]
+fn marked_messages_show_a_dot_and_a_count() {
+    let mut app = sample_app();
+    app.focus = Pane::Messages;
+    app.update(tuilook_model::Action::ToggleMark);
+
+    insta::assert_snapshot!(render(&app));
+}

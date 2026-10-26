@@ -20,6 +20,10 @@ pub enum Action {
     ToggleZoom,
     /// Hide or show the folder pane.
     ToggleFolders,
+    /// Mark or unmark the selected message, then move down.
+    ToggleMark,
+    MarkAll,
+    ClearMarks,
 }
 
 /// Something core tells the UI happened.
