@@ -59,7 +59,7 @@ pub struct OAuthClient {
 impl OAuthClient {
     pub fn new(config: OAuthConfig) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: crate::http_client(),
             config,
             sleep: Arc::new(|d| Box::pin(tokio::time::sleep(d))),
         }

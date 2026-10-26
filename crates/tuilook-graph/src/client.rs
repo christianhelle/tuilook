@@ -59,7 +59,7 @@ pub struct GraphClient<T> {
 impl<T: TokenSource> GraphClient<T> {
     pub fn new(base_url: impl Into<String>, tokens: T) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: tuilook_auth::http_client(),
             base_url: base_url.into(),
             tokens,
             limit: Semaphore::new(MAX_CONCURRENT),

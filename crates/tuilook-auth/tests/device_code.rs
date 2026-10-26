@@ -7,7 +7,7 @@ use serde_json::json;
 use tuilook_auth::{AuthError, OAuthClient, OAuthConfig};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{body_string_contains, method, path},
+    matchers::{body_string_contains, header, method, path},
 };
 
 fn client(server: &MockServer) -> OAuthClient {
@@ -33,6 +33,8 @@ fn client_recording_waits(server: &MockServer) -> (OAuthClient, Arc<Mutex<Vec<Du
 async fn mount_device_code(server: &MockServer) {
     Mock::given(method("POST"))
         .and(path("/common/oauth2/v2.0/devicecode"))
+        // Every sign-in request names tuilook.
+        .and(header("user-agent", tuilook_auth::USER_AGENT))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "device_code": "dev-code",
             "user_code": "ABCD-EFGH",
@@ -96,6 +98,8 @@ async fn start_returns_the_code_the_user_must_enter() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/common/oauth2/v2.0/devicecode"))
+        // Every sign-in request names tuilook.
+        .and(header("user-agent", tuilook_auth::USER_AGENT))
         .and(body_string_contains("client_id=client-123"))
         .and(body_string_contains("scope=offline_access+Mail.Read"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({

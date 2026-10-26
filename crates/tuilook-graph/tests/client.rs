@@ -300,3 +300,19 @@ async fn a_throttled_post_is_retried() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn every_request_says_it_comes_from_tuilook() {
+    let server = MockServer::start().await;
+    Mock::given(path("/me"))
+        .and(header("user-agent", tuilook_auth::USER_AGENT))
+        .respond_with(ok())
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+
+    let _: Value = client.get("/me", &[]).await.unwrap();
+
+    assert!(tuilook_auth::USER_AGENT.starts_with("tuilook/"));
+}
