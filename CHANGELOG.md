@@ -49,5 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Outlook.com does block sending, explains how to unblock the account and
   keeps the message open to send later.
 - Every request names tuilook in its User-Agent.
+- A README on installing, signing in and using tuilook.
 
 [Unreleased]: https://github.com/christianhelle/tuilook/commits/main
