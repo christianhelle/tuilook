@@ -134,3 +134,24 @@ async fn well_known_folders_are_identified_and_missing_ones_skipped() {
         ]
     );
 }
+
+#[tokio::test]
+async fn well_known_folders_are_looked_up_only_on_the_first_sync() {
+    let server = MockServer::start().await;
+    Mock::given(path("/me/mailFolders"))
+        .respond_with(page(vec![graph_folder("f1", "Inbox", "root", 0)], None))
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(path("/me/mailFolders/inbox"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": "f1" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let backend = backend(&server);
+
+    backend.list_folders().await.unwrap();
+    let folders = backend.list_folders().await.unwrap();
+
+    assert_eq!(folders[0].well_known, Some(WellKnown::Inbox));
+}

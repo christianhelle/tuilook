@@ -4,6 +4,7 @@ use jiff::{SignedDuration, Timestamp, Unit};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use serde_json::json;
+use tokio::sync::OnceCell;
 use tuilook_auth::TokenSource;
 use tuilook_model::{
     BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
@@ -26,6 +27,9 @@ const FOLDER_SELECT: &str =
 pub struct GraphBackend<T> {
     client: GraphClient<T>,
     sync_window: SignedDuration,
+    /// Well-known folder ids, looked up on the first sync. A folder keeps
+    /// its id, so there is no need to ask again every sync.
+    well_known: OnceCell<HashMap<String, WellKnown>>,
 }
 
 impl<T: TokenSource> GraphBackend<T> {
@@ -33,6 +37,7 @@ impl<T: TokenSource> GraphBackend<T> {
         Self {
             client,
             sync_window: SignedDuration::from_hours(90 * 24),
+            well_known: OnceCell::new(),
         }
     }
 
@@ -91,7 +96,10 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             i += 1;
         }
         let ids: HashSet<_> = graph_folders.iter().map(|f| f.id.clone()).collect();
-        let well_known = self.well_known_ids().await?;
+        let well_known = self
+            .well_known
+            .get_or_try_init(|| self.well_known_ids())
+            .await?;
         Ok(graph_folders
             .into_iter()
             .map(|f| Folder {
