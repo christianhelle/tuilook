@@ -53,7 +53,11 @@ const LEGACY_ACCOUNT: &str = "default";
 const DEFAULT_CLIENT_ID: &str = "5de297ab-80a5-4cfc-bdea-38e33b917993";
 
 #[derive(Parser)]
-#[command(name = "otlk", version, about = "A terminal mail client for Microsoft 365")]
+#[command(
+    name = "otlk",
+    version,
+    about = "A terminal mail client for Microsoft 365"
+)]
 struct Cli {
     /// Entra ID application (client) ID to sign in with; use your own if your
     /// tenant blocks tuilook's. Each account remembers the one it signed in with.
