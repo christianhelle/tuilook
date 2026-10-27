@@ -10,6 +10,40 @@ the background.
 
 ## Install
 
+tuilook installs as the `otlk` command.
+
+### macOS/Linux
+
+```bash
+curl -fsSL https://christianhelle.com/tuilook/install | bash
+```
+
+This installs the latest release to `~/.local/bin`. To install somewhere else,
+or to pin a release:
+
+```bash
+curl -fsSL https://christianhelle.com/tuilook/install | INSTALL_DIR="$HOME/bin" bash
+curl -fsSL https://christianhelle.com/tuilook/install | VERSION="0.1.0" bash
+```
+
+### Windows PowerShell
+
+```powershell
+irm https://christianhelle.com/tuilook/install.ps1 | iex
+```
+
+This installs the latest release to `%LOCALAPPDATA%\Programs\tuilook`, or to
+`~\.local\bin` or `~\bin` if one of those already exists, and adds it to your
+user `PATH`. To install somewhere else, or to pin a release:
+
+```powershell
+$install = irm https://christianhelle.com/tuilook/install.ps1
+& ([scriptblock]::Create($install)) -InstallDir "$env:USERPROFILE\bin"
+& ([scriptblock]::Create($install)) -Version "0.1.0"
+```
+
+### Cargo
+
 With a recent stable [Rust](https://rustup.rs) toolchain (1.95 or later),
 install it from [crates.io](https://crates.io/crates/tuilook):
 
@@ -17,11 +51,12 @@ install it from [crates.io](https://crates.io/crates/tuilook):
 cargo install tuilook --locked
 ```
 
-This installs the `otlk` command.
+### Release archives
 
-Or download a prebuilt `otlk` for Windows, macOS or Linux from the
+Download a build from the
 [releases page](https://github.com/christianhelle/tuilook/releases), unpack it
-and put it somewhere on your `PATH`.
+and put `otlk` somewhere on your `PATH`. Archives are available for Linux,
+macOS and Windows, on x64 and ARM64.
 
 To try changes that aren't released yet, install straight from GitHub:
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Install scripts: `curl -fsSL https://christianhelle.com/tuilook/install | bash`
+  on macOS and Linux, and `irm https://christianhelle.com/tuilook/install.ps1 | iex`
+  on Windows. Both install the latest release, or the one `VERSION` / `-Version`
+  pins.
+- Release builds for Linux and Windows on ARM64.
+
 ## [0.1.0] - 2026-10-27
 
 ### Added
