@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pins.
 - Release builds for Linux and Windows on ARM64.
 - An application icon, shown on `otlk.exe` on Windows and atop the README.
+- Search: `/` searches every folder of every account as you type, matching
+  subject, sender, preview and the text of messages opened before. Results
+  show the folder each message is in, and can be read, answered and deleted
+  like any folder's.
 
 ### Fixed
 
