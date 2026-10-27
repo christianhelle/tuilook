@@ -1,6 +1,4 @@
-<p align="center"><img src="assets/icon.png" alt="tuilook icon" width="128"></p>
-
-# tuilook
+# TUILook
 
 [![crates.io](https://img.shields.io/crates/v/tuilook.svg)](https://crates.io/crates/tuilook)
 [![CI](https://github.com/christianhelle/tuilook/actions/workflows/ci.yml/badge.svg)](https://github.com/christianhelle/tuilook/actions/workflows/ci.yml)
