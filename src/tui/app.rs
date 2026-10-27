@@ -365,6 +365,7 @@ impl AppState {
                 return self.start_sync();
             }
             Action::Help => self.show_help = true,
+            Action::Search => {}
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::Reply | Action::ReplyAll | Action::Forward => {
                 if let Some(original) = self.selected() {

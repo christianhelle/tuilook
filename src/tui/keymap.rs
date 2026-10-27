@@ -63,6 +63,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('r') => Action::Reply,
         KeyCode::Char('R') => Action::ReplyAll,
         KeyCode::Char('f') => Action::Forward,
+        KeyCode::Char('/') => Action::Search,
         _ => return None,
     };
     Some(action)
@@ -197,6 +198,11 @@ mod tests {
             Keymap::default().action_for(star),
             Some(Action::ToggleFavorite)
         );
+    }
+
+    #[test]
+    fn slash_searches() {
+        assert_eq!(press(KeyCode::Char('/')), Some(Action::Search));
     }
 
     #[test]

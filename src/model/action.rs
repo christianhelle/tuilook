@@ -45,6 +45,8 @@ pub enum Action {
     /// Answer the sender and everyone else on the selected message.
     ReplyAll,
     Forward,
+    /// Search every cached folder.
+    Search,
 }
 
 /// Something core tells the UI happened.
