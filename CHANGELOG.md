@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-27
+
 ### Added
 
 - Terminal mail client for Outlook.com and Microsoft 365, with folder, message
@@ -85,4 +87,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   variation selectors) that newsletters pad their previews with, and tabs
   show as spaces.
 
-[Unreleased]: https://github.com/christianhelle/tuilook/commits/main
+[Unreleased]: https://github.com/christianhelle/tuilook/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/christianhelle/tuilook/releases/tag/v0.1.0

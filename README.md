@@ -1,18 +1,33 @@
 # tuilook
 
+[![crates.io](https://img.shields.io/crates/v/tuilook.svg)](https://crates.io/crates/tuilook)
+[![CI](https://github.com/christianhelle/tuilook/actions/workflows/ci.yml/badge.svg)](https://github.com/christianhelle/tuilook/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A terminal mail client for Outlook.com and Microsoft 365, with vim-style keys.
 It keeps an offline cache, so your mail shows up at once while folders sync in
 the background.
 
 ## Install
 
-You need a recent stable [Rust](https://rustup.rs) toolchain.
+With a recent stable [Rust](https://rustup.rs) toolchain (1.95 or later),
+install it from [crates.io](https://crates.io/crates/tuilook):
+
+```bash
+cargo install tuilook --locked
+```
+
+This installs the `otlk` command.
+
+Or download a prebuilt `otlk` for Windows, macOS or Linux from the
+[releases page](https://github.com/christianhelle/tuilook/releases), unpack it
+and put it somewhere on your `PATH`.
+
+To try changes that aren't released yet, install straight from GitHub:
 
 ```bash
 cargo install --git https://github.com/christianhelle/tuilook
 ```
-
-This installs the `otlk` command.
 
 ## Try it without signing in
 
@@ -322,3 +337,7 @@ otlk sync
 - **Last session:** `session.json` in tuilook's cache folder: `~/.cache/tuilook`
   on Linux, `~/Library/Caches/tuilook` on macOS, `%LOCALAPPDATA%\tuilook\cache`
   on Windows.
+
+## License
+
+tuilook is released under the [MIT License](LICENSE).
