@@ -16,7 +16,7 @@ pub struct Account {
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum FindError {
-    #[error("no signed-in account matches {0}; see `tuilook accounts`")]
+    #[error("no signed-in account matches {0}; see `otlk accounts`")]
     NoMatch(String),
     #[error("{0} matches more than one account: {list}", list = .1.join(", "))]
     Ambiguous(String, Vec<String>),

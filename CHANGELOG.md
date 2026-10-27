@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Terminal mail client for Outlook.com and Microsoft 365, with folder, message
   list and reading panes.
-- `tuilook login` signs in with a device code and keeps the refresh token in the
-  OS keychain; `tuilook logout` forgets it. Signs in to personal accounts
+- `otlk login` signs in with a device code and keeps the refresh token in the
+  OS keychain; `otlk logout` forgets it. Signs in to personal accounts
   (`consumers`) with tuilook's own app registration by default; `--tenant` and
   `--client-id` (or `TUILOOK_TENANT` and `TUILOOK_CLIENT_ID`) override them.
-- `tuilook sync` syncs every folder once without the UI, and `tuilook --demo`
+- `otlk sync` syncs every folder once without the UI, and `otlk --demo`
   browses a built-in sample mailbox without signing in.
 - Offline cache in SQLite: the UI shows cached mail at once while folders sync
   in the background with Graph delta queries. Folders deleted on the server
@@ -59,18 +59,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A README on installing, signing in and using tuilook, with step-by-step
   instructions and links to Microsoft's documentation for registering an app
   and finding the client ID and tenant ID for work or school accounts.
-- Several accounts side by side: run `tuilook login` again to add one. Each
+- Several accounts side by side: run `otlk login` again to add one. Each
   account heads its own folders in the folder pane, every account syncs in the
   background, and a message is sent from the account whose folder is open,
-  shown on a From line while writing. `tuilook accounts` lists the accounts,
-  `tuilook logout <address>` signs out of one, and `tuilook sync` syncs them
+  shown on a From line while writing. `otlk accounts` lists the accounts,
+  `otlk logout <address>` signs out of one, and `otlk sync` syncs them
   all. Each account remembers its tenant and client ID, and a sign-in from
   before this is moved over on first start.
 - Sign-ins too long for one keychain entry, as work and school accounts'
   often are on Windows, are split over several entries.
-- `tuilook --demo` shows three sample accounts (personal, work and
+- `otlk --demo` shows three sample accounts (personal, work and
   university) with dozens of messages in nested folders, and starts on the
   first account's Inbox.
+
+### Changed
+
+- The command is now `otlk`, which is quicker to type; the project is still
+  tuilook, so `cargo install` installs it under that name. Sign-ins, the mail
+  cache and the `TUILOOK_*` environment variables are unchanged.
 
 ### Fixed
 

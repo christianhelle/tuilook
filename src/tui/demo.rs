@@ -1,4 +1,4 @@
-//! Sample mailboxes served by [`FakeBackend`]s for `tuilook --demo`.
+//! Sample mailboxes served by [`FakeBackend`]s for `otlk --demo`.
 
 use std::collections::HashMap;
 

@@ -53,7 +53,7 @@ const LEGACY_ACCOUNT: &str = "default";
 const DEFAULT_CLIENT_ID: &str = "5de297ab-80a5-4cfc-bdea-38e33b917993";
 
 #[derive(Parser)]
-#[command(version, about = "A terminal mail client for Microsoft 365")]
+#[command(name = "otlk", version, about = "A terminal mail client for Microsoft 365")]
 struct Cli {
     /// Entra ID application (client) ID to sign in with; use your own if your
     /// tenant blocks tuilook's. Each account remembers the one it signed in with.
@@ -124,7 +124,7 @@ fn main() -> Result<()> {
         None => {
             let accounts = runtime.block_on(signed_in(&cli))?;
             if accounts.0.is_empty() {
-                bail!("not signed in; run `tuilook login` first");
+                bail!("not signed in; run `otlk login` first");
             }
             let mailboxes = accounts
                 .0
@@ -210,7 +210,7 @@ async fn logout(cli: &Cli, query: Option<&str>) -> Result<()> {
             println!("Not signed in.");
             return Ok(());
         }
-        (None, _) => bail!("signed in to several accounts; say which: `tuilook logout <address>`"),
+        (None, _) => bail!("signed in to several accounts; say which: `otlk logout <address>`"),
     };
     KeyringStore::new(&account.address)?.clear()?;
     accounts.remove(&account.address);
@@ -277,7 +277,7 @@ async fn migrate_legacy(cli: &Cli) -> Result<Accounts> {
 async fn sync_once(cli: &Cli) -> Result<()> {
     let accounts = signed_in(cli).await?;
     if accounts.0.is_empty() {
-        bail!("not signed in; run `tuilook login` first");
+        bail!("not signed in; run `otlk login` first");
     }
     for account in &accounts.0 {
         let backend = graph_backend(account)?;
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn signs_in_with_the_tuilook_app_registration_by_default() {
-        let cli = Cli::try_parse_from(["tuilook"]).unwrap();
+        let cli = Cli::try_parse_from(["otlk"]).unwrap();
 
         assert_eq!(
             cli.client_id.as_deref(),
@@ -579,24 +579,24 @@ mod tests {
     #[test]
     fn signs_in_to_personal_accounts_by_default() {
         // The default app registration accepts personal Microsoft accounts only.
-        let cli = Cli::try_parse_from(["tuilook"]).unwrap();
+        let cli = Cli::try_parse_from(["otlk"]).unwrap();
 
         assert_eq!(cli.tenant, "consumers");
     }
 
     #[test]
     fn the_client_id_can_be_overridden() {
-        let cli = Cli::try_parse_from(["tuilook", "--client-id", "my-own-app"]).unwrap();
+        let cli = Cli::try_parse_from(["otlk", "--client-id", "my-own-app"]).unwrap();
 
         assert_eq!(cli.client_id.as_deref(), Some("my-own-app"));
     }
 
     #[test]
     fn checks_for_new_mail_every_minute_unless_told_otherwise() {
-        let cli = Cli::try_parse_from(["tuilook"]).unwrap();
+        let cli = Cli::try_parse_from(["otlk"]).unwrap();
         assert_eq!(sync_every(&cli), Some(Duration::from_secs(60)));
 
-        let cli = Cli::try_parse_from(["tuilook", "--sync-every", "0"]).unwrap();
+        let cli = Cli::try_parse_from(["otlk", "--sync-every", "0"]).unwrap();
         assert_eq!(sync_every(&cli), None);
     }
 }

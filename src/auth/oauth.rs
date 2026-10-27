@@ -16,7 +16,7 @@ pub struct OAuthConfig {
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
-    #[error("not signed in; run `tuilook login`")]
+    #[error("not signed in; run `otlk login`")]
     NotSignedIn,
     #[error(transparent)]
     Secrets(#[from] crate::auth::SecretError),

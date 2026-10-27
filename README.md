@@ -12,10 +12,12 @@ You need a recent stable [Rust](https://rustup.rs) toolchain.
 cargo install --git https://github.com/christianhelle/tuilook
 ```
 
+This installs the `otlk` command.
+
 ## Try it without signing in
 
 ```bash
-tuilook --demo
+otlk --demo
 ```
 
 This opens three built-in sample accounts with nested folders. Nothing is sent
@@ -24,7 +26,7 @@ anywhere, so it is a safe place to learn the keys.
 ## Sign in
 
 ```bash
-tuilook login
+otlk login
 ```
 
 tuilook prints a code and a link. Open the link in a browser, enter the code
@@ -34,12 +36,12 @@ keychain, so you only do this once.
 Then start tuilook:
 
 ```bash
-tuilook
+otlk
 ```
 
 ### More than one account
 
-Run `tuilook login` again and sign in with another account. tuilook opens
+Run `otlk login` again and sign in with another account. tuilook opens
 every account at once: each one heads its own folders in the folder pane, and
 all of them sync in the background. A message you write is sent from the
 account whose folder you are in, and the compose screen says which.
@@ -47,7 +49,7 @@ account whose folder you are in, and the compose screen says which.
 To see which accounts are signed in:
 
 ```bash
-tuilook accounts
+otlk accounts
 ```
 
 To sign out of an account and forget its cached mail, give its address (or
@@ -55,7 +57,7 @@ enough of the start of it to tell it apart). With only one account, the
 address can be left out:
 
 ```bash
-tuilook logout me@outlook.com
+otlk logout me@outlook.com
 ```
 
 ### Work or school accounts
@@ -67,7 +69,7 @@ which organizations use to allow or block apps. It is an ID, not a secret.
 
 tuilook comes with a registration of its own, but it only accepts personal
 Microsoft accounts (Outlook.com, Hotmail, Live). That is why
-`tuilook login` works for those without any options. For a Microsoft 365 work
+`otlk login` works for those without any options. For a Microsoft 365 work
 or school account, use an app registration in Entra ID and tell tuilook its
 client ID and which tenant (organization) to sign in to.
 
@@ -150,7 +152,7 @@ for example with **Grant admin consent** on the **API permissions** page.
 #### Sign in with your registration
 
 ```bash
-tuilook --tenant <tenant-id> --client-id <client-id> login
+otlk --tenant <tenant-id> --client-id <client-id> login
 ```
 
 Or set `TUILOOK_TENANT` and `TUILOOK_CLIENT_ID` instead of passing the
@@ -281,14 +283,14 @@ To change how often it checks, pass the number of seconds, or `0` to check
 only at start and when you press `F5`:
 
 ```bash
-tuilook --sync-every 300
+otlk --sync-every 300
 ```
 
 To sync every account's folders once without opening the UI, for example from
 a script:
 
 ```bash
-tuilook sync
+otlk sync
 ```
 
 ## Options
@@ -302,11 +304,11 @@ tuilook sync
 
 | Command | What it does |
 | --- | --- |
-| `tuilook` | Open the mail client with every signed-in account |
-| `tuilook login` | Sign in with a device code; run again to add an account |
-| `tuilook logout [address]` | Forget an account's sign-in and cached mail |
-| `tuilook accounts` | List the signed-in accounts |
-| `tuilook sync` | Sync every account's folders once, without the UI |
+| `otlk` | Open the mail client with every signed-in account |
+| `otlk login` | Sign in with a device code; run again to add an account |
+| `otlk logout [address]` | Forget an account's sign-in and cached mail |
+| `otlk accounts` | List the signed-in accounts |
+| `otlk sync` | Sync every account's folders once, without the UI |
 
 ## Where tuilook keeps things
 
