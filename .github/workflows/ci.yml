@@ -32,10 +32,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # aws-lc-sys (rustls' crypto) only builds with clang-cl on Windows ARM64
+      - name: Use clang-cl
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command clang-cl -ErrorAction SilentlyContinue)) {
+            choco install llvm -y --no-progress
+            "C:\Program Files\LLVM\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
+          }
+          "CC=clang-cl" | Out-File -Append -FilePath $env:GITHUB_ENV
+          "CXX=clang-cl" | Out-File -Append -FilePath $env:GITHUB_ENV
       - run: cargo test
