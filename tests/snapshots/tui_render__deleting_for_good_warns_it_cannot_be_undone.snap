@@ -13,4 +13,4 @@ expression: render(&app)
 "│                │┃└──────────────────────────────────────────────────┘                  │"
 "│                │┃                                  ┃│                                  │"
 "└────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘"
-" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "

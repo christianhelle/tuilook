@@ -271,7 +271,7 @@ fn status_line(app: &AppState) -> Line<'static> {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
         None => Span::raw(
-            " ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit",
+            " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",
         ),
     });
     Line::from(spans)
@@ -475,7 +475,7 @@ pub const COMPOSE_HELP: [(&str, &str); 11] = [
 ];
 
 /// What each key does, shown with `?`.
-pub const HELP: [(&str, &str); 18] = [
+pub const HELP: [(&str, &str); 19] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
     ("Enter", "Open the folder or message"),
     ("→ ←  l h", "Expand or enter a folder, collapse it or go up"),
@@ -497,6 +497,7 @@ pub const HELP: [(&str, &str); 18] = [
         "Write a message, reply, reply to all, forward",
     ),
     ("F5  Ctrl-R", "Sync every folder now"),
+    ("/", "Search every folder (Esc goes back)"),
     ("?", "Show this help"),
     ("q  Ctrl-C", "Quit"),
     ("", "Press any key to close"),

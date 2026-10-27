@@ -25,4 +25,4 @@ expression: terminal.backend().to_string()
 "┃    ▸ Projects (┃│                                  ││                                  │"
 "┃  ▾ ada@universi┃│                                  ││                                  │"
 "┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
-" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "
