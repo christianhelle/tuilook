@@ -9,6 +9,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::tui::{
     compose::{Compose, Request},
     keymap::Keymap,
+    search::Search,
 };
 
 /// IO the event loop must perform after an update.
@@ -25,6 +26,8 @@ pub enum Effect {
     /// Sync every folder.
     Sync,
     Send(Draft),
+    /// Search every account's cached mail.
+    Search(String),
 }
 
 /// A question the user must answer before anything else happens.
@@ -176,6 +179,8 @@ pub struct AppState {
     /// Folders shown again in the favorites above the accounts, in the
     /// order they were added.
     pub favorites: Vec<FolderId>,
+    /// A search being typed, or whose results the message list shows.
+    pub search: Option<Search>,
 }
 
 /// Folder ids of the rows heading each account start with this.
@@ -263,6 +268,9 @@ impl AppState {
             }
             return None;
         }
+        if self.typing_search() {
+            return self.search_key(key);
+        }
         keymap
             .action_for(key)
             .and_then(|action| self.update(action))
@@ -349,6 +357,7 @@ impl AppState {
             Action::MarkAll if self.focus == Pane::Messages => {
                 self.marked = self.messages.iter().map(|m| m.id.clone()).collect();
             }
+            Action::ClearMarks if self.marked.is_empty() => return self.leave_search(),
             Action::ClearMarks => self.marked.clear(),
             Action::ToggleMark | Action::MarkAll => {}
             Action::Delete | Action::DeletePermanently if self.focus != Pane::Folders => {
@@ -365,7 +374,7 @@ impl AppState {
                 return self.start_sync();
             }
             Action::Help => self.show_help = true,
-            Action::Search => {}
+            Action::Search => self.start_search(),
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::Reply | Action::ReplyAll | Action::Forward => {
                 if let Some(original) = self.selected() {
@@ -431,7 +440,8 @@ impl AppState {
         self.folder_account = owners;
         self.reveal_selected_folder();
         let current = self.shown_folder();
-        (current != previous.as_ref().map(favorite_target))
+        // Search results stay until the search is left.
+        (current != previous.as_ref().map(favorite_target) && self.results_query().is_none())
             .then_some(current)
             .flatten()
             .map(Effect::LoadFolder)
@@ -466,9 +476,11 @@ impl AppState {
                 .iter()
                 .position(|f| &f.id == id)
                 .map_or(0, |index| self.account_of(index)),
-            Effect::LoadBody(_) | Effect::MarkRead(_) | Effect::Delete { .. } | Effect::Sync => {
-                self.current_account()
-            }
+            Effect::LoadBody(_)
+            | Effect::MarkRead(_)
+            | Effect::Delete { .. }
+            | Effect::Sync
+            | Effect::Search(_) => self.current_account(),
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
         }
     }

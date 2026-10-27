@@ -91,7 +91,12 @@ impl AppState {
 
     /// Selects a folder and asks for its messages.
     pub(crate) fn select_folder(&mut self, index: usize) -> Option<Effect> {
-        if index == self.selected_folder || index >= self.folders.len() {
+        if index >= self.folders.len() {
+            return None;
+        }
+        // Picking a folder leaves a search, even the folder already picked.
+        let searched = self.search.take().is_some_and(|s| s.results.is_some());
+        if index == self.selected_folder && !searched {
             return None;
         }
         self.selected_folder = index;

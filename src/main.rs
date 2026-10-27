@@ -25,13 +25,14 @@ use tuilook::auth::{
 };
 use tuilook::core::{Command, run_engine, sync_folders, sync_messages};
 use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
-use tuilook::model::{Event, MailBackend};
+use tuilook::model::{Event, MailBackend, Message};
 use tuilook::store::Store;
 use tuilook::tui::{
     app::{AppState, Effect, Mouse},
     compose::Field,
     demo,
     keymap::Keymap,
+    search::SEARCH_LIMIT,
     session, ui,
     vim::VimMode,
 };
@@ -557,6 +558,7 @@ fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) 
                 commands.blocking_send(Command::Send(draft))?;
                 None
             }
+            Effect::Search(query) => app.search_results(search_all(mailboxes, &query)?),
             Effect::Delete { ids, permanent } => {
                 commands.blocking_send(Command::Delete { ids, permanent })?;
                 None
@@ -564,6 +566,19 @@ fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) 
         };
     }
     Ok(())
+}
+
+/// Every account's cached messages matching `query`, with the account each
+/// is in, newest first.
+fn search_all(mailboxes: &[Mailbox], query: &str) -> Result<Vec<(usize, Message)>> {
+    let mut found = Vec::new();
+    for (account, mailbox) in mailboxes.iter().enumerate() {
+        let messages = mailbox.store.search(query, SEARCH_LIMIT)?;
+        found.extend(messages.into_iter().map(|m| (account, m)));
+    }
+    found.sort_by_key(|(_, m)| std::cmp::Reverse(m.received_at));
+    found.truncate(SEARCH_LIMIT);
+    Ok(found)
 }
 
 #[cfg(test)]
