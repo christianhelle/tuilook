@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" alt="tuilook icon" width="128"></p>
+
 # tuilook
 
 [![crates.io](https://img.shields.io/crates/v/tuilook.svg)](https://crates.io/crates/tuilook)
