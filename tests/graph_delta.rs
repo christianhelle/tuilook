@@ -4,7 +4,7 @@ use jiff::{SignedDuration, Timestamp};
 use serde_json::{Value, json};
 use tuilook::graph::GraphBackend;
 use tuilook::model::{
-    BackendError, DeltaPage, FolderId, Importance, MailBackend, Message, MessageId,
+    BackendError, DeltaPage, FolderId, Importance, MailBackend, Message, MessageChange, MessageId,
 };
 use wiremock::{
     Mock, MockServer, Request, ResponseTemplate,
@@ -97,6 +97,7 @@ async fn first_sync_pages_through_the_last_90_days_to_a_delta_link() {
         page,
         DeltaPage {
             upserted: vec![message("m1", "First"), message("m2", "Second")],
+            changed: vec![],
             removed: vec![],
             delta_link: Some("https://graph.example/delta?token=abc".to_owned()),
         }
@@ -195,4 +196,45 @@ async fn null_fields_fall_back_to_defaults() {
     assert!(!m.has_attachments);
     assert_eq!(m.importance, Importance::Normal);
     assert_eq!(m.preview, "");
+}
+
+#[tokio::test]
+async fn a_change_with_only_some_fields_is_reported_as_a_change() {
+    // Seen live: once a message is read in Outlook, its delta item carries
+    // the id and the changed fields, with no subject, sender or date.
+    let server = MockServer::start().await;
+    Mock::given(path("/delta"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "value": [
+                { "id": "m1", "isRead": true },
+                { "id": "m2", "flag": { "flagStatus": "notFlagged" }, "importance": "low" }
+            ],
+            "@odata.deltaLink": "https://graph.example/delta?token=def"
+        })))
+        .mount(&server)
+        .await;
+
+    let page = backend(&server)
+        .delta_sync(
+            &FolderId("inbox".to_owned()),
+            Some(&format!("{}/delta?token=abc", server.uri())),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(page.upserted, []);
+    assert_eq!(
+        page.changed,
+        [
+            MessageChange {
+                is_read: Some(true),
+                ..MessageChange::new(MessageId("m1".to_owned()))
+            },
+            MessageChange {
+                flagged: Some(false),
+                importance: Some(Importance::Low),
+                ..MessageChange::new(MessageId("m2".to_owned()))
+            },
+        ]
+    );
 }

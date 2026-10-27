@@ -1,4 +1,6 @@
-use tuilook::model::{Body, BodyType, Folder, FolderId, Importance, Message, MessageId, WellKnown};
+use tuilook::model::{
+    Body, BodyType, Folder, FolderId, Importance, Message, MessageChange, MessageId, WellKnown,
+};
 use tuilook::store::Store;
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>) -> Folder {
@@ -101,6 +103,84 @@ fn upserting_an_existing_message_updates_it() {
     assert_eq!(
         store.messages_in(&FolderId("inbox".to_owned())).unwrap(),
         [m]
+    );
+}
+
+#[test]
+fn a_change_updates_only_the_fields_it_carries() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .upsert_folders(&[folder("inbox", "Inbox", None)])
+        .unwrap();
+    let m = message("m1", "inbox", "2026-01-01T09:00:00Z");
+    store.upsert_messages(std::slice::from_ref(&m)).unwrap();
+
+    store
+        .change_messages(&[
+            MessageChange {
+                is_read: Some(false),
+                flagged: Some(true),
+                ..MessageChange::new(m.id.clone())
+            },
+            // A change to a message that is not cached is dropped.
+            MessageChange {
+                is_read: Some(true),
+                ..MessageChange::new(MessageId("unknown".to_owned()))
+            },
+        ])
+        .unwrap();
+
+    assert_eq!(
+        store.messages_in(&FolderId("inbox".to_owned())).unwrap(),
+        [Message {
+            is_read: false,
+            flagged: true,
+            ..m
+        }]
+    );
+}
+
+#[test]
+fn opening_a_cache_blanked_by_partial_changes_drops_them_and_resyncs() {
+    // tuilook 0.1.0 stored a partial delta change as a whole message, so the
+    // message lost its subject, sender and date (stored as 0).
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let inbox = FolderId("inbox".to_owned());
+    let projects = FolderId("projects".to_owned());
+    let kept = message("m1", "inbox", "2026-01-01T09:00:00Z");
+    {
+        let mut store = Store::open(&path).unwrap();
+        store
+            .upsert_folders(&[
+                folder("inbox", "Inbox", None),
+                folder("projects", "Projects", None),
+            ])
+            .unwrap();
+        let blank = Message {
+            subject: String::new(),
+            from_name: String::new(),
+            from_addr: String::new(),
+            received_at: jiff::Timestamp::UNIX_EPOCH,
+            ..message("m2", "inbox", "2026-01-01T09:00:00Z")
+        };
+        store.upsert_messages(&[kept.clone(), blank]).unwrap();
+        store.set_delta_link(&inbox, Some("inbox-link")).unwrap();
+        store
+            .set_delta_link(&projects, Some("projects-link"))
+            .unwrap();
+    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.pragma_update(None, "user_version", 2).unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+
+    assert_eq!(store.messages_in(&inbox).unwrap(), [kept]);
+    assert_eq!(store.delta_link(&inbox).unwrap(), None);
+    assert_eq!(
+        store.delta_link(&projects).unwrap().as_deref(),
+        Some("projects-link")
     );
 }
 

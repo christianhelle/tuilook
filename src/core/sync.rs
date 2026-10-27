@@ -37,6 +37,7 @@ pub async fn sync_messages(
         result => result?,
     };
     store.upsert_messages(&page.upserted)?;
+    store.change_messages(&page.changed)?;
     store.delete_messages(&page.removed)?;
     store.set_delta_link(folder, page.delta_link.as_deref())?;
     Ok(())

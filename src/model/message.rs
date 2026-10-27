@@ -30,6 +30,40 @@ pub struct Message {
     pub preview: String,
 }
 
+/// The fields of a message that changed on the server; `None` leaves a
+/// field as it is. Graph reports a change this way, without the message's
+/// subject, sender or date.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageChange {
+    pub id: MessageId,
+    pub conversation_id: Option<String>,
+    pub subject: Option<String>,
+    /// Name and address.
+    pub from: Option<(String, String)>,
+    pub is_read: Option<bool>,
+    pub flagged: Option<bool>,
+    pub importance: Option<Importance>,
+    pub has_attachments: Option<bool>,
+    pub preview: Option<String>,
+}
+
+impl MessageChange {
+    /// A change to `id` that changes nothing yet.
+    pub fn new(id: MessageId) -> Self {
+        Self {
+            id,
+            conversation_id: None,
+            subject: None,
+            from: None,
+            is_read: None,
+            flagged: None,
+            importance: None,
+            has_attachments: None,
+            preview: None,
+        }
+    }
+}
+
 /// Orders messages the way the message list shows them: newest first.
 pub fn sort_messages(messages: &mut [Message]) {
     messages.sort_by_key(|m| std::cmp::Reverse(m.received_at));

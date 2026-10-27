@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release builds for Linux and Windows on ARM64.
 - An application icon, shown on `otlk.exe` on Windows and atop the README.
 
+### Fixed
+
+- A message read, flagged or otherwise changed outside tuilook no longer loses
+  its subject, sender and date on the next sync and drops to the bottom of
+  its folder. Messages it already blanked are dropped from the cache and
+  fetched again on the next sync.
+
 ## [0.1.0] - 2026-10-27
 
 ### Added

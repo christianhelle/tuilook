@@ -1,6 +1,7 @@
 use tuilook::core::{fake::FakeBackend, sync_folders, sync_messages};
 use tuilook::model::{
-    BackendError, DeltaPage, Folder, FolderId, Importance, Message, MessageId, WellKnown,
+    BackendError, DeltaPage, Folder, FolderId, Importance, Message, MessageChange, MessageId,
+    WellKnown,
 };
 use tuilook::store::Store;
 
@@ -75,6 +76,7 @@ async fn syncing_a_folder_stores_its_messages() {
 fn delta(upserted: Vec<Message>, removed: &[&str], link: &str) -> DeltaPage {
     DeltaPage {
         upserted,
+        changed: vec![],
         removed: removed
             .iter()
             .map(|id| MessageId((*id).to_owned()))
@@ -112,6 +114,44 @@ async fn later_syncs_resume_from_the_stored_delta_link() {
 
     assert_eq!(store.messages_in(&inbox).unwrap(), [m3, m2]);
     assert_eq!(store.delta_link(&inbox).unwrap().as_deref(), Some("d2"));
+}
+
+#[tokio::test]
+async fn a_partial_change_keeps_the_rest_of_the_message() {
+    let inbox = FolderId("f1".to_owned());
+    let m1 = message("m1", "2026-01-01T09:00:00Z");
+    let read_elsewhere = DeltaPage {
+        changed: vec![MessageChange {
+            is_read: Some(true),
+            ..MessageChange::new(m1.id.clone())
+        }],
+        ..delta(vec![], &[], "d2")
+    };
+    let backend = FakeBackend {
+        folders: vec![folder("f1", "Inbox", Some(WellKnown::Inbox))],
+        deltas: [
+            (
+                (inbox.clone(), None),
+                Ok(delta(vec![m1.clone()], &[], "d1")),
+            ),
+            ((inbox.clone(), Some("d1".to_owned())), Ok(read_elsewhere)),
+        ]
+        .into(),
+        ..Default::default()
+    };
+    let mut store = Store::open_in_memory().unwrap();
+    sync_folders(&backend, &mut store).await.unwrap();
+
+    sync_messages(&backend, &mut store, &inbox).await.unwrap();
+    sync_messages(&backend, &mut store, &inbox).await.unwrap();
+
+    assert_eq!(
+        store.messages_in(&inbox).unwrap(),
+        [Message {
+            is_read: true,
+            ..m1
+        }]
+    );
 }
 
 #[tokio::test]

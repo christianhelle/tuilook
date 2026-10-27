@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use crate::model::{Draft, Folder, FolderId, Message, MessageId};
+use crate::model::{Draft, Folder, FolderId, Message, MessageChange, MessageId};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BackendError {
@@ -18,7 +18,10 @@ pub enum BackendError {
 /// One page of changes from a folder's delta query.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeltaPage {
+    /// Messages new to the folder, or sent whole.
     pub upserted: Vec<Message>,
+    /// Messages that changed, with only the fields that did.
+    pub changed: Vec<MessageChange>,
     pub removed: Vec<MessageId>,
     /// Pass back on the next sync to receive only newer changes.
     pub delta_link: Option<String>,

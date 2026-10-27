@@ -3,7 +3,8 @@
 use std::{collections::HashSet, sync::LazyLock};
 
 use crate::model::{
-    Body, BodyType, Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders,
+    Body, BodyType, Folder, FolderId, Importance, Message, MessageChange, MessageId, WellKnown,
+    sort_folders,
 };
 use jiff::Timestamp;
 use rusqlite::{Connection, OptionalExtension, Row, types::Type};
@@ -13,6 +14,7 @@ static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
     Migrations::new(vec![
         M::up(include_str!("migrations/001_folders_messages.sql")),
         M::up(include_str!("migrations/002_bodies.sql")),
+        M::up(include_str!("migrations/003_resync_blanked_messages.sql")),
     ])
 });
 
@@ -135,6 +137,43 @@ impl Store {
                     importance_to_str(m.importance),
                     m.has_attachments,
                     &m.preview,
+                ))?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Applies changes to cached messages, leaving the fields a change does
+    /// not carry as they are. A change to a message not cached is dropped.
+    pub fn change_messages(&mut self, changes: &[MessageChange]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "UPDATE messages SET
+                     conversation_id = COALESCE(?2, conversation_id),
+                     subject = COALESCE(?3, subject),
+                     from_name = COALESCE(?4, from_name),
+                     from_addr = COALESCE(?5, from_addr),
+                     is_read = COALESCE(?6, is_read),
+                     flagged = COALESCE(?7, flagged),
+                     importance = COALESCE(?8, importance),
+                     has_attachments = COALESCE(?9, has_attachments),
+                     preview = COALESCE(?10, preview)
+                 WHERE id = ?1",
+            )?;
+            for c in changes {
+                stmt.execute((
+                    &c.id.0,
+                    &c.conversation_id,
+                    &c.subject,
+                    c.from.as_ref().map(|(name, _)| name),
+                    c.from.as_ref().map(|(_, addr)| addr),
+                    c.is_read,
+                    c.flagged,
+                    c.importance.map(importance_to_str),
+                    c.has_attachments,
+                    &c.preview,
                 ))?;
             }
         }

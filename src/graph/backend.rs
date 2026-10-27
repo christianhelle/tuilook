@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::auth::TokenSource;
 use crate::model::{
     BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
-    MailBackend, Message, MessageId, WellKnown,
+    MailBackend, Message, MessageChange, MessageId, WellKnown,
 };
 use jiff::{SignedDuration, Timestamp, Unit};
 use reqwest::StatusCode;
@@ -156,6 +156,9 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             for m in page.value {
                 if m.removed.is_some() {
                     result.removed.push(MessageId(m.id));
+                } else if m.received_date_time.is_none() {
+                    // Every message has a date, so this is only what changed.
+                    result.changed.push(to_change(m));
                 } else {
                     result.upserted.push(to_message(m, folder));
                 }
@@ -312,13 +315,33 @@ fn to_message(m: dto::Message, folder: &FolderId) -> Message {
         // Without a read state, do not nag the user with a bold row.
         is_read: m.is_read.unwrap_or(true),
         flagged: m.flag.is_some_and(|f| f.flag_status == "flagged"),
-        importance: match m.importance.as_deref() {
-            Some("low") => Importance::Low,
-            Some("high") => Importance::High,
-            _ => Importance::Normal,
-        },
+        importance: importance(m.importance.as_deref()),
         has_attachments: m.has_attachments.unwrap_or(false),
         preview: m.body_preview.unwrap_or_default(),
+    }
+}
+
+fn to_change(m: dto::Message) -> MessageChange {
+    MessageChange {
+        id: MessageId(m.id),
+        conversation_id: m.conversation_id,
+        subject: m.subject,
+        from: m
+            .from
+            .map(|r| (r.email_address.name, r.email_address.address)),
+        is_read: m.is_read,
+        flagged: m.flag.map(|f| f.flag_status == "flagged"),
+        importance: m.importance.as_deref().map(|i| importance(Some(i))),
+        has_attachments: m.has_attachments,
+        preview: m.body_preview,
+    }
+}
+
+fn importance(importance: Option<&str>) -> Importance {
+    match importance {
+        Some("low") => Importance::Low,
+        Some("high") => Importance::High,
+        _ => Importance::Normal,
     }
 }
 
