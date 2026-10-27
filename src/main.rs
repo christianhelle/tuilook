@@ -560,7 +560,11 @@ fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) 
             }
             Effect::Search(query) => app.search_results(search_all(mailboxes, &query)?),
             Effect::Delete { ids, permanent } => {
-                commands.blocking_send(Command::Delete { ids, permanent })?;
+                // Search results may be in several accounts.
+                for (account, ids) in app.by_account(ids) {
+                    let delete = Command::Delete { ids, permanent };
+                    mailboxes[account].commands.blocking_send(delete)?;
+                }
                 None
             }
         };
