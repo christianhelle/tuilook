@@ -328,3 +328,79 @@ fn two_handles_on_one_file_see_each_others_writes() {
 
     assert_eq!(reader.folders().unwrap(), [folder("f1", "Inbox", None)]);
 }
+
+/// A store with an Inbox and an Archive, holding `messages`.
+fn store_with(messages: &[Message]) -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .upsert_folders(&[
+            folder("inbox", "Inbox", None),
+            folder("archive", "Archive", None),
+        ])
+        .unwrap();
+    store.upsert_messages(messages).unwrap();
+    store
+}
+
+fn ids(messages: &[Message]) -> Vec<&str> {
+    messages.iter().map(|m| m.id.0.as_str()).collect()
+}
+
+#[test]
+fn search_finds_subject_sender_and_preview_in_every_folder_ignoring_case() {
+    let mut by_subject = message("subject", "inbox", "2026-01-01T09:00:00Z");
+    by_subject.subject = "Lunch on Friday?".to_owned();
+    let mut by_name = message("name", "archive", "2026-01-02T09:00:00Z");
+    by_name.from_name = "Lunch Club".to_owned();
+    let mut by_addr = message("addr", "inbox", "2026-01-03T09:00:00Z");
+    by_addr.from_addr = "lunch@example.com".to_owned();
+    let mut by_preview = message("preview", "archive", "2026-01-04T09:00:00Z");
+    by_preview.preview = "Shall we have LUNCH?".to_owned();
+    let other = message("other", "inbox", "2026-01-05T09:00:00Z");
+    let store = store_with(&[by_subject, by_name, by_addr, by_preview, other]);
+
+    let found = store.search("lunch", 100).unwrap();
+
+    assert_eq!(ids(&found), ["preview", "addr", "name", "subject"]);
+}
+
+#[test]
+fn search_finds_words_in_fetched_bodies() {
+    let mut store = store_with(&[
+        message("m1", "inbox", "2026-01-01T09:00:00Z"),
+        message("m2", "inbox", "2026-01-02T09:00:00Z"),
+    ]);
+    let body = Body {
+        content_type: BodyType::Text,
+        content: "The invoice is attached.".to_owned(),
+    };
+    store.put_body(&MessageId("m1".to_owned()), &body).unwrap();
+
+    let found = store.search("Invoice", 100).unwrap();
+
+    assert_eq!(ids(&found), ["m1"]);
+}
+
+#[test]
+fn search_takes_wildcards_literally() {
+    let mut percent = message("percent", "inbox", "2026-01-01T09:00:00Z");
+    percent.subject = "50% off".to_owned();
+    let plain = message("plain", "inbox", "2026-01-02T09:00:00Z");
+    let store = store_with(&[percent, plain]);
+
+    assert_eq!(ids(&store.search("%", 100).unwrap()), ["percent"]);
+    assert!(store.search("_x_", 100).unwrap().is_empty());
+}
+
+#[test]
+fn search_returns_at_most_the_limit_newest_first() {
+    let store = store_with(&[
+        message("m1", "inbox", "2026-01-01T09:00:00Z"),
+        message("m2", "archive", "2026-01-02T09:00:00Z"),
+        message("m3", "inbox", "2026-01-03T09:00:00Z"),
+    ]);
+
+    let found = store.search("ada", 2).unwrap();
+
+    assert_eq!(ids(&found), ["m3", "m2"]);
+}

@@ -289,6 +289,30 @@ impl Store {
         Ok(messages)
     }
 
+    /// Messages in any folder whose subject, sender, preview or fetched body
+    /// contains `query`, ignoring case, newest first, at most `limit` of them.
+    pub fn search(&self, query: &str, limit: usize) -> Result<Vec<Message>> {
+        let pattern = format!("%{}%", escape_like(query));
+        let mut stmt = self.conn.prepare(
+            "SELECT id, folder_id, conversation_id, subject, from_name, from_addr,
+                    received_at, is_read, flagged, importance, has_attachments, preview
+             FROM messages m
+             WHERE subject LIKE ?1 ESCAPE '\\'
+                OR from_name LIKE ?1 ESCAPE '\\'
+                OR from_addr LIKE ?1 ESCAPE '\\'
+                OR preview LIKE ?1 ESCAPE '\\'
+                OR EXISTS (SELECT 1 FROM bodies b
+                           WHERE b.message_id = m.id AND b.body LIKE ?1 ESCAPE '\\')
+             ORDER BY received_at DESC
+             LIMIT ?2",
+        )?;
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let messages = stmt
+            .query_map((&pattern, limit), message_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(messages)
+    }
+
     /// Where the next delta sync of `folder` resumes, if it has synced before.
     pub fn delta_link(&self, folder: &FolderId) -> Result<Option<String>> {
         let link = self
@@ -355,6 +379,18 @@ fn message_from_row(row: &Row) -> rusqlite::Result<Message> {
         has_attachments: row.get(10)?,
         preview: row.get(11)?,
     })
+}
+
+/// `text` with LIKE's wildcards made literal, for use with `ESCAPE '\'`.
+fn escape_like(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 fn importance_to_str(importance: Importance) -> &'static str {
