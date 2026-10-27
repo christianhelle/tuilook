@@ -268,6 +268,19 @@ mod tests {
     }
 
     #[test]
+    fn a_result_is_read_and_answered_from_its_own_account() {
+        let mut app = searched();
+        let r2 = MessageId("r2".to_owned());
+
+        assert_eq!(app.account_for(&Effect::LoadBody(r2.clone())), 1);
+        assert_eq!(app.account_for(&Effect::MarkRead(r2)), 1);
+        app.focus = Pane::Messages;
+        app.update(Action::SelectNext);
+        app.update(Action::Reply);
+        assert_eq!(app.compose.map(|c| c.account), Some(1));
+    }
+
+    #[test]
     fn results_say_which_account_they_are_in() {
         let app = searched();
         let id = |id: &str| MessageId(id.to_owned());

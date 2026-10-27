@@ -476,11 +476,8 @@ impl AppState {
                 .iter()
                 .position(|f| &f.id == id)
                 .map_or(0, |index| self.account_of(index)),
-            Effect::LoadBody(_)
-            | Effect::MarkRead(_)
-            | Effect::Delete { .. }
-            | Effect::Sync
-            | Effect::Search(_) => self.current_account(),
+            Effect::LoadBody(id) | Effect::MarkRead(id) => self.message_account(id),
+            Effect::Delete { .. } | Effect::Sync | Effect::Search(_) => self.current_account(),
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
         }
     }
@@ -521,9 +518,13 @@ impl AppState {
         (tree, owners)
     }
 
-    /// Opens a message to write from the account being looked at.
+    /// Opens a message to write from the account being looked at, or for
+    /// a reply or forward, the account the original is in.
     fn start_compose(&mut self, mut compose: Compose) {
-        compose.account = self.current_account();
+        compose.account = match (&compose.kind, self.selected()) {
+            (ComposeKind::New, _) | (_, None) => self.current_account(),
+            (_, Some(original)) => self.message_account(&original.id),
+        };
         if self.accounts.len() > 1 {
             compose.from = self.accounts.get(compose.account).cloned();
         }
