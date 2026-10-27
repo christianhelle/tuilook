@@ -72,4 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   university) with dozens of messages in nested folders, and starts on the
   first account's Inbox.
 
+### Fixed
+
+- Panes no longer smear across each other in terminals such as WezTerm: mail
+  is drawn without the invisible characters (zero-width joiners, soft hyphens,
+  variation selectors) that newsletters pad their previews with, and tabs
+  show as spaces.
+
 [Unreleased]: https://github.com/christianhelle/tuilook/commits/main

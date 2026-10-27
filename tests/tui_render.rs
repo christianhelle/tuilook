@@ -495,3 +495,25 @@ fn a_click_in_the_favorites_selects_the_favorite() {
         "the first account, below the favorites"
     );
 }
+
+#[test]
+fn mail_text_draws_nothing_a_terminal_could_count_differently() {
+    let mut app = sample_app();
+    let padding = "\u{034F}\u{00AD}\u{200C}\u{FEFF}".repeat(50);
+    app.set_messages(vec![message(
+        "m1",
+        "Ada\u{200B}",
+        "⚠\u{FE0F} Engine\r\nnotes",
+        &format!("Notes{padding}\tend"),
+    )]);
+    let mut terminal = Terminal::new(TestBackend::new(90, 12)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+    let cells = terminal.backend().buffer().content();
+
+    assert!(
+        cells
+            .iter()
+            .all(|cell| cell.symbol() == ui::shown(cell.symbol()))
+    );
+    assert!(terminal.backend().to_string().contains("Notes    end"));
+}

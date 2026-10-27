@@ -15,6 +15,47 @@ use crate::tui::{
     vim::VimMode,
 };
 
+/// Mail text made safe to draw. Mail is full of characters that take no room
+/// (zero-width joiners, soft hyphens, variation selectors), often hundreds
+/// of them padding a newsletter's preview. Ratatui counts them as no width,
+/// but some terminals (WezTerm, for one) give them a cell, so every row they
+/// are on pushes past its pane. Ratatui drops tabs, so they become spaces.
+pub fn shown(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\t' => out.push_str("    "),
+            '\n' => out.push(c),
+            c if c.is_control() || takes_no_room(c) => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Unicode's default-ignorable characters: drawn as nothing at all.
+fn takes_no_room(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{034F}'
+            | '\u{061C}'
+            | '\u{115F}'..='\u{1160}'
+            | '\u{17B4}'..='\u{17B5}'
+            | '\u{180B}'..='\u{180F}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{206F}'
+            | '\u{3164}'
+            | '\u{FE00}'..='\u{FE0F}'
+            | '\u{FEFF}'
+            | '\u{FFA0}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}'
+    )
+}
+
 /// Each message takes this many rows in the message list.
 const MESSAGE_ROWS: usize = 2;
 
@@ -600,11 +641,11 @@ fn draw_folder_rows(
             Span::styled(marker, Style::new().fg(Color::DarkGray)),
             if is_account_row(folder) {
                 Span::styled(
-                    folder.name.clone(),
+                    shown(&folder.name),
                     Style::new().add_modifier(Modifier::BOLD),
                 )
             } else {
-                Span::raw(folder.name.clone())
+                Span::raw(shown(&folder.name))
             },
         ];
         let unread = app.unread_shown(index);
@@ -641,8 +682,8 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
             Span::raw("")
         };
         ListItem::new(vec![
-            Line::from(vec![mark, Span::styled(m.from_name.clone(), style)]),
-            Line::raw(format!("  {}", m.subject)),
+            Line::from(vec![mark, Span::styled(shown(&m.from_name), style)]),
+            Line::raw(format!("  {}", shown(&m.subject))),
         ])
     });
     let list = List::new(items).block(block).highlight_symbol("> ");
@@ -667,13 +708,17 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
 fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
     let m = app.messages.get(app.selected_message)?;
     let mut text = vec![
-        Line::raw(format!("From: {} <{}>", m.from_name, m.from_addr)),
-        Line::raw(format!("Subject: {}", m.subject)),
+        Line::raw(format!(
+            "From: {} <{}>",
+            shown(&m.from_name),
+            shown(&m.from_addr)
+        )),
+        Line::raw(format!("Subject: {}", shown(&m.subject))),
         Line::raw(""),
     ];
     // The preview stands in until core has loaded the body.
     let body = app.body.as_deref().unwrap_or(&m.preview);
-    text.extend(body.lines().map(|l| Line::raw(l.to_owned())));
+    text.extend(shown(body).lines().map(|l| Line::raw(l.to_owned())));
     Some(Paragraph::new(text).wrap(Wrap { trim: false }))
 }
 
