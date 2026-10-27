@@ -2,7 +2,15 @@
 name = "tuilook"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.95"
+description = "A terminal mail client for Outlook.com and Microsoft 365, with vim-style keys"
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/christianhelle/tuilook"
 repository = "https://github.com/christianhelle/tuilook"
+keywords = ["email", "outlook", "tui", "terminal", "mail"]
+categories = ["command-line-utilities", "email"]
+exclude = [".github/", ".gitattributes"]
 
 [[bin]]
 name = "otlk"
