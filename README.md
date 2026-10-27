@@ -229,7 +229,7 @@ device-code sign-in can be allowed for you.
 │ Sent Items   ││   Carol   Invoice #1042     ││                      │
 │ ▸ Projects 2 ││                             ││ Are you free ...     │
 └──────────────┘└─────────────────────────────┘└──────────────────────┘
- ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit
+ ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit
 ```
 
 Three panes: folders, the messages in the selected folder, and the message you
@@ -268,6 +268,25 @@ account's Inbox, the favorite also shows the account, as in
 
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.
+
+## Searching
+
+| Keys | What they do |
+| --- | --- |
+| `/` | Search every folder of every account |
+| `Enter` | Keep the results and move into them |
+| `Esc` | Go back to the folder you were in |
+
+Press `/` and start typing: the message list shows what matches as you type,
+newest first, with the folder (and account) each message is in. A message
+matches when its subject, sender or preview contains what you typed, ignoring
+case, or its text does if you have opened it before. Search looks through the
+mail tuilook has cached, so it works offline but does not find mail that has
+not synced yet.
+
+You can read, reply to and delete the results as in any folder. `Esc` in the
+results (once nothing is marked) or picking a folder ends the search, and `/`
+goes back to the query to change it.
 
 ## Deleting
 
