@@ -517,3 +517,39 @@ fn mail_text_draws_nothing_a_terminal_could_count_differently() {
     );
     assert!(terminal.backend().to_string().contains("Notes    end"));
 }
+
+#[test]
+fn typing_a_search_shows_the_query() {
+    let mut app = sample_app();
+
+    press(&mut app, "/eng");
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn search_results_say_where_each_message_is() {
+    let mut app = two_accounts();
+    press(&mut app, "/ada⏎");
+    let mut sent = message("m2", "Ada", "Re: Analytical engine", "Thanks");
+    sent.folder_id = FolderId("sent".to_owned());
+    let mut work = message("m3", "Ada", "Engine budget", "Numbers");
+    work.folder_id = FolderId("work".to_owned());
+    app.search_results(vec![
+        (0, message("m1", "Ada", "Analytical engine", "Notes")),
+        (0, sent),
+        (1, work),
+    ]);
+    app.focus = Pane::Messages;
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn a_search_that_finds_nothing_says_so() {
+    let mut app = sample_app();
+    press(&mut app, "/zzz");
+    app.search_results(vec![]);
+
+    insta::assert_snapshot!(render(&app));
+}

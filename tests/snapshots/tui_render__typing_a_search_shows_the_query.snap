@@ -1,0 +1,17 @@
+---
+source: tests/tui_render.rs
+assertion_line: 527
+expression: render(&app)
+---
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││> Ada                             ││From: Ada <ada@example.com>       │"
+"└────────────────┘│    Analytical engine             ││Subject: Analytical engine        │"
+"┏ Folders ━━━━━━━┓│  Grace                           ││                                  │"
+"┃>   Inbox (2)   ┃│    Compiler draft                ││Notes on the engine               │"
+"┃    Sent Items  ┃│                                  ││                                  │"
+"┃    Projects    ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" /eng                                                                                     "

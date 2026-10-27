@@ -1,0 +1,21 @@
+---
+source: tests/tui_render.rs
+assertion_line: 545
+expression: render_tall(&app)
+---
+"┌ Favorites ─────┐┏ Search: ada (3) ━━━━━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
+"│* adds the selec│┃> Ada                             ┃│From: Ada <ada@example.com>       │"
+"└────────────────┘┃    Inbox, me@outlook.com · Analyt┃│Subject: Analytical engine        │"
+"┌ Accounts ──────┐┃  Ada                             ┃│                                  │"
+"│  ▾ me@outlook.c│┃    Sent Items, me@outlook.com · R┃│Notes                             │"
+"│>     Inbox (2) │┃  Ada                             ┃│                                  │"
+"│      Sent Items│┃    Inbox, me@work.example · Engin┃│                                  │"
+"│  ▾ me@work.exam│┃                                  ┃│                                  │"
+"│      Inbox (5) │┃                                  ┃│                                  │"
+"│                │┃                                  ┃│                                  │"
+"│                │┃                                  ┃│                                  │"
+"│                │┃                                  ┃│                                  │"
+"│                │┃                                  ┃│                                  │"
+"│                │┃                                  ┃│                                  │"
+"└────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · c write · r reply · d delete · q quit            "

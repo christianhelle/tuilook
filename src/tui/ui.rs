@@ -1,6 +1,6 @@
 //! Renders [`AppState`] into a frame. Pure: no IO, no state changes.
 
-use crate::model::{ComposeKind, folder_depths};
+use crate::model::{ComposeKind, Message, folder_depths};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position, Rect},
@@ -10,7 +10,10 @@ use ratatui::{
 };
 
 use crate::tui::{
-    app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport, is_account_row},
+    app::{
+        AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport, is_account_row,
+        is_favorite_row,
+    },
     compose::{Compose, Field},
     vim::VimMode,
 };
@@ -140,6 +143,11 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         draw_compose(frame, message, compose);
     }
     frame.render_widget(status_line(app), status);
+    if let Some(search) = app.search.as_ref().filter(|s| s.editing) {
+        let typed = u16::try_from(Line::raw(search.query.as_str()).width()).unwrap_or(u16::MAX);
+        let x = status.x.saturating_add(2).saturating_add(typed);
+        frame.set_cursor_position((x.min(status.right().saturating_sub(1)), status.y));
+    }
 
     if app.show_help {
         let help: &[(&str, &str)] = match app.compose {
@@ -248,6 +256,11 @@ fn status_line(app: &AppState) -> Line<'static> {
         };
         let badge = Style::new().fg(Color::Black).bg(color);
         spans.push(Span::styled(format!(" {} ", mode.label()), badge));
+    }
+    if let Some(search) = app.search.as_ref().filter(|s| s.editing) {
+        spans.push(Span::styled(" /", Style::new().fg(Color::Cyan)));
+        spans.push(Span::raw(search.query.clone()));
+        return Line::from(spans);
     }
     spans.push(match &app.status {
         Some(Status::Error(error)) => {
@@ -661,13 +674,23 @@ fn draw_folder_rows(
 }
 
 fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
+    let query = app.results_query();
+    let title = match query {
+        Some(query) => format!("Search: {} ({})", shown(query), app.messages.len()),
+        None => "Messages".to_owned(),
+    };
     let title = match app.marked.len() {
-        0 => "Messages".to_owned(),
-        marked => format!("Messages ({marked} marked)"),
+        0 => title,
+        marked => format!("{title} ({marked} marked)"),
     };
     let block = pane_block(app, Pane::Messages, &title);
     if app.messages.is_empty() {
-        frame.render_widget(Paragraph::new("No messages").block(block), area);
+        let empty = if query.is_some() {
+            "Nothing found"
+        } else {
+            "No messages"
+        };
+        frame.render_widget(Paragraph::new(empty).block(block), area);
         return;
     }
     let items = app.messages.iter().map(|m| {
@@ -681,14 +704,38 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         } else {
             Span::raw("")
         };
+        let mut second = vec![Span::raw("  ")];
+        if query.is_some() {
+            let place = Style::new().fg(Color::DarkGray);
+            second.push(Span::styled(format!("{} · ", found_in(app, m)), place));
+        }
+        second.push(Span::raw(shown(&m.subject)));
         ListItem::new(vec![
             Line::from(vec![mark, Span::styled(shown(&m.from_name), style)]),
-            Line::raw(format!("  {}", shown(&m.subject))),
+            Line::from(second),
         ])
     });
     let list = List::new(items).block(block).highlight_symbol("> ");
     let mut state = ListState::default().with_selected(Some(app.selected_message));
     frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// Where a search result is: its folder, and its account when there are
+/// several.
+fn found_in(app: &AppState, message: &Message) -> String {
+    let folder = app
+        .folders
+        .iter()
+        .find(|f| f.id == message.folder_id && !is_favorite_row(f))
+        .map_or("?", |f| f.name.as_str());
+    let account = app
+        .accounts
+        .get(app.message_account(&message.id))
+        .filter(|_| app.accounts.len() > 1);
+    match account {
+        Some(address) => format!("{}, {address}", shown(folder)),
+        None => shown(folder),
+    }
 }
 
 fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {

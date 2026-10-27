@@ -471,6 +471,7 @@ enum Cursor {
 impl Cursor {
     fn of(app: &AppState) -> Self {
         match &app.compose {
+            None if app.typing_search() => Cursor::Bar,
             None => Cursor::Default,
             Some(compose) if compose.field != Field::Body => Cursor::Bar,
             Some(compose) if compose.body.vim.mode == VimMode::Insert => Cursor::Bar,
