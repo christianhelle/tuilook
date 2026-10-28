@@ -65,6 +65,10 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('f') => Action::Forward,
         KeyCode::Char('/') => Action::Search,
         KeyCode::Char('S') => Action::EditSignature,
+        KeyCode::Char('a') => Action::AddFolder,
+        KeyCode::Char('A') => Action::AddTopFolder,
+        KeyCode::F(2) => Action::RenameFolder,
+        KeyCode::Char('m') => Action::Move,
         _ => return None,
     };
     Some(action)
@@ -213,6 +217,18 @@ mod tests {
             Keymap::default().action_for(shift_s),
             Some(Action::EditSignature)
         );
+    }
+
+    #[test]
+    fn a_adds_a_folder_f2_renames_it_and_m_moves_mail() {
+        assert_eq!(press(KeyCode::Char('a')), Some(Action::AddFolder));
+        let shift_a = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT);
+        assert_eq!(
+            Keymap::default().action_for(shift_a),
+            Some(Action::AddTopFolder)
+        );
+        assert_eq!(press(KeyCode::F(2)), Some(Action::RenameFolder));
+        assert_eq!(press(KeyCode::Char('m')), Some(Action::Move));
     }
 
     #[test]

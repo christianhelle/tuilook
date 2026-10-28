@@ -6,6 +6,7 @@ pub mod compose;
 pub mod demo;
 pub mod editor;
 pub mod favorites;
+pub mod folder_edit;
 pub mod folders;
 pub mod groups;
 pub mod input;

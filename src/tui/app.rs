@@ -12,6 +12,7 @@ use ratatui::{
 
 use crate::tui::{
     compose::{Compose, Request},
+    folder_edit::NamePrompt,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
     search::Search,
@@ -44,6 +45,18 @@ pub enum Effect {
     DeleteFolder {
         folder: FolderId,
         permanent: bool,
+    },
+    /// Make a folder in `account`, inside `parent` or at the top level.
+    CreateFolder {
+        account: usize,
+        parent: Option<FolderId>,
+        name: String,
+    },
+    /// Give a folder of `account` a new name.
+    RenameFolder {
+        account: usize,
+        folder: FolderId,
+        name: String,
     },
     /// Sync every folder.
     Sync,
@@ -207,6 +220,8 @@ pub struct AppState {
     /// Folders whose subfolders are shown.
     pub expanded: BTreeSet<FolderId>,
     pub confirm: Option<Confirm>,
+    /// A folder name being typed, to make or rename a folder.
+    pub prompt: Option<NamePrompt>,
     pub show_help: bool,
     /// What the mail service said when it blocked sending, shown in a
     /// dialog until the next key.
@@ -395,6 +410,9 @@ impl AppState {
             self.cancelled(confirm);
             return None;
         }
+        if self.prompt.is_some() {
+            return self.prompt_key(key);
+        }
         if let Some(compose) = &mut self.compose {
             match compose.key(key, self.viewport.compose, &mut self.register) {
                 Request::None => {}
@@ -480,7 +498,11 @@ impl AppState {
             }
             return None;
         }
-        if self.confirm.is_some() || self.compose.is_some() || self.signature.is_some() {
+        if self.confirm.is_some()
+            || self.prompt.is_some()
+            || self.compose.is_some()
+            || self.signature.is_some()
+        {
             return None;
         }
         let Hit { pane, item } = hit?;
@@ -566,6 +588,12 @@ impl AppState {
             Action::Delete | Action::DeletePermanently => {
                 self.ask_to_delete_folder(action == Action::DeletePermanently);
             }
+            Action::AddFolder | Action::AddTopFolder if self.focus == Pane::Folders => {
+                self.ask_folder_name(action == Action::AddTopFolder);
+            }
+            Action::RenameFolder if self.focus == Pane::Folders => self.ask_new_name(),
+            Action::AddFolder | Action::AddTopFolder | Action::RenameFolder => {}
+            Action::Move => {}
             Action::Refresh if self.sync.running => {
                 self.sync.forced = true;
                 self.show_busy("Syncing…");
@@ -706,7 +734,9 @@ impl AppState {
                 self.current_account()
             }
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
-            Effect::SaveSignature { account, .. } => *account,
+            Effect::SaveSignature { account, .. }
+            | Effect::CreateFolder { account, .. }
+            | Effect::RenameFolder { account, .. } => *account,
         }
     }
 

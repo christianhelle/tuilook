@@ -1,0 +1,307 @@
+//! Making and renaming folders: the name being typed for one.
+
+use crate::model::{Folder, FolderId};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+use crate::tui::app::{AppState, Effect, is_account_row, row_target};
+
+/// What the name being typed is for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Naming {
+    /// A new folder inside `parent`, called `under`, or at the top level of
+    /// the account.
+    New {
+        parent: Option<FolderId>,
+        under: Option<String>,
+    },
+    /// A new name for a folder now called `old`.
+    Rename { folder: FolderId, old: String },
+}
+
+/// A folder name being typed, shown in a dialog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamePrompt {
+    pub account: usize,
+    pub naming: Naming,
+    pub text: String,
+}
+
+impl NamePrompt {
+    /// What the dialog asks for.
+    pub fn title(&self) -> String {
+        match &self.naming {
+            Naming::New {
+                under: Some(under), ..
+            } => format!("New folder in {under}"),
+            Naming::New { under: None, .. } => "New folder".to_owned(),
+            Naming::Rename { old, .. } => format!("Rename {old}"),
+        }
+    }
+}
+
+impl AppState {
+    /// a or A in the folder pane: asks the name of a new folder, inside the
+    /// selected one or, with `top_level` or on an account's row, at the top
+    /// level of the selected folder's account.
+    pub(crate) fn ask_folder_name(&mut self, top_level: bool) {
+        let Some(row) = self.folders.get(self.selected_folder) else {
+            return;
+        };
+        let account = self.current_account();
+        let parent = (!top_level && !is_account_row(row)).then(|| row_target(&row.id));
+        let under = parent
+            .as_ref()
+            .and_then(|id| self.real_folder(id))
+            .map(|f| f.name.clone());
+        let naming = Naming::New { parent, under };
+        self.prompt = Some(NamePrompt {
+            account,
+            naming,
+            text: String::new(),
+        });
+    }
+
+    /// F2 in the folder pane: asks a new name for the selected folder,
+    /// starting from the one it has. Outlook's own folders keep theirs.
+    pub(crate) fn ask_new_name(&mut self) {
+        let Some(row) = self.folders.get(self.selected_folder) else {
+            return;
+        };
+        if is_account_row(row) {
+            return;
+        }
+        let account = self.current_account();
+        let Some(folder) = self.real_folder(&row_target(&row.id)) else {
+            return;
+        };
+        let old = folder.name.clone();
+        if folder.well_known.is_some() {
+            self.show_error(format!(
+                "{old} is one of Outlook's own folders and cannot be renamed"
+            ));
+            return;
+        }
+        let naming = Naming::Rename {
+            folder: folder.id.clone(),
+            old: old.clone(),
+        };
+        self.prompt = Some(NamePrompt {
+            account,
+            naming,
+            text: old,
+        });
+    }
+
+    /// A key while typing a folder name. Enter makes or renames the folder,
+    /// Esc gives up.
+    pub(crate) fn prompt_key(&mut self, key: KeyEvent) -> Option<Effect> {
+        let prompt = self.prompt.as_mut()?;
+        match key.code {
+            KeyCode::Esc => self.prompt = None,
+            KeyCode::Backspace => {
+                prompt.text.pop();
+            }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                prompt.text.push(c);
+            }
+            KeyCode::Enter => {
+                let name = prompt.text.trim().to_owned();
+                if name.is_empty() {
+                    return None;
+                }
+                let NamePrompt {
+                    account, naming, ..
+                } = self.prompt.take()?;
+                return match naming {
+                    Naming::New { parent, .. } => {
+                        self.show_busy(format!("Creating {name}…"));
+                        Some(Effect::CreateFolder {
+                            account,
+                            parent,
+                            name,
+                        })
+                    }
+                    Naming::Rename { old, .. } if old == name => None,
+                    Naming::Rename { folder, old } => {
+                        self.show_busy(format!("Renaming {old}…"));
+                        Some(Effect::RenameFolder {
+                            account,
+                            folder,
+                            name,
+                        })
+                    }
+                };
+            }
+            _ => {}
+        }
+        None
+    }
+
+    /// The folder `id` itself, not a favorite or unread row standing for it.
+    pub(crate) fn real_folder(&self, id: &FolderId) -> Option<&Folder> {
+        self.folders.iter().find(|f| &f.id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::{Action, WellKnown};
+
+    use super::*;
+    use crate::tui::{app::Pane, keymap::Keymap};
+
+    fn folder(id: &str, parent: Option<&str>) -> Folder {
+        Folder {
+            id: FolderId(id.to_owned()),
+            parent_id: parent.map(|p| FolderId(p.to_owned())),
+            name: id.to_owned(),
+            well_known: (id == "Inbox").then_some(WellKnown::Inbox),
+            unread: 0,
+            total: 0,
+        }
+    }
+
+    /// Inbox > Receipts, with Receipts selected in the folder pane.
+    fn on_receipts() -> AppState {
+        let mut app = AppState::default();
+        app.set_folders(vec![
+            folder("Inbox", None),
+            folder("Receipts", Some("Inbox")),
+        ]);
+        app.expanded.insert(FolderId("Inbox".to_owned()));
+        app.selected_folder = 1;
+        app.focus = Pane::Folders;
+        app
+    }
+
+    fn type_text(app: &mut AppState, text: &str) -> Option<Effect> {
+        let mut keymap = Keymap::default();
+        let mut effect = None;
+        for c in text.chars() {
+            let code = match c {
+                '\n' => KeyCode::Enter,
+                '\u{8}' => KeyCode::Backspace,
+                '\u{1b}' => KeyCode::Esc,
+                c => KeyCode::Char(c),
+            };
+            effect = app.on_key(KeyEvent::new(code, KeyModifiers::NONE), &mut keymap);
+        }
+        effect
+    }
+
+    #[test]
+    fn a_asks_a_name_and_enter_makes_the_folder_inside_the_selected_one() {
+        let mut app = on_receipts();
+
+        app.update(Action::AddFolder);
+        assert_eq!(
+            app.prompt.as_ref().unwrap().title(),
+            "New folder in Receipts"
+        );
+        let effect = type_text(&mut app, "2026\n");
+
+        assert_eq!(
+            effect,
+            Some(Effect::CreateFolder {
+                account: 0,
+                parent: Some(FolderId("Receipts".to_owned())),
+                name: "2026".to_owned(),
+            })
+        );
+        assert_eq!(app.prompt, None);
+    }
+
+    #[test]
+    fn shift_a_makes_a_top_level_folder() {
+        let mut app = on_receipts();
+
+        app.update(Action::AddTopFolder);
+        assert_eq!(app.prompt.as_ref().unwrap().title(), "New folder");
+        let effect = type_text(&mut app, "Travel\n");
+
+        assert_eq!(
+            effect,
+            Some(Effect::CreateFolder {
+                account: 0,
+                parent: None,
+                name: "Travel".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn keys_go_to_the_name_and_esc_gives_up() {
+        let mut app = on_receipts();
+
+        app.update(Action::AddFolder);
+        type_text(&mut app, "qj\u{8}");
+        assert_eq!(app.prompt.as_ref().unwrap().text, "q");
+        assert!(!app.should_quit, "q is typed, not a quit");
+        let effect = type_text(&mut app, "\u{1b}");
+
+        assert_eq!(effect, None);
+        assert_eq!(app.prompt, None);
+    }
+
+    #[test]
+    fn a_blank_name_keeps_asking() {
+        let mut app = on_receipts();
+
+        app.update(Action::AddFolder);
+        let effect = type_text(&mut app, "  \n");
+
+        assert_eq!(effect, None);
+        assert!(app.prompt.is_some());
+    }
+
+    #[test]
+    fn f2_starts_from_the_folders_name_and_renames_it() {
+        let mut app = on_receipts();
+
+        app.update(Action::RenameFolder);
+        assert_eq!(app.prompt.as_ref().unwrap().text, "Receipts");
+        let effect = type_text(&mut app, "\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}Bills\n");
+
+        assert_eq!(
+            effect,
+            Some(Effect::RenameFolder {
+                account: 0,
+                folder: FolderId("Receipts".to_owned()),
+                name: "Bills".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn keeping_the_same_name_renames_nothing() {
+        let mut app = on_receipts();
+
+        app.update(Action::RenameFolder);
+        let effect = type_text(&mut app, "\n");
+
+        assert_eq!(effect, None);
+        assert_eq!(app.prompt, None);
+    }
+
+    #[test]
+    fn outlooks_own_folders_cannot_be_renamed() {
+        let mut app = on_receipts();
+        app.selected_folder = 0;
+
+        app.update(Action::RenameFolder);
+
+        assert_eq!(app.prompt, None);
+        assert!(app.status.is_some());
+    }
+
+    #[test]
+    fn folders_are_made_and_renamed_only_from_the_folder_pane() {
+        let mut app = on_receipts();
+        app.focus = Pane::Messages;
+
+        app.update(Action::AddFolder);
+        app.update(Action::RenameFolder);
+
+        assert_eq!(app.prompt, None);
+    }
+}

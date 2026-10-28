@@ -16,6 +16,7 @@ use crate::tui::{
     },
     compose::{Compose, Field},
     editor::{Editor, Pos},
+    folder_edit::NamePrompt,
     groups::MessageRow,
     older::LOADING_OLDER,
     signature::SignatureEditor,
@@ -209,9 +210,50 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Confirm::SendAnyway { sent_lately, .. }) => draw_confirm_burst(frame, *sent_lately),
         None => {}
     }
+    if let Some(prompt) = &app.prompt {
+        draw_name_prompt(frame, prompt);
+    }
     if let Some(said) = &app.blocked {
         draw_blocked(frame, said);
     }
+}
+
+/// Width of the dialog asking a folder's name, borders included.
+const PROMPT_WIDTH: u16 = 52;
+
+/// A dialog asking the name of a folder to make, or a folder's new name.
+fn draw_name_prompt(frame: &mut Frame, prompt: &NamePrompt) {
+    // Room for the name and the cursor after it, inside the borders.
+    let room = usize::from(PROMPT_WIDTH - 3);
+    let text = shown(&prompt.text);
+    let skip = text.chars().count().saturating_sub(room);
+    let typed: String = text.chars().skip(skip).collect();
+    let lines = vec![
+        Line::raw(typed.clone()),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("Enter", Style::new().fg(Color::Yellow)),
+            Span::raw(" save   "),
+            Span::styled("Esc", Style::new().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ]),
+    ];
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(PROMPT_WIDTH), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title(shown(&prompt.title()))
+                .border_style(Style::new().fg(Color::Yellow)),
+        ),
+        area,
+    );
+    let width = u16::try_from(Line::raw(typed).width()).unwrap_or(u16::MAX);
+    let x = area.x.saturating_add(1).saturating_add(width);
+    frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 1));
 }
 
 /// A dialog asking whether to send one more message in a burst of them.

@@ -721,3 +721,18 @@ fn the_focused_reader_shows_normal_mode() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn a_new_folder_asks_its_name() {
+    let mut app = sample_app();
+    app.selected_folder = 2;
+    app.update(tuilook::model::Action::AddFolder);
+    let mut keymap = tuilook::tui::keymap::Keymap::default();
+    for c in "2026".chars() {
+        let key =
+            ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Char(c));
+        app.on_key(key, &mut keymap);
+    }
+
+    insta::assert_snapshot!(render(&app));
+}

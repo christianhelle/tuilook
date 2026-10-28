@@ -620,6 +620,14 @@ fn apply(
                 commands.blocking_send(Command::DeleteFolder { folder, permanent })?;
                 None
             }
+            Effect::CreateFolder { parent, name, .. } => {
+                commands.blocking_send(Command::CreateFolder { parent, name })?;
+                None
+            }
+            Effect::RenameFolder { folder, name, .. } => {
+                commands.blocking_send(Command::RenameFolder { folder, name })?;
+                None
+            }
             Effect::MarkRead(id) => {
                 commands.blocking_send(Command::MarkRead(id))?;
                 None

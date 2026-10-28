@@ -36,6 +36,15 @@ pub enum Action {
     /// Delete the marked or selected messages, or the selected folder, for
     /// good, after asking.
     DeletePermanently,
+    /// Make a folder inside the selected one, after asking its name.
+    AddFolder,
+    /// Make a top-level folder in the selected folder's account, after
+    /// asking its name.
+    AddTopFolder,
+    /// Give the selected folder a new name.
+    RenameFolder,
+    /// Move the marked or selected messages to a folder picked next.
+    Move,
     /// Sync every folder now.
     Refresh,
     /// Show the keys until the next key press.
