@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `gg` moves to the top in visual mode while writing, instead of doing
+  nothing.
 - Mail older than 90 days can be read. Sync still reaches back 90 days, but
   moving to the end of the message list, or picking a folder that shows
   nothing, fetches the next page of older mail while the folder holds more. A
