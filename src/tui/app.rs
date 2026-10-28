@@ -425,9 +425,14 @@ impl AppState {
             Action::HalfPageUp => return self.move_selection(-self.page() / 2),
             Action::Top => return self.move_selection(-isize::MAX),
             Action::Bottom => return self.move_selection(isize::MAX),
+            Action::Open if self.focus == Pane::Messages && self.selected_group.is_some() => {
+                return self.toggle_group();
+            }
             Action::Open => self.open(),
             Action::Expand if self.focus == Pane::Folders => return self.expand_folder(),
             Action::Collapse if self.focus == Pane::Folders => return self.collapse_folder(),
+            Action::Expand if self.focus == Pane::Messages => return self.expand_group(),
+            Action::Collapse if self.focus == Pane::Messages => return self.collapse_group(),
             Action::Expand | Action::Collapse => {}
             Action::ToggleFavorite if self.focus == Pane::Folders => {
                 return self.toggle_favorite();
@@ -914,6 +919,41 @@ impl AppState {
     /// The date group of the message at `index`.
     pub(crate) fn group_at(&self, index: usize) -> Option<DateGroup> {
         groups::group_at(&self.messages, index, &Zoned::now())
+    }
+
+    /// → in the message list: unfolds the selected date group, or if it
+    /// already is, moves to its first message.
+    fn expand_group(&mut self) -> Option<Effect> {
+        let group = self.selected_group?;
+        if self.collapsed_groups.remove(&group) {
+            return None;
+        }
+        self.move_selection(1)
+    }
+
+    /// ← in the message list: folds the group of the selected message or
+    /// header, leaving the cursor on its header.
+    fn collapse_group(&mut self) -> Option<Effect> {
+        let group = self
+            .selected_group
+            .or_else(|| self.group_at(self.selected_message))?;
+        self.collapsed_groups.insert(group);
+        let moved = self.selected_group.replace(group).is_none();
+        self.select_row(MessageRow::Header {
+            group,
+            count: 0,
+            collapsed: true,
+        });
+        moved.then(|| self.selection_changed()).flatten()
+    }
+
+    /// Enter or a click on a date header: folds or unfolds its group.
+    pub(crate) fn toggle_group(&mut self) -> Option<Effect> {
+        let group = self.selected_group?;
+        if !self.collapsed_groups.remove(&group) {
+            self.collapsed_groups.insert(group);
+        }
+        None
     }
 
     /// Puts the cursor on `row`: a header, or a message.
@@ -2137,5 +2177,58 @@ Ada"
 
         assert_eq!(app.selected_group, Some(DateGroup::Older));
         assert_eq!(app.selected_message, 2);
+    }
+
+    #[test]
+    fn left_folds_the_group_of_the_selected_message_onto_its_header() {
+        let mut app = with_folders(&["a"]);
+        app.focus = Pane::Messages;
+        app.set_messages(today_and_older(&["t1", "t2"], &["o1"]));
+        app.update(Action::SelectNext);
+        app.body = Some("t2".to_owned());
+
+        app.update(Action::Collapse);
+
+        assert!(app.collapsed_groups.contains(&DateGroup::Today));
+        assert_eq!(app.selected_group, Some(DateGroup::Today));
+        assert_eq!(app.body, None, "the reader no longer shows t2");
+        assert_eq!(app.update(Action::SelectNext), None, "onto Older");
+        assert_eq!(app.update(Action::SelectNext), load_body("o1"));
+    }
+
+    #[test]
+    fn right_unfolds_a_header_then_steps_into_it() {
+        let mut app = with_folders(&["a"]);
+        app.focus = Pane::Messages;
+        app.collapsed_groups.insert(DateGroup::Today);
+        app.set_messages(today_and_older(&["t1"], &["o1"]));
+
+        assert_eq!(app.update(Action::Expand), None);
+        assert!(app.collapsed_groups.is_empty());
+        assert_eq!(app.update(Action::Expand), load_body("t1"));
+    }
+
+    #[test]
+    fn enter_on_a_header_folds_and_unfolds_it() {
+        let mut app = in_message_list(&["m0"]);
+        app.update(Action::Top);
+
+        app.update(Action::Open);
+        assert!(app.collapsed_groups.contains(&DateGroup::Older));
+        app.update(Action::Open);
+        assert!(app.collapsed_groups.is_empty());
+        assert_eq!(app.focus, Pane::Messages);
+    }
+
+    #[test]
+    fn a_header_cannot_be_replied_to_or_deleted() {
+        let mut app = in_message_list(&["m0"]);
+        app.update(Action::Top);
+
+        app.update(Action::Reply);
+        app.update(Action::Delete);
+
+        assert!(app.compose.is_none());
+        assert_eq!(app.confirm, None);
     }
 }
