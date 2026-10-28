@@ -113,10 +113,8 @@ impl AppState {
             let Some(folder) = self.folders.iter().find(|f| f.id == id) else {
                 break;
             };
-            if !self.expanded.insert(id) {
-                // Already expanded, and so is everything above it.
-                break;
-            }
+            // Above an expanded folder may still be a folded account.
+            self.expanded.insert(id);
             parent = folder.parent_id.clone();
         }
     }

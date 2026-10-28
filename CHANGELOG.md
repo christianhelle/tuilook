@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Accounts folded in the folder pane, in either section, stay folded the next
+  time tuilook starts, just as expanded and collapsed folders do.
 - A message read, flagged or otherwise changed outside tuilook no longer loses
   its subject, sender and date on the next sync and drops to the bottom of
   its folder. Messages it already blanked are dropped from the cache and

@@ -5,7 +5,7 @@ use std::{io, path::Path};
 use crate::model::{FolderId, MessageId};
 use serde::{Deserialize, Serialize};
 
-use crate::tui::app::{AppState, Effect, Pane};
+use crate::tui::app::{AppState, Effect, Pane, account_row, unread_row};
 
 /// What is kept between runs. Anything missing or unknown is left as it is.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -18,6 +18,9 @@ pub struct Snapshot {
     pub folders_hidden: bool,
     /// Folders whose subfolders were shown.
     pub expanded: Vec<String>,
+    /// Accounts, in either section, whose folders were hidden. They start
+    /// out shown, so this keeps them hidden.
+    pub collapsed: Vec<String>,
     /// Folders in the favorites, in order.
     pub favorites: Vec<String>,
 }
@@ -34,6 +37,16 @@ impl Snapshot {
             zoomed: app.zoomed,
             folders_hidden: app.folders_hidden,
             expanded: app.expanded.iter().map(|id| id.0.clone()).collect(),
+            collapsed: app
+                .accounts
+                .iter()
+                .flat_map(|address| {
+                    let row = account_row(address);
+                    [unread_row(&row), row]
+                })
+                .filter(|id| !app.expanded.contains(id))
+                .map(|id| id.0)
+                .collect(),
             favorites: app.favorites.iter().map(|id| id.0.clone()).collect(),
         }
     }
@@ -64,11 +77,19 @@ impl AppState {
             .extend(snapshot.expanded.iter().cloned().map(FolderId));
         self.favorites = snapshot.favorites.iter().cloned().map(FolderId).collect();
         self.rebuild_folders();
-        let id = FolderId(snapshot.folder.clone()?);
-        let index = self.folders.iter().position(|f| f.id == id)?;
-        let effect = self.select_folder(index);
+        let effect = self.restore_folder(snapshot);
+        // Accounts folded at quit stay folded, unless the folder is in one.
+        for id in &snapshot.collapsed {
+            self.expanded.remove(&FolderId(id.clone()));
+        }
         self.reveal_selected_folder();
         effect
+    }
+
+    fn restore_folder(&mut self, snapshot: &Snapshot) -> Option<Effect> {
+        let id = FolderId(snapshot.folder.clone()?);
+        let index = self.folders.iter().position(|f| f.id == id)?;
+        self.select_folder(index)
     }
 
     /// Selects a message in the list by id, if it is there.
@@ -126,6 +147,7 @@ mod tests {
             zoomed: true,
             folders_hidden: true,
             expanded: vec!["a".to_owned()],
+            collapsed: Vec::new(),
             favorites: vec!["b".to_owned()],
         };
         let mut app = AppState::default();
@@ -157,6 +179,56 @@ mod tests {
 
         assert_eq!(app.visible_folders(), [0, 1, 2]);
         assert_eq!(app.selected_folder, 1);
+    }
+
+    fn two_accounts() -> AppState {
+        let mut app = AppState {
+            accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+            ..Default::default()
+        };
+        let mut b = folder("b");
+        b.parent_id = Some(FolderId("a".to_owned()));
+        app.set_account_folders(0, vec![folder("a"), b]);
+        app.set_account_folders(1, vec![folder("c")]);
+        app
+    }
+
+    fn shown(app: &AppState) -> Vec<String> {
+        let visible = app.visible_folders();
+        visible
+            .iter()
+            .map(|&i| app.folders[i].id.0.clone())
+            .collect()
+    }
+
+    #[test]
+    fn folded_accounts_and_folders_stay_as_they_were() {
+        let mut app = two_accounts();
+        app.expanded.insert(FolderId("a".to_owned()));
+        app.expanded.remove(&account_row("me@work.example"));
+        app.expanded
+            .remove(&unread_row(&account_row("me@outlook.com")));
+        let snapshot = Snapshot::of(&app);
+
+        let mut restarted = two_accounts();
+        restarted.restore(&snapshot);
+
+        assert_eq!(restarted.expanded, app.expanded);
+        assert_eq!(shown(&restarted), shown(&app));
+    }
+
+    #[test]
+    fn the_restored_folder_is_shown_even_inside_a_folded_account() {
+        let mut app = two_accounts();
+
+        app.restore(&Snapshot {
+            folder: Some("c".to_owned()),
+            collapsed: vec!["account:me@work.example".to_owned()],
+            ..Default::default()
+        });
+
+        assert!(app.expanded.contains(&account_row("me@work.example")));
+        assert_eq!(app.folders[app.selected_folder].id.0, "c");
     }
 
     #[test]
