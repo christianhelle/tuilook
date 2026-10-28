@@ -287,6 +287,24 @@ mail is fetched.
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.
 
+### Copying from a message
+
+In the reading pane, `v` starts picking text at the top of the pane, as Vim's
+visual mode does, and `V` picks whole lines. Move with the Vim motions, then
+`y` copies what is picked to the clipboard.
+
+| Keys | What they do |
+| --- | --- |
+| `v` / `V` | Pick characters / whole lines |
+| `h` `j` `k` `l` `w` `b` `e` `0` `^` `$` `gg` `G` | Move |
+| `Ctrl-D` `Ctrl-U` `Ctrl-F` `Ctrl-B` | Move half a page or a page |
+| `y` | Copy to the clipboard |
+| `Esc` | Stop picking |
+
+tuilook copies through the terminal with an OSC 52 escape sequence, so it works
+over SSH too. Windows Terminal, WezTerm, kitty, Alacritty, iTerm2 and most
+modern terminals support it; tmux needs `set -g set-clipboard on`.
+
 ## Searching
 
 | Keys | What they do |
