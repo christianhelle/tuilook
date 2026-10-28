@@ -1103,6 +1103,7 @@ impl AppState {
     fn selection_changed(&mut self) -> Option<Effect> {
         self.body = None;
         self.reader_scroll = 0;
+        self.visual = None;
         self.selected().map(|m| Effect::LoadBody(m.id.clone()))
     }
 
@@ -1358,6 +1359,17 @@ Second",
         assert_eq!(app.reader_scroll, 7, "row 10 is the last in view");
         type_keys(&mut app, "gg");
         assert_eq!(app.reader_scroll, 0);
+    }
+
+    #[test]
+    fn showing_another_message_stops_picking() {
+        let mut app = reading(10, 5);
+        type_keys(&mut app, "v");
+
+        app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
+
+        assert_eq!(app.selected_message, 1);
+        assert!(app.visual.is_none());
     }
 
     #[test]
