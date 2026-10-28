@@ -386,9 +386,7 @@ impl AppState {
                 let item = item?;
                 match pane {
                     Pane::Folders => self.select_folder(item),
-                    Pane::Messages => {
-                        self.move_selection(item as isize - self.selected_message as isize)
-                    }
+                    Pane::Messages => self.click_row(item),
                     Pane::Reader => None,
                 }
             }
@@ -669,8 +667,8 @@ impl AppState {
         if let Some(group) = header {
             // A selected header stays selected while its group has mail.
             let now = Zoned::now();
-            let first = (0..messages.len())
-                .find(|&i| groups::group_at(&messages, i, &now) == Some(group));
+            let first =
+                (0..messages.len()).find(|&i| groups::group_at(&messages, i, &now) == Some(group));
             if let Some(index) = first {
                 self.messages = messages;
                 self.selected_message = index;
@@ -919,6 +917,19 @@ impl AppState {
     /// The date group of the message at `index`.
     pub(crate) fn group_at(&self, index: usize) -> Option<DateGroup> {
         groups::group_at(&self.messages, index, &Zoned::now())
+    }
+
+    /// A click on row `index` of the message list selects it, and on a date
+    /// header also folds or unfolds its group.
+    fn click_row(&mut self, index: usize) -> Option<Effect> {
+        let rows = self.message_rows();
+        let row = *rows.get(index)?;
+        let moved = self.selected_row(&rows) != Some(index);
+        self.select_row(row);
+        if matches!(row, MessageRow::Header { .. }) {
+            self.toggle_group();
+        }
+        moved.then(|| self.selection_changed()).flatten()
     }
 
     /// → in the message list: unfolds the selected date group, or if it
@@ -1849,7 +1860,8 @@ Ada"
         let mut app = in_message_list(&["m0", "m1", "m2"]);
         app.focus = Pane::Folders;
 
-        let effect = app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
+        // Row 0 is the date header.
+        let effect = app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(3)));
 
         assert_eq!(app.focus, Pane::Messages);
         assert_eq!(effect, load_body("m2"));
@@ -2230,5 +2242,20 @@ Ada"
 
         assert!(app.compose.is_none());
         assert_eq!(app.confirm, None);
+    }
+
+    #[test]
+    fn a_click_on_a_header_folds_and_unfolds_its_group() {
+        let mut app = in_message_list(&["m0", "m1"]);
+
+        assert_eq!(
+            app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(0))),
+            None
+        );
+        assert!(app.collapsed_groups.contains(&DateGroup::Older));
+        assert_eq!(app.selected_group, Some(DateGroup::Older));
+
+        app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(0)));
+        assert!(app.collapsed_groups.is_empty());
     }
 }

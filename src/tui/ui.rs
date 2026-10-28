@@ -16,6 +16,7 @@ use crate::tui::{
     },
     compose::{Compose, Field},
     editor::Editor,
+    groups::MessageRow,
     older::LOADING_OLDER,
     signature::SignatureEditor,
     vim::VimMode,
@@ -806,7 +807,21 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         frame.render_widget(Paragraph::new(empty).block(block), area);
         return;
     }
-    let items = app.messages.iter().map(|m| {
+    let rows = app.message_rows();
+    let items = rows.iter().map(|row| {
+        let m = match *row {
+            MessageRow::Header {
+                group,
+                count,
+                collapsed,
+            } => {
+                let fold = if collapsed { "▸" } else { "▾" };
+                let style = Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+                let title = format!("{fold} {} ({count})", group.title());
+                return ListItem::new(Line::styled(title, style));
+            }
+            MessageRow::Message(index) => &app.messages[index],
+        };
         let style = if m.is_read {
             Style::new().fg(Color::DarkGray)
         } else {
@@ -829,7 +844,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         ])
     });
     let list = List::new(items).block(block).highlight_symbol("> ");
-    let mut state = ListState::default().with_selected(Some(app.selected_message));
+    let mut state = ListState::default().with_selected(app.selected_row(&rows));
     frame.render_stateful_widget(list, area, &mut state);
 }
 
@@ -914,11 +929,13 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
             let offset = selected.map_or(0, |selected| list_offset(selected, rows));
             section.get(offset + line).copied()
         }),
-        Pane::Messages => line
-            .map(|line| {
-                list_offset(app.selected_message, rows / MESSAGE_ROWS) + line / MESSAGE_ROWS
-            })
-            .filter(|&item| item < app.messages.len()),
+        Pane::Messages => line.and_then(|line| {
+            // Rows are the headers and messages shown; the hit is the row's index.
+            let shown = app.message_rows();
+            let heights: Vec<usize> = shown.iter().map(row_height).collect();
+            let selected = app.selected_row(&shown).unwrap_or(0);
+            row_at(&heights, rows_offset(&heights, selected, rows), line)
+        }),
         Pane::Reader => None,
     };
     Some(Hit { pane, item })
@@ -928,6 +945,41 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
 /// so ratatui scrolls only as far as it takes to show the selected row.
 fn list_offset(selected: usize, visible: usize) -> usize {
     selected.saturating_sub(visible.saturating_sub(1))
+}
+
+/// Lines a row of the message list takes.
+fn row_height(row: &MessageRow) -> usize {
+    match row {
+        MessageRow::Header { .. } => 1,
+        MessageRow::Message(_) => MESSAGE_ROWS,
+    }
+}
+
+/// The first row a list of rows `heights` tall shows in `height` lines,
+/// drawn from a fresh state: as many rows as fit, ending with the selected.
+fn rows_offset(heights: &[usize], selected: usize, height: usize) -> usize {
+    let Some(&tallest) = heights.get(selected) else {
+        return 0;
+    };
+    let mut first = selected;
+    let mut used = tallest;
+    while first > 0 && used + heights[first - 1] <= height {
+        first -= 1;
+        used += heights[first];
+    }
+    first
+}
+
+/// The row at `line` of a list of rows `heights` tall showing from `first`.
+fn row_at(heights: &[usize], first: usize, line: usize) -> Option<usize> {
+    let mut top = 0;
+    for (row, &height) in heights.iter().enumerate().skip(first) {
+        if line < top + height {
+            return Some(row);
+        }
+        top += height;
+    }
+    None
 }
 
 /// What each pane can show in `area`, for paging and scroll limits.
@@ -953,5 +1005,33 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
             (None, Some(_)) => usize::from(signature_areas(panes.compose)[1].height),
             (None, None) => 0,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rows_show_from_the_top_while_the_selected_one_fits() {
+        assert_eq!(rows_offset(&[1, 2, 2, 1, 2], 2, 6), 0);
+    }
+
+    #[test]
+    fn rows_scroll_until_the_selected_one_is_at_the_bottom() {
+        // A header then messages: the fourth row ends on line 7.
+        assert_eq!(rows_offset(&[1, 2, 2, 2], 3, 4), 2);
+        assert_eq!(rows_offset(&[1, 2, 2, 1, 2], 4, 5), 2);
+    }
+
+    #[test]
+    fn a_line_hits_the_row_drawn_on_it() {
+        let heights = [1, 2, 2];
+        assert_eq!(row_at(&heights, 0, 0), Some(0), "the header");
+        assert_eq!(row_at(&heights, 0, 1), Some(1));
+        assert_eq!(row_at(&heights, 0, 2), Some(1));
+        assert_eq!(row_at(&heights, 0, 3), Some(2));
+        assert_eq!(row_at(&heights, 0, 5), None, "below the last row");
+        assert_eq!(row_at(&heights, 1, 2), Some(2), "scrolled past the header");
     }
 }
