@@ -4,11 +4,12 @@ use std::{
 };
 
 use crate::model::{Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId};
-use jiff::Timestamp;
+use jiff::{Timestamp, Zoned};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::{
     compose::{Compose, Request},
+    groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
     search::Search,
     signature::{self, SignatureEditor},
@@ -174,6 +175,11 @@ pub struct AppState {
     pub selected_folder: usize,
     pub messages: Vec<Message>,
     pub selected_message: usize,
+    /// The date group whose header is selected, instead of a message. The
+    /// selected message is then the group's first.
+    pub selected_group: Option<DateGroup>,
+    /// Date groups whose messages are folded away, in every folder.
+    pub collapsed_groups: BTreeSet<DateGroup>,
     /// The selected message's body, once core has loaded it.
     pub body: Option<String>,
     pub status: Option<Status>,
@@ -490,6 +496,7 @@ impl AppState {
         self.marked.clear();
         self.messages = messages;
         self.selected_message = 0;
+        self.settle_selection();
         self.selection_changed()
     }
 
@@ -650,13 +657,26 @@ impl AppState {
     /// Shows the current folder's messages after a sync, keeping the
     /// selected message when it is still there.
     pub fn refresh_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
+        let header = self.selected_group;
         let selected = self.selected().map(|m| m.id.clone());
         self.marked
             .retain(|id| messages.iter().any(|m| &m.id == id));
+        if let Some(group) = header {
+            // A selected header stays selected while its group has mail.
+            let now = Zoned::now();
+            let first = (0..messages.len())
+                .find(|&i| groups::group_at(&messages, i, &now) == Some(group));
+            if let Some(index) = first {
+                self.messages = messages;
+                self.selected_message = index;
+                return None;
+            }
+        }
         match selected.and_then(|id| messages.iter().position(|m| m.id == id)) {
             Some(index) => {
                 self.messages = messages;
                 self.selected_message = index;
+                self.settle_selection();
                 None
             }
             None => {
@@ -677,6 +697,7 @@ impl AppState {
         let index = before.filter(|m| !gone(m)).count();
         self.messages.retain(|m| !gone(m));
         self.selected_message = index.min(self.messages.len().saturating_sub(1));
+        self.settle_selection();
         for id in ids {
             self.marked.remove(id);
         }
@@ -843,6 +864,9 @@ impl AppState {
     /// Shows a body core loaded, unless the user has moved on, and marks
     /// the message read if it was not.
     pub fn body_loaded(&mut self, message: MessageId, text: String) -> Option<Effect> {
+        if self.selected_group.is_some() {
+            return None;
+        }
         let shown = self.messages.get_mut(self.selected_message)?;
         if shown.id != message {
             return None;
@@ -855,8 +879,67 @@ impl AppState {
         Some(Effect::MarkRead(message))
     }
 
-    fn selected(&self) -> Option<&Message> {
+    /// The selected message; none while a date header is selected.
+    pub(crate) fn selected(&self) -> Option<&Message> {
+        if self.selected_group.is_some() {
+            return None;
+        }
         self.messages.get(self.selected_message)
+    }
+
+    /// The message list's rows as they are now: date headers, and the
+    /// messages of the groups not folded away.
+    pub fn message_rows(&self) -> Vec<MessageRow> {
+        groups::message_rows(&self.messages, &self.collapsed_groups, &Zoned::now())
+    }
+
+    /// The row of `rows` the cursor is on: the selected header, or the
+    /// selected message, or the header of the group it is folded in.
+    pub fn selected_row(&self, rows: &[MessageRow]) -> Option<usize> {
+        let group = self
+            .selected_group
+            .or_else(|| self.group_at(self.selected_message))?;
+        rows.iter().position(|row| match *row {
+            MessageRow::Message(index) => {
+                self.selected_group.is_none() && index == self.selected_message
+            }
+            MessageRow::Header {
+                group: header,
+                collapsed,
+                ..
+            } => header == group && (self.selected_group.is_some() || collapsed),
+        })
+    }
+
+    /// The date group of the message at `index`.
+    pub(crate) fn group_at(&self, index: usize) -> Option<DateGroup> {
+        groups::group_at(&self.messages, index, &Zoned::now())
+    }
+
+    /// Puts the cursor on `row`: a header, or a message.
+    pub(crate) fn select_row(&mut self, row: MessageRow) {
+        match row {
+            MessageRow::Header { group, .. } => {
+                self.selected_group = Some(group);
+                if let Some(first) =
+                    (0..self.messages.len()).find(|&i| self.group_at(i) == Some(group))
+                {
+                    self.selected_message = first;
+                }
+            }
+            MessageRow::Message(index) => {
+                self.selected_group = None;
+                self.selected_message = index;
+            }
+        }
+    }
+
+    /// Selects the selected message's row, or its group's header when the
+    /// group is folded away.
+    fn settle_selection(&mut self) {
+        self.selected_group = self
+            .group_at(self.selected_message)
+            .filter(|group| self.collapsed_groups.contains(group));
     }
 
     /// Drops the old body and asks for the newly selected one.
@@ -895,12 +978,15 @@ impl AppState {
                 self.select_folder(visible[to])
             }
             Pane::Messages => {
-                let moved = step(&mut self.selected_message, self.messages.len(), delta);
-                if moved {
-                    self.selection_changed()
-                } else {
-                    None
+                // Move among the rows shown: headers, and unfolded messages.
+                let rows = self.message_rows();
+                let at = self.selected_row(&rows)?;
+                let mut to = at;
+                if !step(&mut to, rows.len(), delta) {
+                    return None;
                 }
+                self.select_row(rows[to]);
+                self.selection_changed()
             }
             Pane::Reader => {
                 // Scroll until the last line is at the bottom of the pane.
@@ -1107,7 +1193,9 @@ mod tests {
 
         assert_eq!(app.update(Action::Bottom), load_body("m2"));
         assert_eq!(app.update(Action::Bottom), None);
-        assert_eq!(app.update(Action::Top), load_body("m0"));
+        assert_eq!(app.update(Action::Top), None, "the date header is first");
+        assert_eq!(app.selected_group, Some(DateGroup::Older));
+        assert_eq!(app.update(Action::SelectNext), load_body("m0"));
     }
 
     #[test]
@@ -1345,6 +1433,7 @@ mod tests {
         app.update(Action::Bottom);
         app.update(Action::ToggleMark);
         app.update(Action::Top);
+        app.update(Action::SelectNext);
         app.update(Action::ToggleMark);
 
         key(&mut app, KeyCode::Char('D'));
@@ -1994,5 +2083,59 @@ Ada"
         assert_eq!(app.focus, Pane::Reader);
         app.update(Action::FocusPrevPane);
         assert_eq!(app.focus, Pane::Messages);
+    }
+
+    /// Messages received now, then messages from long ago, in two groups.
+    fn today_and_older(today: &[&str], older: &[&str]) -> Vec<Message> {
+        let now = jiff::Timestamp::now();
+        let today = today.iter().map(|id| Message {
+            received_at: now,
+            ..message(id)
+        });
+        today.chain(older.iter().map(|id| message(id))).collect()
+    }
+
+    #[test]
+    fn moving_steps_onto_date_headers_too() {
+        let mut app = with_folders(&["a"]);
+        app.focus = Pane::Messages;
+        assert_eq!(
+            app.set_messages(today_and_older(&["t1"], &["o1"])),
+            load_body("t1")
+        );
+
+        assert_eq!(app.update(Action::SelectNext), None);
+        assert_eq!(app.selected_group, Some(DateGroup::Older));
+        assert_eq!(app.selected(), None);
+        assert_eq!(app.update(Action::SelectNext), load_body("o1"));
+    }
+
+    #[test]
+    fn moving_skips_the_mail_of_folded_groups() {
+        let mut app = with_folders(&["a"]);
+        app.focus = Pane::Messages;
+        app.collapsed_groups.insert(DateGroup::Today);
+
+        assert_eq!(
+            app.set_messages(today_and_older(&["t1", "t2"], &["o1"])),
+            None,
+            "the folded group's header is selected"
+        );
+        assert_eq!(app.selected_group, Some(DateGroup::Today));
+        app.update(Action::SelectNext);
+        assert_eq!(app.update(Action::SelectNext), load_body("o1"));
+    }
+
+    #[test]
+    fn a_selected_header_stays_selected_after_a_sync() {
+        let mut app = with_folders(&["a"]);
+        app.focus = Pane::Messages;
+        app.set_messages(today_and_older(&["t1"], &["o1"]));
+        app.update(Action::SelectNext);
+
+        app.refresh_messages(today_and_older(&["t0", "t1"], &["o1"]));
+
+        assert_eq!(app.selected_group, Some(DateGroup::Older));
+        assert_eq!(app.selected_message, 2);
     }
 }

@@ -112,7 +112,7 @@ impl AppState {
     /// again drops them all.
     pub fn kept_read(&self) -> Vec<MessageId> {
         if self.sync.forced {
-            let selected = self.messages.get(self.selected_message);
+            let selected = self.selected();
             return selected.map(|m| m.id.clone()).into_iter().collect();
         }
         self.messages.iter().map(|m| m.id.clone()).collect()
