@@ -1,6 +1,6 @@
 //! Picking text in the reading pane with Vim's visual mode, to copy it.
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::{
     editor::Editor,
@@ -40,6 +40,9 @@ impl Visual {
 
     /// Acts on a key, moving `page` lines a page.
     pub fn key(&mut self, key: KeyEvent, page: usize) -> Request {
+        if !reads(key) {
+            return Request::None;
+        }
         match vim::key(&mut self.editor, key, page, &mut Register::default()) {
             Outcome::Yanked(text) => Request::Copy(text),
             _ => Request::None,
@@ -47,10 +50,30 @@ impl Visual {
     }
 }
 
+/// Whether a key only moves, picks or yanks, leaving the text as it is.
+fn reads(key: KeyEvent) -> bool {
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        return matches!(key.code, KeyCode::Char('d' | 'u' | 'f' | 'b'));
+    }
+    match key.code {
+        KeyCode::Char(c) => c.is_ascii_digit() || "hjklwbe^$gGvVy ".contains(c),
+        KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Up
+        | KeyCode::Down
+        | KeyCode::Home
+        | KeyCode::End
+        | KeyCode::PageUp
+        | KeyCode::PageDown
+        | KeyCode::Backspace
+        | KeyCode::Esc => true,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
     fn picking(text: &str, row: usize) -> Visual {
         let lines: Vec<String> = text.lines().map(str::to_owned).collect();
@@ -77,5 +100,15 @@ mod tests {
         let request = keys(&mut visual, "wey");
 
         assert_eq!(request, Request::Copy("Dear Charles".into()));
+    }
+
+    #[test]
+    fn keys_that_would_change_the_text_do_nothing() {
+        let mut visual = picking("Dear Charles,", 0);
+
+        assert_eq!(keys(&mut visual, "ldxcpPr~"), Request::None);
+        let request = keys(&mut visual, "$y");
+
+        assert_eq!(request, Request::Copy("Dear Charles,".into()));
     }
 }
