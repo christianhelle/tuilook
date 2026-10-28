@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   messages, replies and forwards from that account start with it, ready to
   edit before sending.
 
+### Changed
+
+- Read mail is dimmed and unread subjects are bold, so unread mail stands out
+  in the message list.
+
 ### Fixed
 
 - A message read, flagged or otherwise changed outside tuilook no longer loses

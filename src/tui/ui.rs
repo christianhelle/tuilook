@@ -767,7 +767,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
     }
     let items = app.messages.iter().map(|m| {
         let style = if m.is_read {
-            Style::new()
+            Style::new().fg(Color::DarkGray)
         } else {
             Style::new().add_modifier(Modifier::BOLD)
         };
@@ -781,7 +781,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
             let place = Style::new().fg(Color::DarkGray);
             second.push(Span::styled(format!("{} · ", found_in(app, m)), place));
         }
-        second.push(Span::raw(shown(&m.subject)));
+        second.push(Span::styled(shown(&m.subject), style));
         ListItem::new(vec![
             Line::from(vec![mark, Span::styled(shown(&m.from_name), style)]),
             Line::from(second),

@@ -578,3 +578,46 @@ fn a_search_that_finds_nothing_says_so() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+/// The leftmost place `text` is drawn, which is in the message list when the
+/// reading pane shows it too.
+fn leftmost(terminal: &Terminal<TestBackend>, text: &str) -> ratatui::style::Style {
+    let buffer = terminal.backend().buffer();
+    let width = buffer.area.width as usize;
+    let rows: Vec<String> = buffer
+        .content()
+        .chunks(width)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect())
+        .collect();
+    let (x, y) = rows
+        .iter()
+        .enumerate()
+        .filter_map(|(y, row)| row.find(text).map(|x| (row[..x].chars().count(), y)))
+        .min()
+        .unwrap_or_else(|| panic!("{text} is not drawn"));
+    buffer.content()[y * width + x].style()
+}
+
+#[test]
+fn read_mail_is_dimmed_and_unread_mail_is_bold() {
+    use ratatui::style::{Color, Modifier};
+    let mut app = sample_app();
+    let mut read = message("m2", "Grace", "Compiler draft", "First pass attached");
+    read.is_read = true;
+    app.set_messages(vec![
+        message("m1", "Ada", "Analytical engine", "Notes on the engine"),
+        read,
+    ]);
+    let mut terminal = Terminal::new(TestBackend::new(90, 12)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+
+    for unread in ["Ada", "Analytical engine"] {
+        let style = leftmost(&terminal, unread);
+        assert!(style.add_modifier.contains(Modifier::BOLD), "{unread}");
+    }
+    for read in ["Grace", "Compiler draft"] {
+        let style = leftmost(&terminal, read);
+        assert_eq!(style.fg, Some(Color::DarkGray), "{read}");
+        assert!(!style.add_modifier.contains(Modifier::BOLD), "{read}");
+    }
+}
