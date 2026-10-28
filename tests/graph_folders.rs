@@ -5,7 +5,7 @@ use tuilook::graph::GraphBackend;
 use tuilook::model::{Folder, FolderId, MailBackend, WellKnown};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{method, path, query_param},
+    matchers::{body_json, method, path, query_param},
 };
 
 fn backend(server: &MockServer) -> GraphBackend<std::sync::Arc<support::FakeTokens>> {
@@ -154,4 +154,38 @@ async fn well_known_folders_are_looked_up_only_on_the_first_sync() {
     let folders = backend.list_folders().await.unwrap();
 
     assert_eq!(folders[0].well_known, Some(WellKnown::Inbox));
+}
+
+#[tokio::test]
+async fn creating_a_top_level_folder_posts_its_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/mailFolders"))
+        .and(body_json(json!({"displayName": "Receipts"})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({"id": "f9"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .create_folder(None, "Receipts")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn creating_a_subfolder_posts_to_its_parent() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/mailFolders/inbox-id/childFolders"))
+        .and(body_json(json!({"displayName": "2026"})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({"id": "f9"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .create_folder(Some(&FolderId("inbox-id".to_owned())), "2026")
+        .await
+        .unwrap();
 }

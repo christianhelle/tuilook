@@ -89,6 +89,13 @@ pub trait MailBackend {
         permanent: bool,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 
+    /// Makes a folder called `name` inside `parent`, or at the top level.
+    fn create_folder(
+        &self,
+        parent: Option<&FolderId>,
+        name: &str,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
     /// Marks a message as read.
     fn mark_read(
         &self,

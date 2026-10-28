@@ -26,6 +26,8 @@ pub struct FakeBackend {
     /// Each folder's mail from before what delta sync reaches, served a
     /// page of [`OLDER_PAGE`] at a time.
     pub older: HashMap<FolderId, Vec<Message>>,
+    /// Folders created so far, listed after `folders`.
+    pub created: Arc<Mutex<Vec<Folder>>>,
     /// Folders deleted so far, and whether permanently.
     pub deleted_folders: Arc<Mutex<Vec<(FolderId, bool)>>>,
     /// Messages deleted so far, and whether permanently.
@@ -45,7 +47,8 @@ impl MailBackend for FakeBackend {
         if let Some(error) = &self.folders_error {
             return Err(error.clone());
         }
-        Ok(self.folders.clone())
+        let created = self.created.lock().expect("no test panics holding it");
+        Ok(self.folders.iter().chain(created.iter()).cloned().collect())
     }
 
     async fn delta_sync(
@@ -113,6 +116,35 @@ impl MailBackend for FakeBackend {
             .lock()
             .expect("no test panics holding it");
         deleted.push((folder.clone(), permanent));
+        Ok(())
+    }
+
+    async fn create_folder(
+        &self,
+        parent: Option<&FolderId>,
+        name: &str,
+    ) -> Result<(), BackendError> {
+        let mut created = self.created.lock().expect("no test panics holding it");
+        let taken = self
+            .folders
+            .iter()
+            .chain(created.iter())
+            .any(|f| f.parent_id.as_ref() == parent && f.name.eq_ignore_ascii_case(name));
+        if taken {
+            return Err(BackendError::Other(format!("{name} already exists")));
+        }
+        let id = match parent {
+            Some(parent) => format!("{}/{name}", parent.0),
+            None => name.to_owned(),
+        };
+        created.push(Folder {
+            id: FolderId(id),
+            parent_id: parent.cloned(),
+            name: name.to_owned(),
+            well_known: None,
+            unread: 0,
+            total: 0,
+        });
         Ok(())
     }
 

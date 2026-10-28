@@ -240,6 +240,20 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(())
     }
 
+    async fn create_folder(
+        &self,
+        parent: Option<&FolderId>,
+        name: &str,
+    ) -> Result<(), BackendError> {
+        let path = match parent {
+            Some(parent) => format!("/me/mailFolders/{}/childFolders", parent.0),
+            None => "/me/mailFolders".to_owned(),
+        };
+        let folder = json!({ "displayName": name });
+        self.client.post::<dto::Id>(&path, &folder).await?;
+        Ok(())
+    }
+
     async fn mark_read(&self, message: &MessageId) -> Result<(), BackendError> {
         let path = format!("/me/messages/{}", message.0);
         self.client.patch(&path, &json!({ "isRead": true })).await?;
