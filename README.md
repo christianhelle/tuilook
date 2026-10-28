@@ -246,7 +246,7 @@ zoom, expanded folders and favorites) and picks up there next time.
 | `Tab` / `Shift-Tab` | Next pane / previous pane |
 | `Enter` | Open the folder or message, or fold or unfold a date group |
 | `j` `k` or `↓` `↑` | Move, or scroll the message |
-| `l` `h` or `→` `←` | Expand a folder or date group, collapse it or go up |
+| `l` `h` or `→` `←` | Expand a folder or date group, collapse it or go up; in the reading pane, show the next or previous mail |
 | `*` | Add the folder to Favorites, or take it out |
 | `PgDn` `PgUp` or `Ctrl-F` `Ctrl-B` | Move or scroll a page |
 | `Ctrl-D` `Ctrl-U` | Move or scroll half a page |
