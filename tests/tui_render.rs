@@ -668,3 +668,12 @@ fn picked_text_in_the_reader_is_highlighted() {
     assert!(!reversed("ubject:"), "but not past it");
     assert!(!reversed("Dear"));
 }
+
+#[test]
+fn picking_in_the_reader_shows_the_mode_and_how_to_copy() {
+    let mut app = sample_app();
+    app.focus = Pane::Reader;
+    press(&mut app, "V");
+
+    insta::assert_snapshot!(render(&app));
+}

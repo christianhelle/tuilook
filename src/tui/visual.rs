@@ -45,6 +45,11 @@ impl Visual {
         self.editor.cursor()
     }
 
+    /// Whether characters or whole lines are picked.
+    pub fn mode(&self) -> VimMode {
+        self.editor.vim.mode
+    }
+
     /// The first and last picked places.
     pub fn selection(&self) -> Option<(Pos, Pos)> {
         self.editor.vim.selection(self.editor.cursor())

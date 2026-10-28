@@ -296,8 +296,12 @@ fn status_line(app: &AppState) -> Line<'static> {
         (None, Some(editor)) => Some(&editor.body),
         _ => None,
     };
-    if let Some(body) = editing {
-        let mode = body.vim.mode;
+    let mode = match (editing, &app.visual) {
+        (Some(body), _) => Some(body.vim.mode),
+        (None, Some(visual)) => Some(visual.mode()),
+        (None, None) => None,
+    };
+    if let Some(mode) = mode {
         let color = match mode {
             VimMode::Normal => Color::Blue,
             VimMode::Insert => Color::Green,
@@ -320,6 +324,7 @@ fn status_line(app: &AppState) -> Line<'static> {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
         None if app.signature.is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
+        None if app.visual.is_some() => Span::raw(" y copy · Esc cancel"),
         None => Span::raw(
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",
         ),
