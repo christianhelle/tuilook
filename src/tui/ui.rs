@@ -597,19 +597,26 @@ pub const SIGNATURE_HELP: [(&str, &str); 9] = [
 ];
 
 /// What each key does, shown with `?`.
-pub const HELP: [(&str, &str); 21] = [
+pub const HELP: [(&str, &str); 22] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
     ("Enter", "Open the folder or message, fold a date group"),
     (
         "→ ←  l h",
-        "Unfold or fold a folder or group, next/prev mail",
+        "Unfold/fold folder or group; → ← next/prev mail",
     ),
     ("*", "Add the folder to Favorites or take it out"),
     ("↑ ↓  j k", "Move, or scroll the message"),
     ("PgUp PgDn Ctrl-B Ctrl-F", "Move or scroll a page"),
     ("Ctrl-U Ctrl-D", "Move or scroll half a page"),
     ("g g  G  Home End", "Jump to the first or last"),
-    ("v V, then y", "Pick text or lines in the message, copy it"),
+    (
+        "h j k l w b e 0 $",
+        "Move the cursor in the message, as Vim does",
+    ),
+    (
+        "v V then y, or yy",
+        "Pick text or lines from the cursor, copy them",
+    ),
     ("z", "Zoom the pane, or show every pane again"),
     ("b", "Hide or show the folders"),
     (
