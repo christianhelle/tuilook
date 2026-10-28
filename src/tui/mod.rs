@@ -16,3 +16,4 @@ pub mod signature;
 pub mod ui;
 pub mod unread;
 pub mod vim;
+pub mod visual;
