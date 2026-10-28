@@ -65,6 +65,8 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('f') => Action::Forward,
         KeyCode::Char('/') => Action::Search,
         KeyCode::Char('S') => Action::EditSignature,
+        KeyCode::Char('v') => Action::Visual,
+        KeyCode::Char('V') => Action::VisualLine,
         _ => return None,
     };
     Some(action)
@@ -212,6 +214,16 @@ mod tests {
         assert_eq!(
             Keymap::default().action_for(shift_s),
             Some(Action::EditSignature)
+        );
+    }
+
+    #[test]
+    fn v_and_shift_v_pick_text_in_the_reader() {
+        let shift_v = KeyEvent::new(KeyCode::Char('V'), KeyModifiers::SHIFT);
+        assert_eq!(press(KeyCode::Char('v')), Some(Action::Visual));
+        assert_eq!(
+            Keymap::default().action_for(shift_v),
+            Some(Action::VisualLine)
         );
     }
 

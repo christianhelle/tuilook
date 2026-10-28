@@ -51,6 +51,10 @@ pub enum Action {
     Forward,
     /// Search every cached folder.
     Search,
+    /// Pick characters in the reading pane, to copy them.
+    Visual,
+    /// Pick whole lines in the reading pane, to copy them.
+    VisualLine,
 }
 
 /// Something core tells the UI happened.

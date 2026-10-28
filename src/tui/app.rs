@@ -490,6 +490,7 @@ impl AppState {
             }
             Action::Help => self.show_help = true,
             Action::Search => self.start_search(),
+            Action::Visual | Action::VisualLine => {}
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::EditSignature => {
                 let account = self.current_account();
