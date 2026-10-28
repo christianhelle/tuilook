@@ -305,6 +305,10 @@ whole lines; `y` then copies what is picked to the clipboard.
 | `Esc` | Stop picking |
 | `→` `←` | Show the next or previous mail |
 
+What you copy is also kept to put with `p` or `P` in normal mode while writing
+a message or a signature, as in Vim. Text deleted or yanked while writing is
+kept the same way, from one message to the next.
+
 Keys the cursor has no use for work as they do in the other panes, so `r`
 replies and `d` deletes. In the reading pane `b` moves back a word; hide the
 folders from another pane.
