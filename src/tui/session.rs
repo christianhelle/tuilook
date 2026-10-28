@@ -5,7 +5,10 @@ use std::{io, path::Path};
 use crate::model::{FolderId, MessageId};
 use serde::{Deserialize, Serialize};
 
-use crate::tui::app::{AppState, Effect, Pane, account_row, unread_row};
+use crate::tui::{
+    app::{AppState, Effect, Pane, account_row, unread_row},
+    groups::DateGroup,
+};
 
 /// What is kept between runs. Anything missing or unknown is left as it is.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +26,8 @@ pub struct Snapshot {
     pub collapsed: Vec<String>,
     /// Folders in the favorites, in order.
     pub favorites: Vec<String>,
+    /// Date groups folded away in the message list.
+    pub collapsed_groups: Vec<DateGroup>,
 }
 
 impl Snapshot {
@@ -48,6 +53,7 @@ impl Snapshot {
                 .map(|id| id.0)
                 .collect(),
             favorites: app.favorites.iter().map(|id| id.0.clone()).collect(),
+            collapsed_groups: app.collapsed_groups.iter().copied().collect(),
         }
     }
 }
@@ -76,6 +82,7 @@ impl AppState {
         self.expanded
             .extend(snapshot.expanded.iter().cloned().map(FolderId));
         self.favorites = snapshot.favorites.iter().cloned().map(FolderId).collect();
+        self.collapsed_groups = snapshot.collapsed_groups.iter().copied().collect();
         self.rebuild_folders();
         let effect = self.restore_folder(snapshot);
         // Accounts folded at quit stay folded, unless the folder is in one.
@@ -92,15 +99,20 @@ impl AppState {
         self.select_folder(index)
     }
 
-    /// Selects a message in the list by id, if it is there.
+    /// Selects a message in the list by id, if it is there, or the header
+    /// of its group when that is folded.
     pub fn select_message(&mut self, id: &str) -> Option<Effect> {
         let id = MessageId(id.to_owned());
         let index = self.messages.iter().position(|m| m.id == id)?;
-        if index == self.selected_message {
+        let folded = self
+            .group_at(index)
+            .filter(|group| self.collapsed_groups.contains(group));
+        if index == self.selected_message && folded == self.selected_group {
             return None;
         }
         self.selected_message = index;
-        Some(Effect::LoadBody(id))
+        self.selected_group = folded;
+        folded.is_none().then_some(Effect::LoadBody(id))
     }
 }
 
@@ -149,6 +161,7 @@ mod tests {
             expanded: vec!["a".to_owned()],
             collapsed: Vec::new(),
             favorites: vec!["b".to_owned()],
+            collapsed_groups: vec![DateGroup::Today],
         };
         let mut app = AppState::default();
         let mut b = folder("b");
@@ -163,6 +176,23 @@ mod tests {
 
         assert_eq!(effect, Some(Effect::LoadBody(MessageId("m2".to_owned()))));
         assert_eq!(Snapshot::of(&app), snapshot);
+    }
+
+    #[test]
+    fn a_message_in_a_folded_group_comes_back_as_its_header() {
+        let mut app = AppState::default();
+        app.set_folders(vec![folder("b")]);
+        app.restore(&Snapshot {
+            folder: Some("b".to_owned()),
+            collapsed_groups: vec![DateGroup::Older],
+            ..Default::default()
+        });
+        app.set_messages(vec![message("m1"), message("m2")]);
+
+        assert_eq!(app.select_message("m2"), None);
+
+        assert_eq!(app.selected_group, Some(DateGroup::Older));
+        assert_eq!(app.selected_message, 1);
     }
 
     #[test]
