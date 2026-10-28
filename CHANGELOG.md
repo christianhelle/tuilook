@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Copying from a message: `v` in the reading pane picks text with Vim's
+  visual mode, `V` picks whole lines, and `y` copies them to the clipboard
+  through the terminal (OSC 52).
 - Install scripts: `curl -fsSL https://christianhelle.com/tuilook/install | bash`
   on macOS and Linux, and `irm https://christianhelle.com/tuilook/install.ps1 | iex`
   on Windows. Both install the latest release, or the one `VERSION` / `-Version`
