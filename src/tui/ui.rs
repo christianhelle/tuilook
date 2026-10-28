@@ -19,7 +19,6 @@ use crate::tui::{
     groups::MessageRow,
     older::LOADING_OLDER,
     signature::SignatureEditor,
-    viewer::Viewer,
     vim::VimMode,
 };
 
@@ -296,10 +295,10 @@ fn status_line(app: &AppState) -> Line<'static> {
         (None, Some(editor)) => Some(&editor.body),
         _ => None,
     };
-    let mode = match (editing, &app.visual) {
-        (Some(body), _) => Some(body.vim.mode),
-        (None, Some(visual)) => Some(visual.mode()),
-        (None, None) => None,
+    let picking = app.viewer.mode() != VimMode::Normal;
+    let mode = match editing {
+        Some(body) => Some(body.vim.mode),
+        None => picking.then(|| app.viewer.mode()),
     };
     if let Some(mode) = mode {
         let color = match mode {
@@ -324,7 +323,7 @@ fn status_line(app: &AppState) -> Line<'static> {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
         None if app.signature.is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
-        None if app.visual.is_some() => Span::raw(" y copy · Esc cancel"),
+        None if picking => Span::raw(" y copy · Esc cancel"),
         None => Span::raw(
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",
         ),
@@ -902,7 +901,7 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
 
 /// The selected message's headers and body, wrapped to the pane.
 fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
-    let selection = app.visual.as_ref().and_then(Viewer::selection);
+    let selection = app.viewer.selection();
     let text: Vec<Line> = app
         .reader_text()?
         .iter()

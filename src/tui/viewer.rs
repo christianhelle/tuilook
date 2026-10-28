@@ -24,22 +24,6 @@ pub enum Request {
 }
 
 impl Viewer {
-    /// Starts picking `lines` at the start of line `row`, whole lines when
-    /// `line`.
-    pub fn new(lines: &[String], row: usize, line: bool) -> Self {
-        let mut editor = Editor::default();
-        editor.set_text(&lines.join("\n"));
-        editor.move_to(row, 0);
-        let start = if line { 'V' } else { 'v' };
-        vim::key(
-            &mut editor,
-            KeyEvent::from(KeyCode::Char(start)),
-            1,
-            &mut Register::default(),
-        );
-        Viewer { editor }
-    }
-
     /// Shows `lines`, keeping the cursor and mode as the new lines allow.
     pub fn show(&mut self, lines: &[String]) {
         if self.editor.lines() == lines {

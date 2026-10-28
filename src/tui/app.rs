@@ -18,7 +18,6 @@ use crate::tui::{
     signature::{self, SignatureEditor},
     ui::shown,
     viewer::{self, Viewer},
-    vim::VimMode,
 };
 
 /// IO the event loop must perform after an update.
@@ -231,7 +230,7 @@ pub struct AppState {
     /// order they were added.
     pub favorites: Vec<FolderId>,
     /// Text being picked in the reading pane, to copy it.
-    pub visual: Option<Viewer>,
+    pub viewer: Viewer,
     /// A search being typed, or whose results the message list shows.
     pub search: Option<Search>,
     /// The folder whose older mail is being fetched, and whether only its
@@ -337,19 +336,6 @@ impl AppState {
         self.reader_scroll = self.reader_scroll.max(lowest).min(top);
     }
 
-    /// The line of the reading pane shown on wrapped row `row`.
-    fn reader_line_at(&self, row: usize) -> usize {
-        let mut top = 0;
-        let rows = self.reader_rows();
-        for (line, height) in rows.iter().enumerate() {
-            top += height;
-            if row < top {
-                return line;
-            }
-        }
-        rows.len().saturating_sub(1)
-    }
-
     /// The pane filling the screen, which follows the focus while zoomed.
     pub fn zoomed_pane(&self) -> Option<Pane> {
         self.zoomed.then_some(self.focus)
@@ -419,29 +405,28 @@ impl AppState {
             }
             return None;
         }
-        if let Some(visual) = &mut self.visual {
-            match visual.key(key, self.viewport.reader) {
-                viewer::Request::None if visual.mode() == VimMode::Normal => {
-                    self.visual = None;
-                }
+        if self.typing_search() {
+            return self.search_key(key);
+        }
+        if self.focus == Pane::Reader
+            && let Some(text) = self.reader_text()
+        {
+            self.viewer.show(&text);
+            match self.viewer.key(key, self.viewport.reader) {
                 viewer::Request::None => {
-                    let (line, _) = visual.cursor();
+                    let (line, _) = self.viewer.cursor();
                     self.show_reader_line(line);
+                    return None;
                 }
                 viewer::Request::Copy(text) => {
-                    self.visual = None;
                     match text.lines().count() {
                         1 => self.show_info("Copied 1 line"),
                         lines => self.show_info(format!("Copied {lines} lines")),
                     }
                     return Some(Effect::Copy(text));
                 }
-                viewer::Request::Unhandled => self.visual = None,
+                viewer::Request::Unhandled => {}
             }
-            return None;
-        }
-        if self.typing_search() {
-            return self.search_key(key);
         }
         keymap
             .action_for(key)
@@ -559,12 +544,6 @@ impl AppState {
             }
             Action::Help => self.show_help = true,
             Action::Search => self.start_search(),
-            Action::Visual | Action::VisualLine if self.focus == Pane::Reader => {
-                let line = action == Action::VisualLine;
-                let top = self.reader_line_at(self.reader_scroll);
-                self.visual = self.reader_text().map(|text| Viewer::new(&text, top, line));
-            }
-            Action::Visual | Action::VisualLine => {}
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::EditSignature => {
                 let account = self.current_account();
@@ -1107,7 +1086,7 @@ impl AppState {
     fn selection_changed(&mut self) -> Option<Effect> {
         self.body = None;
         self.reader_scroll = 0;
-        self.visual = None;
+        self.viewer = Viewer::default();
         self.selected().map(|m| Effect::LoadBody(m.id.clone()))
     }
 
@@ -1209,6 +1188,7 @@ impl Pane {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::vim::VimMode;
 
     fn folder(id: &str) -> Folder {
         Folder {
@@ -1312,45 +1292,46 @@ mod tests {
     }
 
     #[test]
-    fn v_in_the_reader_picks_text_and_y_copies_it() {
+    fn keys_in_the_reader_move_its_cursor() {
         let mut app = reading(10, 5);
         app.body = Some("Dear Charles,".to_owned());
 
-        let effect = type_keys(&mut app, "vjjj$y");
+        type_keys(&mut app, "jjjw");
+
+        assert_eq!(app.viewer.cursor(), (3, 5));
+    }
+
+    #[test]
+    fn keys_the_reader_has_no_use_for_still_work() {
+        let mut app = reading(10, 5);
+
+        type_keys(&mut app, "z");
+
+        assert!(app.zoomed);
+    }
+
+    #[test]
+    fn v_in_the_reader_picks_from_the_cursor_and_y_copies_it() {
+        let mut app = reading(10, 5);
+        app.body = Some("Dear Charles,".to_owned());
+
+        let effect = type_keys(&mut app, "jvjj$y");
 
         assert_eq!(
             effect,
             Some(Effect::Copy(
-                "From:  <>
-Subject: m0
+                "Subject: m0
 
 Dear Charles,"
                     .to_owned()
             ))
         );
-        assert!(app.visual.is_none(), "copying stops picking");
-        assert_eq!(app.status, Some(Status::Info("Copied 4 lines".to_owned())));
+        assert_eq!(app.viewer.mode(), VimMode::Normal, "copying stops picking");
+        assert_eq!(app.status, Some(Status::Info("Copied 3 lines".to_owned())));
     }
 
     #[test]
-    fn picking_starts_at_the_line_at_the_top_of_the_reader() {
-        let mut app = reading(10, 20);
-        app.viewport.reader_width = 34;
-        // The long line wraps to three rows, so "Second" is the seventh row
-        app.body = Some(format!(
-            "{}
-Second",
-            "word ".repeat(20)
-        ));
-        app.reader_scroll = 6;
-
-        let effect = type_keys(&mut app, "v$y");
-
-        assert_eq!(effect, Some(Effect::Copy("Second".to_owned())));
-    }
-
-    #[test]
-    fn the_reader_scrolls_to_keep_the_picking_cursor_in_view() {
+    fn the_reader_scrolls_to_keep_the_cursor_in_view() {
         let mut app = reading(4, 23);
         app.viewport.reader_width = 80;
         let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
@@ -1359,21 +1340,22 @@ Second",
 ",
         ));
 
-        type_keys(&mut app, "v10j");
+        type_keys(&mut app, "10j");
         assert_eq!(app.reader_scroll, 7, "row 10 is the last in view");
         type_keys(&mut app, "gg");
         assert_eq!(app.reader_scroll, 0);
     }
 
     #[test]
-    fn showing_another_message_stops_picking() {
+    fn another_message_starts_with_the_cursor_at_the_top() {
         let mut app = reading(10, 5);
-        type_keys(&mut app, "v");
+        type_keys(&mut app, "jv");
 
         app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
 
         assert_eq!(app.selected_message, 1);
-        assert!(app.visual.is_none());
+        assert_eq!(app.viewer.cursor(), (0, 0));
+        assert_eq!(app.viewer.mode(), VimMode::Normal);
     }
 
     #[test]
