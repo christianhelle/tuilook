@@ -576,8 +576,8 @@ pub const SIGNATURE_HELP: [(&str, &str); 9] = [
 /// What each key does, shown with `?`.
 pub const HELP: [(&str, &str); 20] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
-    ("Enter", "Open the folder or message"),
-    ("→ ←  l h", "Expand or enter a folder, collapse it or go up"),
+    ("Enter", "Open the folder or message, fold a date group"),
+    ("→ ←  l h", "Unfold or fold a folder or date group"),
     ("*", "Add the folder to Favorites or take it out"),
     ("↑ ↓  j k", "Move, or scroll the message"),
     ("PgUp PgDn Ctrl-B Ctrl-F", "Move or scroll a page"),
