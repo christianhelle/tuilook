@@ -539,6 +539,14 @@ fn on_core_event(
             app.folder_deleted(&folder);
             None
         }
+        Event::FolderCreated(name) => {
+            app.show_info(format!("Created {name}"));
+            None
+        }
+        Event::FolderRenamed { name, .. } => {
+            app.show_info(format!("Renamed to {name}"));
+            None
+        }
         Event::BodyLoaded { message, text } => app.body_loaded(message, text),
         Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
         Event::Sent => {

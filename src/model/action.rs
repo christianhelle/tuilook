@@ -75,6 +75,14 @@ pub enum Event {
     },
     /// The folder was deleted. The folder tree is synced right after.
     FolderDeleted(FolderId),
+    /// A folder called this was made. The folder tree is synced right after.
+    FolderCreated(String),
+    /// The folder was given a new name. The folder tree is synced right
+    /// after.
+    FolderRenamed {
+        folder: FolderId,
+        name: String,
+    },
     /// These messages were deleted and are gone from the store.
     MessagesDeleted(Vec<MessageId>),
     Sent,

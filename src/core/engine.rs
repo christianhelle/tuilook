@@ -25,6 +25,16 @@ pub enum Command {
         folder: FolderId,
         permanent: bool,
     },
+    /// Make a folder called `name` inside `parent`, or at the top level.
+    CreateFolder {
+        parent: Option<FolderId>,
+        name: String,
+    },
+    /// Give a folder a new name.
+    RenameFolder {
+        folder: FolderId,
+        name: String,
+    },
     /// Delete messages: to Deleted Items, or for good when `permanent`.
     Delete {
         ids: Vec<MessageId>,
@@ -62,6 +72,20 @@ pub async fn run_engine(
             } => load_older(&backend, &mut store, folder, before, unread_only, &events).await,
             Command::DeleteFolder { folder, permanent } => {
                 delete_folder(&backend, &mut store, folder, permanent, &events).await
+            }
+            Command::CreateFolder { parent, name } => {
+                let created = backend.create_folder(parent.as_ref(), &name).await;
+                let done = created
+                    .map(|()| Event::FolderCreated(name))
+                    .map_err(|e| format!("could not create the folder: {e}"));
+                folder_changed(&backend, &mut store, done, &events).await
+            }
+            Command::RenameFolder { folder, name } => {
+                let renamed = backend.rename_folder(&folder, &name).await;
+                let done = renamed
+                    .map(|()| Event::FolderRenamed { folder, name })
+                    .map_err(|e| format!("could not rename the folder: {e}"));
+                folder_changed(&backend, &mut store, done, &events).await
             }
             Command::Delete { ids, permanent } => {
                 delete(&backend, &mut store, &ids, permanent, &events).await
@@ -144,6 +168,24 @@ async fn delete_folder(
         return events.send(Event::Error(error)).await;
     }
     events.send(Event::FolderDeleted(folder)).await?;
+    match sync_folders(backend, store).await {
+        Ok(()) => events.send(Event::FoldersSynced).await,
+        Err(e) => events.send(Event::Error(e.to_string())).await,
+    }
+}
+
+/// Reports a change to the folder tree, or why it failed, then refreshes
+/// the tree so the change shows.
+async fn folder_changed(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    done: Result<Event, String>,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    match done {
+        Ok(event) => events.send(event).await?,
+        Err(error) => return events.send(Event::Error(error)).await,
+    }
     match sync_folders(backend, store).await {
         Ok(()) => events.send(Event::FoldersSynced).await,
         Err(e) => events.send(Event::Error(e.to_string())).await,

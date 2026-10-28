@@ -407,3 +407,82 @@ async fn deleting_a_folder_reports_it_then_syncs_the_folder_tree() {
     assert_eq!(events.recv().await, Some(Event::FoldersSynced));
     assert_eq!(*deleted.lock().unwrap(), [(FolderId("a".to_owned()), true)]);
 }
+
+#[tokio::test]
+async fn creating_a_folder_reports_it_then_syncs_the_folder_tree() {
+    let backend = FakeBackend {
+        folders: vec![folder("inbox")],
+        ..Default::default()
+    };
+    let created = backend.created.clone();
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::CreateFolder {
+            parent: Some(FolderId("inbox".to_owned())),
+            name: "Receipts".to_owned(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::FolderCreated("Receipts".to_owned()))
+    );
+    assert_eq!(events.recv().await, Some(Event::FoldersSynced));
+    let created = created.lock().unwrap();
+    assert_eq!(created[0].name, "Receipts");
+    assert_eq!(created[0].parent_id, Some(FolderId("inbox".to_owned())));
+}
+
+#[tokio::test]
+async fn a_folder_that_cannot_be_created_says_why() {
+    let backend = FakeBackend {
+        folders: vec![folder("inbox")],
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::CreateFolder {
+            parent: None,
+            name: "INBOX".to_owned(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error(
+            "could not create the folder: INBOX already exists".to_owned()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn renaming_a_folder_reports_it_then_syncs_the_folder_tree() {
+    let backend = FakeBackend {
+        folders: vec![folder("a")],
+        ..Default::default()
+    };
+    let renamed = backend.renamed.clone();
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::RenameFolder {
+            folder: FolderId("a".to_owned()),
+            name: "Bills".to_owned(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::FolderRenamed {
+            folder: FolderId("a".to_owned()),
+            name: "Bills".to_owned()
+        })
+    );
+    assert_eq!(events.recv().await, Some(Event::FoldersSynced));
+    assert_eq!(renamed.lock().unwrap()[&FolderId("a".to_owned())], "Bills");
+}
