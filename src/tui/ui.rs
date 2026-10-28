@@ -577,7 +577,10 @@ pub const SIGNATURE_HELP: [(&str, &str); 9] = [
 pub const HELP: [(&str, &str); 20] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
     ("Enter", "Open the folder or message, fold a date group"),
-    ("→ ←  l h", "Unfold or fold a folder or group, next/prev mail"),
+    (
+        "→ ←  l h",
+        "Unfold or fold a folder or group, next/prev mail",
+    ),
     ("*", "Add the folder to Favorites or take it out"),
     ("↑ ↓  j k", "Move, or scroll the message"),
     ("PgUp PgDn Ctrl-B Ctrl-F", "Move or scroll a page"),
