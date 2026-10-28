@@ -426,6 +426,10 @@ impl AppState {
                 }
                 visual::Request::Copy(text) => {
                     self.visual = None;
+                    match text.lines().count() {
+                        1 => self.show_info("Copied 1 line"),
+                        lines => self.show_info(format!("Copied {lines} lines")),
+                    }
                     return Some(Effect::Copy(text));
                 }
                 visual::Request::Close => self.visual = None,
@@ -1320,6 +1324,7 @@ Dear Charles,"
             ))
         );
         assert!(app.visual.is_none(), "copying stops picking");
+        assert_eq!(app.status, Some(Status::Info("Copied 4 lines".to_owned())));
     }
 
     #[test]
