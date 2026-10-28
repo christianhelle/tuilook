@@ -40,6 +40,11 @@ pub enum Command {
         ids: Vec<MessageId>,
         permanent: bool,
     },
+    /// Move messages into another folder.
+    Move {
+        ids: Vec<MessageId>,
+        to: FolderId,
+    },
     /// Mark a message read, as it is being shown.
     MarkRead(MessageId),
     Send(Draft),
@@ -89,6 +94,9 @@ pub async fn run_engine(
             }
             Command::Delete { ids, permanent } => {
                 delete(&backend, &mut store, &ids, permanent, &events).await
+            }
+            Command::Move { ids, to } => {
+                move_messages(&backend, &mut store, &ids, to, &events).await
             }
             Command::MarkRead(message) => {
                 let event = match mark_read(&backend, &mut store, &message).await {
@@ -222,6 +230,51 @@ async fn delete(
         events.send(Event::Error(error)).await?;
     }
     Ok(())
+}
+
+/// Moves each message, reporting the ones that went and why any did not,
+/// then syncs the folder they went to so they show there.
+async fn move_messages(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    ids: &[MessageId],
+    to: FolderId,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    let mut moved = Vec::new();
+    let mut failures = Vec::new();
+    for id in ids {
+        match backend.move_message(id, &to).await {
+            Ok(()) => moved.push(id.clone()),
+            Err(e) => failures.push(e.to_string()),
+        }
+    }
+    // Graph gives a moved message a new id; the sync below brings it back.
+    if let Err(e) = store.delete_messages(&moved) {
+        failures.push(e.to_string());
+    }
+    if !moved.is_empty() {
+        let event = Event::MessagesMoved {
+            ids: moved.clone(),
+            to: to.clone(),
+        };
+        events.send(event).await?;
+    }
+    if let Some(first) = failures.first() {
+        let error = match moved.len() {
+            0 => format!("could not move: {first}"),
+            n => format!("moved {n}, {} failed: {first}", failures.len()),
+        };
+        events.send(Event::Error(error)).await?;
+    }
+    if moved.is_empty() {
+        return Ok(());
+    }
+    let event = match sync_messages(backend, store, &to).await {
+        Ok(()) => Event::FolderSynced(to),
+        Err(e) => Event::Error(e.to_string()),
+    };
+    events.send(event).await
 }
 
 /// Marks a message read on the server, then in the store. Returns the folder

@@ -799,9 +799,28 @@ impl AppState {
         }
     }
 
-    /// Drops messages core deleted. The selection stays on the same row, so
-    /// the message after a deleted one is selected next.
+    /// Drops messages core deleted.
     pub fn messages_deleted(&mut self, ids: &[MessageId]) -> Option<Effect> {
+        let s = if ids.len() == 1 { "" } else { "s" };
+        self.show_info(format!("Deleted {} message{s}", ids.len()));
+        self.drop_messages(ids)
+    }
+
+    /// Drops messages core moved to folder `to`.
+    pub fn messages_moved(&mut self, ids: &[MessageId], to: &FolderId) -> Option<Effect> {
+        let s = if ids.len() == 1 { "" } else { "s" };
+        let name = self
+            .folders
+            .iter()
+            .find(|f| &f.id == to)
+            .map_or("another folder", |f| f.name.as_str());
+        self.show_info(format!("Moved {} message{s} to {name}", ids.len()));
+        self.drop_messages(ids)
+    }
+
+    /// Drops messages that left the list. The selection stays on the same
+    /// row, so the message after a dropped one is selected next.
+    fn drop_messages(&mut self, ids: &[MessageId]) -> Option<Effect> {
         let selected = self.selected().map(|m| m.id.clone());
         let gone = |m: &Message| ids.contains(&m.id);
         let before = self.messages.iter().take(self.selected_message);
@@ -812,8 +831,6 @@ impl AppState {
         for id in ids {
             self.marked.remove(id);
         }
-        let s = if ids.len() == 1 { "" } else { "s" };
-        self.show_info(format!("Deleted {} message{s}", ids.len()));
         if self.selected().map(|m| &m.id) == selected.as_ref() {
             None
         } else {

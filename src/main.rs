@@ -549,6 +549,7 @@ fn on_core_event(
         }
         Event::BodyLoaded { message, text } => app.body_loaded(message, text),
         Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
+        Event::MessagesMoved { ids, to } => app.messages_moved(&ids, &to),
         Event::Sent => {
             app.mail_sent(Instant::now());
             None

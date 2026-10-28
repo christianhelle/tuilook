@@ -486,3 +486,81 @@ async fn renaming_a_folder_reports_it_then_syncs_the_folder_tree() {
     assert_eq!(events.recv().await, Some(Event::FoldersSynced));
     assert_eq!(renamed.lock().unwrap()[&FolderId("a".to_owned())], "Bills");
 }
+
+fn in_folder(id: &str, folder: &str) -> Message {
+    Message {
+        folder_id: FolderId(folder.to_owned()),
+        ..old(id, 1)
+    }
+}
+
+#[tokio::test]
+async fn moving_reports_what_went_then_syncs_the_folder_it_went_to() {
+    let backend = FakeBackend {
+        folders: vec![folder("a"), folder("b")],
+        messages: [(
+            FolderId("a".to_owned()),
+            vec![in_folder("m1", "a"), in_folder("m2", "a")],
+        )]
+        .into(),
+        ..Default::default()
+    };
+    let moved = backend.moved.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    commands
+        .send(Command::Move {
+            ids: ids(&["m1"]),
+            to: FolderId("b".to_owned()),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::MessagesMoved {
+            ids: ids(&["m1"]),
+            to: FolderId("b".to_owned())
+        })
+    );
+    assert_eq!(
+        events.recv().await,
+        Some(Event::FolderSynced(FolderId("b".to_owned())))
+    );
+    assert_eq!(
+        *moved.lock().unwrap(),
+        [(MessageId("m1".to_owned()), FolderId("b".to_owned()))]
+    );
+}
+
+#[tokio::test]
+async fn a_message_that_will_not_move_is_reported_and_the_rest_still_go() {
+    let backend = FakeBackend {
+        folders: vec![folder("b")],
+        undeletable: ids(&["m2"]).into_iter().collect(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::Move {
+            ids: ids(&["m1", "m2"]),
+            to: FolderId("b".to_owned()),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::MessagesMoved {
+            ids: ids(&["m1"]),
+            to: FolderId("b".to_owned())
+        })
+    );
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error("moved 1, 1 failed: m2 is locked".to_owned()))
+    );
+}

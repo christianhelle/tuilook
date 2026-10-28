@@ -85,6 +85,12 @@ pub enum Event {
     },
     /// These messages were deleted and are gone from the store.
     MessagesDeleted(Vec<MessageId>),
+    /// These messages were moved to the folder and are gone from the store
+    /// until it syncs, which follows.
+    MessagesMoved {
+        ids: Vec<MessageId>,
+        to: FolderId,
+    },
     Sent,
     /// The message being sent was not; it is still open to try again.
     SendFailed(String),
