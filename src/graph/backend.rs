@@ -221,10 +221,16 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             let path = format!("/me/messages/{}/permanentDelete", message.0);
             self.client.post_no_content(&path, None).await?;
         } else {
-            let path = format!("/me/messages/{}/move", message.0);
-            let target = json!({ "destinationId": WellKnown::DeletedItems.as_graph_name() });
-            self.client.post::<dto::Id>(&path, &target).await?;
+            let deleted = FolderId(WellKnown::DeletedItems.as_graph_name().to_owned());
+            self.move_message(message, &deleted).await?;
         }
+        Ok(())
+    }
+
+    async fn move_message(&self, message: &MessageId, to: &FolderId) -> Result<(), BackendError> {
+        let path = format!("/me/messages/{}/move", message.0);
+        let target = json!({ "destinationId": to.0 });
+        self.client.post::<dto::Id>(&path, &target).await?;
         Ok(())
     }
 

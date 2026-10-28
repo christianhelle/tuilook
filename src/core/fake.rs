@@ -34,7 +34,10 @@ pub struct FakeBackend {
     pub deleted_folders: Arc<Mutex<Vec<(FolderId, bool)>>>,
     /// Messages deleted so far, and whether permanently.
     pub deleted: Arc<Mutex<Vec<(MessageId, bool)>>>,
-    /// Messages that fail to delete.
+    /// Messages moved so far, and the folder each went to. Later syncs
+    /// report them in that folder.
+    pub moved: Arc<Mutex<Vec<(MessageId, FolderId)>>>,
+    /// Messages that fail to delete or move.
     pub undeletable: HashSet<MessageId>,
     /// Messages marked read so far. Later syncs report them as read.
     pub read: Arc<Mutex<HashSet<MessageId>>>,
@@ -70,8 +73,17 @@ impl MailBackend for FakeBackend {
             return scripted.clone();
         }
         let read = self.read.lock().expect("no test panics holding it");
-        let mut upserted = self.messages.get(folder).cloned().unwrap_or_default();
+        let moved = self.moved.lock().expect("no test panics holding it");
+        let now_in: HashMap<&MessageId, &FolderId> = moved.iter().map(|(m, f)| (m, f)).collect();
+        let mut upserted: Vec<Message> = self
+            .messages
+            .iter()
+            .flat_map(|(was_in, messages)| messages.iter().map(move |m| (was_in, m)))
+            .filter(|(was_in, m)| now_in.get(&m.id).copied().unwrap_or(was_in) == folder)
+            .map(|(_, m)| m.clone())
+            .collect();
         for m in &mut upserted {
+            m.folder_id = folder.clone();
             m.is_read |= read.contains(&m.id);
         }
         Ok(DeltaPage {
@@ -116,6 +128,15 @@ impl MailBackend for FakeBackend {
         }
         let mut deleted = self.deleted.lock().expect("no test panics holding it");
         deleted.push((message.clone(), permanent));
+        Ok(())
+    }
+
+    async fn move_message(&self, message: &MessageId, to: &FolderId) -> Result<(), BackendError> {
+        if self.undeletable.contains(message) {
+            return Err(BackendError::Other(format!("{} is locked", message.0)));
+        }
+        let mut moved = self.moved.lock().expect("no test panics holding it");
+        moved.push((message.clone(), to.clone()));
         Ok(())
     }
 

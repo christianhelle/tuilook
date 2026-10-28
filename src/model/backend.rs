@@ -81,6 +81,13 @@ pub trait MailBackend {
         permanent: bool,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 
+    /// Moves a message into another folder.
+    fn move_message(
+        &self,
+        message: &MessageId,
+        to: &FolderId,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
     /// Deletes a folder and everything in it: to Deleted Items, or for good
     /// when `permanent`.
     fn delete_folder(

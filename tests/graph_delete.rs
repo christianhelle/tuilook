@@ -77,3 +77,21 @@ async fn deleting_a_folder_permanently_skips_deleted_items() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn moving_a_message_posts_its_new_folder() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/messages/m1/move"))
+        .and(body_json(json!({"destinationId": "f2"})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({"id": "m1-moved"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let backend = GraphBackend::new(support::client(&server).0);
+
+    backend
+        .move_message(&MessageId("m1".to_owned()), &FolderId("f2".to_owned()))
+        .await
+        .unwrap();
+}
