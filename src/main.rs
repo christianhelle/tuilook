@@ -524,9 +524,7 @@ fn on_core_event(
                 Some(Effect::Search(query.to_owned()))
             } else if app.shown_folder().as_ref() == Some(&id) {
                 let messages = if app.shows_unread() {
-                    // The message being read stays until another is picked.
-                    let selected = app.messages.get(app.selected_message);
-                    store.unread_in(&id, selected.map(|m| &m.id))?
+                    store.unread_in(&id, &app.kept_read())?
                 } else {
                     store.messages_in(&id)?
                 };
@@ -571,7 +569,7 @@ fn apply(
         let Mailbox { store, commands } = &mailboxes[app.account_for(&next)];
         effect = match next {
             Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
-            Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, None)?),
+            Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
             Effect::LoadBody(id) => {
                 commands.blocking_send(Command::LoadBody(id))?;
                 None

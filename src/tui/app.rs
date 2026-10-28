@@ -119,6 +119,9 @@ pub struct SyncState {
     pub next: Option<Instant>,
     /// How often to sync on its own; never when `None`.
     pub every: Option<Duration>,
+    /// Whether the running sync was asked for with F5, which also lets the
+    /// unread list drop the mail read in it.
+    pub forced: bool,
 }
 
 impl SyncState {
@@ -422,10 +425,15 @@ impl AppState {
                 }
             }
             Action::Delete | Action::DeletePermanently => {}
-            Action::Refresh if self.sync.running => self.show_busy("Syncing…"),
+            Action::Refresh if self.sync.running => {
+                self.sync.forced = true;
+                self.show_busy("Syncing…");
+            }
             Action::Refresh => {
                 self.show_busy("Syncing…");
-                return self.start_sync();
+                let effect = self.start_sync();
+                self.sync.forced = true;
+                return effect;
             }
             Action::Help => self.show_help = true,
             Action::Search => self.start_search(),
@@ -737,6 +745,7 @@ impl AppState {
             return;
         }
         self.sync.running = false;
+        self.sync.forced = false;
         if let Some(every) = self.sync.every {
             self.sync.due_by(now + every);
         }

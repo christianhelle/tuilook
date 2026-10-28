@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use crate::model::{Folder, FolderId, WellKnown};
+use crate::model::{Folder, FolderId, MessageId, WellKnown};
 
 use crate::tui::app::{AppState, account_row, is_unread_row, row_target, unread_row};
 
@@ -104,6 +104,18 @@ impl AppState {
             .skip(self.favorite_count())
             .take_while(|f| is_unread_row(f))
             .count()
+    }
+
+    /// The read messages the unread list keeps when it is loaded again after
+    /// a sync: every one it shows, so going back to mail just read still
+    /// works. After F5 only the one being read stays. Picking the folder
+    /// again drops them all.
+    pub fn kept_read(&self) -> Vec<MessageId> {
+        if self.sync.forced {
+            let selected = self.messages.get(self.selected_message);
+            return selected.map(|m| m.id.clone()).into_iter().collect();
+        }
+        self.messages.iter().map(|m| m.id.clone()).collect()
     }
 
     /// Whether the selected row is in the unread section, and so the
@@ -237,6 +249,44 @@ mod tests {
         ]);
 
         assert_eq!(unread_names(&app), ["Inbox"]);
+    }
+
+    fn message(id: &str, is_read: bool) -> crate::model::Message {
+        crate::model::Message {
+            id: MessageId(id.to_owned()),
+            folder_id: FolderId("work-inbox".to_owned()),
+            conversation_id: String::new(),
+            subject: id.to_owned(),
+            from_name: String::new(),
+            from_addr: String::new(),
+            received_at: jiff::Timestamp::UNIX_EPOCH,
+            is_read,
+            flagged: false,
+            importance: Default::default(),
+            has_attachments: false,
+            preview: String::new(),
+        }
+    }
+
+    fn ids(ids: &[&str]) -> Vec<MessageId> {
+        ids.iter().map(|id| MessageId((*id).to_owned())).collect()
+    }
+
+    #[test]
+    fn mail_read_in_the_list_stays_until_f5() {
+        let mut app = two_accounts();
+        select(&mut app, "unread:work-inbox");
+        app.set_messages(vec![message("m1", true), message("m2", false)]);
+        app.selected_message = 1;
+
+        assert_eq!(app.kept_read(), ids(&["m1", "m2"]));
+
+        app.update(crate::model::Action::Refresh);
+        assert_eq!(app.kept_read(), ids(&["m2"]), "only the one being read");
+
+        app.sync_finished(std::time::Instant::now());
+        app.sync_finished(std::time::Instant::now());
+        assert_eq!(app.kept_read(), ids(&["m1", "m2"]));
     }
 
     #[test]

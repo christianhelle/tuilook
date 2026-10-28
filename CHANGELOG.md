@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edit before sending.
 - An Unread section in the folder pane, between Favorites and the accounts. It
   lists each account's folders that have unread mail, leaving out Junk Email
-  and Deleted Items, and picking one shows only its unread messages.
+  and Deleted Items, and picking one shows only its unread messages. Mail read
+  there stays in the list until the folder is picked again or `F5` is pressed.
 
 ### Changed
 

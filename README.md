@@ -268,8 +268,9 @@ each account's Inbox, the favorite also shows the account, as in
 
 Unread lists your accounts' folders again, but only those with unread mail,
 leaving out Junk Email and Deleted Items. Picking a folder there shows only its
-unread messages. A message you open stays in the list, shown as read, until you
-move on and the list is loaded again, and the folder stays until you leave it.
+unread messages. Mail you read stays in the list, shown as read, so you can go
+back to it, until you pick the folder again or press `F5`; after `F5` only the
+message you are reading stays. The folder stays until you leave it.
 
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.

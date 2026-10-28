@@ -406,7 +406,7 @@ fn search_returns_at_most_the_limit_newest_first() {
 }
 
 #[test]
-fn unread_in_lists_a_folders_unread_mail_and_the_one_kept() {
+fn unread_in_lists_a_folders_unread_mail_and_those_kept() {
     let mut read = message("read", "inbox", "2026-01-01T09:00:00Z");
     read.is_read = true;
     let mut kept = message("kept", "inbox", "2026-01-02T09:00:00Z");
@@ -418,9 +418,11 @@ fn unread_in_lists_a_folders_unread_mail_and_the_one_kept() {
     let store = store_with(&[read, kept.clone(), unread, elsewhere]);
     let inbox = FolderId("inbox".to_owned());
 
-    assert_eq!(ids(&store.unread_in(&inbox, None).unwrap()), ["unread"]);
+    assert_eq!(ids(&store.unread_in(&inbox, &[]).unwrap()), ["unread"]);
     assert_eq!(
-        ids(&store.unread_in(&inbox, Some(&kept.id)).unwrap()),
+        ids(&store
+            .unread_in(&inbox, std::slice::from_ref(&kept.id))
+            .unwrap()),
         ["unread", "kept"]
     );
 }
