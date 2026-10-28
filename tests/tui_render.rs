@@ -713,3 +713,11 @@ fn the_focused_reader_shows_its_cursor() {
     assert!(reversed(&terminal, "Subject:"));
     assert!(!reversed(&terminal, "ubject:"));
 }
+
+#[test]
+fn the_focused_reader_shows_normal_mode() {
+    let mut app = sample_app();
+    app.focus = Pane::Reader;
+
+    insta::assert_snapshot!(render(&app));
+}

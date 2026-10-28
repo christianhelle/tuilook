@@ -298,7 +298,7 @@ fn status_line(app: &AppState) -> Line<'static> {
     let picking = app.viewer.mode() != VimMode::Normal;
     let mode = match editing {
         Some(body) => Some(body.vim.mode),
-        None => picking.then(|| app.viewer.mode()),
+        None => (picking || app.focus == Pane::Reader).then(|| app.viewer.mode()),
     };
     if let Some(mode) = mode {
         let color = match mode {
@@ -324,6 +324,9 @@ fn status_line(app: &AppState) -> Line<'static> {
         }
         None if app.signature.is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
         None if picking => Span::raw(" y copy · Esc cancel"),
+        None if app.focus == Pane::Reader => {
+            Span::raw(" v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit")
+        }
         None => Span::raw(
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",
         ),

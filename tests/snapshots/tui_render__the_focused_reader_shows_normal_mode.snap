@@ -1,0 +1,16 @@
+---
+source: tests/tui_render.rs
+expression: render(&app)
+---
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┏ Reading ━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"│* adds the selec││  ▾ Older (2)                     │┃From: Ada <ada@example.com>       ┃"
+"└────────────────┘│> Ada                             │┃Subject: Analytical engine        ┃"
+"┌ Unread ────────┐│    Analytical engine             │┃                                  ┃"
+"│No unread mail  ││  Grace                           │┃Notes on the engine               ┃"
+"└────────────────┘│    Compiler draft                │┃                                  ┃"
+"┌ Folders ───────┐│                                  │┃                                  ┃"
+"│>   Inbox (2)   ││                                  │┃                                  ┃"
+"│    Sent Items  ││                                  │┃                                  ┃"
+"│    Projects    ││                                  │┃                                  ┃"
+"└────────────────┘└──────────────────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" NORMAL  v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit              "

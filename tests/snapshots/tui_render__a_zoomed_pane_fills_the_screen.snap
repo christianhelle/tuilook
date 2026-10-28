@@ -1,6 +1,5 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 158
 expression: render(&app)
 ---
 "┏ Reading ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -14,4 +13,4 @@ expression: render(&app)
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"
 "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "
+" NORMAL  v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit              "
