@@ -724,14 +724,15 @@ pub const HELP: [(&str, &str); 22] = [
         "v V then y, or yy",
         "Pick text or lines from the cursor, copy them",
     ),
-    ("z", "Zoom the pane, or show every pane again"),
-    ("b", "Hide or show the folders"),
+    ("z  b", "Zoom the pane or show all, hide the folders"),
     (
         "Space, Ctrl-A",
         "Mark a message, mark them all (Esc clears)",
     ),
     ("d", "Move marked, selected or folder to Deleted Items"),
     ("D", "Delete marked, selected or folder for good"),
+    ("m", "Move marked or selected mail to a folder"),
+    ("a  A  F2", "New subfolder, new top folder, rename folder"),
     (
         "c  r  R  f",
         "Write a message, reply, reply to all, forward",
@@ -739,8 +740,7 @@ pub const HELP: [(&str, &str); 22] = [
     ("F5  Ctrl-R", "Sync every folder now"),
     ("/", "Search every folder (Esc goes back)"),
     ("S", "Write this account's signature"),
-    ("?", "Show this help"),
-    ("q  Ctrl-C", "Quit"),
+    ("?  q  Ctrl-C", "Show this help, quit"),
     ("", "Press any key to close"),
 ];
 
