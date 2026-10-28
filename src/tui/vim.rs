@@ -252,6 +252,11 @@ fn normal_key(
         vim.operator = None;
         return Outcome::Handled;
     }
+    if code == KeyCode::Char('g') && !ctrl {
+        vim.g = true;
+        vim.count = typed;
+        return Outcome::Handled;
+    }
     if matches!(vim.mode, VimMode::Visual | VimMode::VisualLine) {
         return visual_key(vim, editor, code, ctrl, register);
     }
@@ -260,10 +265,6 @@ fn normal_key(
     match code {
         KeyCode::Esc if pending => vim.reset(),
         KeyCode::Esc => return Outcome::Leave,
-        KeyCode::Char('g') if !ctrl => {
-            vim.g = true;
-            vim.count = typed;
-        }
         KeyCode::Char(c) if !ctrl && Operator::of(c).is_some() => {
             let Some(operator) = Operator::of(c) else {
                 return Outcome::Handled;
@@ -816,6 +817,25 @@ mod tests {
         assert_eq!(outcome, Outcome::Yanked("a\nb".into()));
         assert_eq!(typing.cursor(), (0, 0));
         assert_eq!(typing.editor.vim.mode, VimMode::Normal);
+    }
+
+    #[test]
+    fn gg_moves_to_the_top_in_visual_mode() {
+        let mut typing = Typing::new(
+            "abc
+def",
+        );
+
+        let outcome = typing.keys("jvggy");
+
+        assert_eq!(
+            outcome,
+            Outcome::Yanked(
+                "abc
+d"
+                .into()
+            )
+        );
     }
 
     #[test]
