@@ -5,7 +5,7 @@ expression: terminal.backend().to_string()
 "┌ Favor┌Keys──────────────────────────────────────────────────────────────────────┐──────┐"
 "│* adds│Tab / Shift-Tab          Next pane / previous pane                        │      │"
 "└──────│Enter                    Open the folder or message, fold a date group    │      │"
-"┌ Unrea│→ ←  l h                 Unfold or fold a folder or date group            │      │"
+"┌ Unrea│→ ←  l h                 Unfold or fold a folder or group, next/prev mail │      │"
 "│No unr│*                        Add the folder to Favorites or take it out       │      │"
 "└──────│↑ ↓  j k                 Move, or scroll the message                      │      │"
 "┏ Folde│PgUp PgDn Ctrl-B Ctrl-F  Move or scroll a page                            │      │"
