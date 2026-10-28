@@ -2261,6 +2261,33 @@ Ada"
     }
 
     #[test]
+    fn the_reader_stays_on_the_first_and_last_mail() {
+        let mut app = with_folders(&["a"]);
+        app.set_messages(today_and_older(&["t1"], &["o1"]));
+        app.focus = Pane::Reader;
+        app.body = Some("t1".to_owned());
+
+        assert_eq!(app.update(Action::Collapse), None);
+        assert_eq!(app.body.as_deref(), Some("t1"), "still showing t1");
+        app.update(Action::Expand);
+        assert_eq!(app.update(Action::Expand), None);
+        assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("o1"));
+    }
+
+    #[test]
+    fn the_zoomed_reader_skips_the_mail_of_folded_groups() {
+        let mut app = with_folders(&["a"]);
+        app.collapsed_groups.insert(DateGroup::Older);
+        app.set_messages(today_and_older(&["t1"], &["o1", "o2"]));
+        app.focus = Pane::Reader;
+        app.zoomed = true;
+
+        assert_eq!(app.update(Action::Expand), None);
+        assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("t1"));
+        assert_eq!(app.zoomed_pane(), Some(Pane::Reader));
+    }
+
+    #[test]
     fn enter_on_a_header_folds_and_unfolds_it() {
         let mut app = in_message_list(&["m0"]);
         app.update(Action::Top);
