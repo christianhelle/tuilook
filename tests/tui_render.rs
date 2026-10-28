@@ -173,6 +173,7 @@ fn viewport_measures_what_each_pane_can_show() {
             reader: 9,
             // From, Subject, blank, "Hi", then the long line wrapped in three
             reader_lines: 7,
+            reader_width: 34,
             compose: 0,
         }
     );

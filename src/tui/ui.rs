@@ -991,6 +991,7 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
         messages: messages / MESSAGE_ROWS,
         reader,
         reader_lines: reader_paragraph(app).map_or(0, |p| p.line_count(reader_width)),
+        reader_width,
         compose: match (&app.compose, &app.signature) {
             (Some(compose), _) => usize::from(compose_areas(panes.compose, compose).body.height),
             (None, Some(_)) => usize::from(signature_areas(panes.compose)[1].height),

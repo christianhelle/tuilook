@@ -5,7 +5,10 @@ use std::{
 
 use crate::model::{Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId};
 use jiff::{Timestamp, Zoned};
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::{
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    widgets::{Paragraph, Wrap},
+};
 
 use crate::tui::{
     compose::{Compose, Request},
@@ -166,6 +169,8 @@ pub struct Viewport {
     pub reader: usize,
     /// Lines the reading pane's content takes once wrapped.
     pub reader_lines: usize,
+    /// Columns the reading pane wraps its lines to.
+    pub reader_width: u16,
     /// Body lines that fit while writing a message.
     pub compose: usize,
 }
@@ -305,6 +310,33 @@ impl AppState {
         let body = self.body.as_deref().unwrap_or(&m.preview);
         text.extend(shown(body).lines().map(str::to_owned));
         Some(text)
+    }
+
+    /// The rows each line of the reading pane takes once wrapped.
+    fn reader_rows(&self) -> Vec<usize> {
+        let width = self.viewport.reader_width.max(1);
+        self.reader_text()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|line| {
+                Paragraph::new(line)
+                    .wrap(Wrap { trim: false })
+                    .line_count(width)
+            })
+            .collect()
+    }
+
+    /// The line of the reading pane shown on wrapped row `row`.
+    fn reader_line_at(&self, row: usize) -> usize {
+        let mut top = 0;
+        let rows = self.reader_rows();
+        for (line, height) in rows.iter().enumerate() {
+            top += height;
+            if row < top {
+                return line;
+            }
+        }
+        rows.len().saturating_sub(1)
     }
 
     /// The pane filling the screen, which follows the focus while zoomed.
@@ -508,7 +540,8 @@ impl AppState {
             Action::Search => self.start_search(),
             Action::Visual | Action::VisualLine if self.focus == Pane::Reader => {
                 let line = action == Action::VisualLine;
-                self.visual = self.reader_text().map(|text| Visual::new(&text, 0, line));
+                let top = self.reader_line_at(self.reader_scroll);
+                self.visual = self.reader_text().map(|text| Visual::new(&text, top, line));
             }
             Action::Visual | Action::VisualLine => {}
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
@@ -1274,6 +1307,23 @@ Dear Charles,"
             ))
         );
         assert!(app.visual.is_none(), "copying stops picking");
+    }
+
+    #[test]
+    fn picking_starts_at_the_line_at_the_top_of_the_reader() {
+        let mut app = reading(10, 20);
+        app.viewport.reader_width = 34;
+        // The long line wraps to three rows, so "Second" is the seventh row
+        app.body = Some(format!(
+            "{}
+Second",
+            "word ".repeat(20)
+        ));
+        app.reader_scroll = 6;
+
+        let effect = type_keys(&mut app, "v$y");
+
+        assert_eq!(effect, Some(Effect::Copy("Second".to_owned())));
     }
 
     #[test]
