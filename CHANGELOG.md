@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lists each account's folders that have unread mail, leaving out Junk Email
   and Deleted Items, and picking one shows only its unread messages. Mail read
   there stays in the list until the folder is picked again or `F5` is pressed.
+- Deleting folders: `d` in the folder pane moves the selected folder and
+  everything in it to Deleted Items, and `D` deletes it for good, after asking.
+  Outlook's own folders cannot be deleted.
 
 ### Changed
 
@@ -34,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Mail older than 90 days can be read. Sync still reaches back 90 days, but
+  moving to the end of the message list, or picking a folder that shows
+  nothing, fetches the next page of older mail while the folder holds more. A
+  folder in the Unread section whose unread mail is all older, which showed an
+  empty list, now shows it.
 - Accounts folded in the folder pane, in either section, stay folded the next
   time tuilook starts, just as expanded and collapsed folders do.
 - A message read, flagged or otherwise changed outside tuilook no longer loses

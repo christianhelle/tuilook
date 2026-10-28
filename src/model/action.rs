@@ -30,9 +30,11 @@ pub enum Action {
     ToggleMark,
     MarkAll,
     ClearMarks,
-    /// Move the marked or selected messages to Deleted Items, after asking.
+    /// Move the marked or selected messages, or in the folder pane the
+    /// selected folder, to Deleted Items, after asking.
     Delete,
-    /// Delete the marked or selected messages for good, after asking.
+    /// Delete the marked or selected messages, or the selected folder, for
+    /// good, after asking.
     DeletePermanently,
     /// Sync every folder now.
     Refresh,
@@ -64,6 +66,15 @@ pub enum Event {
         message: MessageId,
         text: String,
     },
+    /// A page of a folder's older mail is in the store; `more` says whether
+    /// there is older mail still to fetch.
+    OlderLoaded {
+        folder: FolderId,
+        unread_only: bool,
+        more: bool,
+    },
+    /// The folder was deleted. The folder tree is synced right after.
+    FolderDeleted(FolderId),
     /// These messages were deleted and are gone from the store.
     MessagesDeleted(Vec<MessageId>),
     Sent,

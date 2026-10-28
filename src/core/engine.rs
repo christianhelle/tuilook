@@ -1,5 +1,8 @@
+use std::collections::HashSet;
+
 use crate::model::{BackendError, Draft, Event, FolderId, MailBackend, MessageId, WellKnown};
 use crate::store::Store;
+use jiff::Timestamp;
 use tokio::sync::mpsc;
 
 use crate::core::{load_body, sync_folders, sync_messages};
@@ -10,6 +13,18 @@ pub enum Command {
     /// Refresh the folder tree, then every folder's messages.
     SyncAll,
     LoadBody(MessageId),
+    /// Fetch a page of a folder's mail received at or before `before`, which
+    /// sync does not reach, and only unread mail when `unread_only`.
+    LoadOlder {
+        folder: FolderId,
+        before: Timestamp,
+        unread_only: bool,
+    },
+    /// Delete a folder: to Deleted Items, or for good when `permanent`.
+    DeleteFolder {
+        folder: FolderId,
+        permanent: bool,
+    },
     /// Delete messages: to Deleted Items, or for good when `permanent`.
     Delete {
         ids: Vec<MessageId>,
@@ -40,6 +55,14 @@ pub async fn run_engine(
                 };
                 events.send(event).await
             }
+            Command::LoadOlder {
+                folder,
+                before,
+                unread_only,
+            } => load_older(&backend, &mut store, folder, before, unread_only, &events).await,
+            Command::DeleteFolder { folder, permanent } => {
+                delete_folder(&backend, &mut store, folder, permanent, &events).await
+            }
             Command::Delete { ids, permanent } => {
                 delete(&backend, &mut store, &ids, permanent, &events).await
             }
@@ -59,6 +82,71 @@ pub async fn run_engine(
         if sent.is_err() {
             return; // The UI has gone away.
         }
+    }
+}
+
+/// Caches a page of a folder's older mail. There is more to fetch only
+/// while pages bring mail not cached yet, so a page of mail already cached
+/// cannot have the UI ask for the same page forever.
+async fn load_older(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    folder: FolderId,
+    before: Timestamp,
+    unread_only: bool,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    let fetched = backend.older_messages(&folder, before, unread_only).await;
+    let cached = store
+        .messages_in(&folder)
+        .map(|messages| messages.into_iter().map(|m| m.id).collect::<HashSet<_>>());
+    let more = match (fetched, cached) {
+        (Ok(page), Ok(cached)) => {
+            let new = page.messages.iter().any(|m| !cached.contains(&m.id));
+            match store.upsert_messages(&page.messages) {
+                Ok(()) => page.more && new,
+                Err(e) => {
+                    events.send(Event::Error(e.to_string())).await?;
+                    false
+                }
+            }
+        }
+        (Err(e), _) => {
+            let error = format!("could not load older mail: {e}");
+            events.send(Event::Error(error)).await?;
+            false
+        }
+        (_, Err(e)) => {
+            events.send(Event::Error(e.to_string())).await?;
+            false
+        }
+    };
+    events
+        .send(Event::OlderLoaded {
+            folder,
+            unread_only,
+            more,
+        })
+        .await
+}
+
+/// Deletes a folder, then refreshes the folder tree so it leaves it, or
+/// shows up again under Deleted Items.
+async fn delete_folder(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    folder: FolderId,
+    permanent: bool,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    if let Err(e) = backend.delete_folder(&folder, permanent).await {
+        let error = format!("could not delete the folder: {e}");
+        return events.send(Event::Error(error)).await;
+    }
+    events.send(Event::FolderDeleted(folder)).await?;
+    match sync_folders(backend, store).await {
+        Ok(()) => events.send(Event::FoldersSynced).await,
+        Err(e) => events.send(Event::Error(e.to_string())).await,
     }
 }
 

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use crate::model::FolderId;
 
-use crate::tui::app::{AppState, Effect};
+use crate::tui::app::{AppState, Confirm, Effect, is_account_row, row_target};
 
 impl AppState {
     /// Indexes into `folders` of the folders shown, in order: the top-level
@@ -103,6 +103,39 @@ impl AppState {
         self.load_shown()
     }
 
+    /// d or D in the folder pane: asks before deleting the selected folder.
+    /// Outlook's own folders, such as Inbox, cannot be deleted.
+    pub(crate) fn ask_to_delete_folder(&mut self, permanent: bool) {
+        let Some(row) = self.folders.get(self.selected_folder) else {
+            return;
+        };
+        if is_account_row(row) {
+            return;
+        }
+        let name = row.name.clone();
+        if row.well_known.is_some() {
+            self.show_error(format!(
+                "{name} is one of Outlook's own folders and cannot be deleted"
+            ));
+            return;
+        }
+        self.confirm = Some(Confirm::DeleteFolder {
+            folder: row_target(&row.id),
+            name,
+            permanent,
+        });
+    }
+
+    /// Says core deleted a folder; the folder tree follows.
+    pub fn folder_deleted(&mut self, folder: &FolderId) {
+        let name = self
+            .folders
+            .iter()
+            .find(|f| &f.id == folder)
+            .map_or_else(|| "the folder".to_owned(), |f| f.name.clone());
+        self.show_info(format!("Deleted {name}"));
+    }
+
     /// Expands every folder above the selected one, so it is shown.
     pub(crate) fn reveal_selected_folder(&mut self) {
         let mut parent = self
@@ -167,6 +200,68 @@ mod tests {
 
     fn selected(app: &AppState) -> &str {
         &app.folders[app.selected_folder].name
+    }
+
+    fn key(app: &mut AppState, c: char) -> Option<Effect> {
+        let code = ratatui::crossterm::event::KeyCode::Char(c);
+        let key = ratatui::crossterm::event::KeyEvent::from(code);
+        app.on_key(key, &mut crate::tui::keymap::Keymap::default())
+    }
+
+    #[test]
+    fn d_in_the_folders_asks_then_moves_the_folder_to_deleted_items() {
+        let mut app = tree();
+        app.selected_folder = at(&app, "archive");
+
+        assert_eq!(key(&mut app, 'd'), None);
+        assert_eq!(
+            app.confirm,
+            Some(Confirm::DeleteFolder {
+                folder: FolderId("archive".to_owned()),
+                name: "archive".to_owned(),
+                permanent: false,
+            })
+        );
+        assert_eq!(
+            key(&mut app, 'y'),
+            Some(Effect::DeleteFolder {
+                folder: FolderId("archive".to_owned()),
+                permanent: false,
+            })
+        );
+    }
+
+    #[test]
+    fn shift_d_in_the_folders_deletes_for_good_and_any_other_key_cancels() {
+        let mut app = tree();
+        app.selected_folder = at(&app, "archive");
+
+        key(&mut app, 'D');
+        assert!(matches!(
+            app.confirm,
+            Some(Confirm::DeleteFolder {
+                permanent: true,
+                ..
+            })
+        ));
+        assert_eq!(key(&mut app, 'n'), None);
+        assert_eq!(app.confirm, None);
+    }
+
+    #[test]
+    fn outlooks_own_folders_cannot_be_deleted() {
+        let mut app = AppState::default();
+        let mut inbox = folder("inbox", None, 0);
+        inbox.well_known = Some(crate::model::WellKnown::Inbox);
+        app.set_folders(vec![inbox]);
+
+        key(&mut app, 'd');
+
+        assert_eq!(app.confirm, None);
+        assert!(matches!(
+            app.status,
+            Some(crate::tui::app::Status::Error(_))
+        ));
     }
 
     fn load(id: &str) -> Option<Effect> {

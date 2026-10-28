@@ -5,9 +5,15 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use jiff::Timestamp;
+
 use crate::model::{
     BackendError, Body, DeltaPage, Draft, Folder, FolderId, MailBackend, Message, MessageId,
+    OlderPage,
 };
+
+/// Older messages the fake hands out at a time.
+pub const OLDER_PAGE: usize = 2;
 
 #[derive(Debug, Clone, Default)]
 pub struct FakeBackend {
@@ -17,6 +23,11 @@ pub struct FakeBackend {
     /// Answers for a folder's delta sync from a given link. A first sync
     /// (`None`) that is not scripted returns all of the folder's `messages`.
     pub deltas: HashMap<(FolderId, Option<String>), Result<DeltaPage, BackendError>>,
+    /// Each folder's mail from before what delta sync reaches, served a
+    /// page of [`OLDER_PAGE`] at a time.
+    pub older: HashMap<FolderId, Vec<Message>>,
+    /// Folders deleted so far, and whether permanently.
+    pub deleted_folders: Arc<Mutex<Vec<(FolderId, bool)>>>,
     /// Messages deleted so far, and whether permanently.
     pub deleted: Arc<Mutex<Vec<(MessageId, bool)>>>,
     /// Messages that fail to delete.
@@ -57,6 +68,29 @@ impl MailBackend for FakeBackend {
         })
     }
 
+    async fn older_messages(
+        &self,
+        folder: &FolderId,
+        before: Timestamp,
+        unread_only: bool,
+    ) -> Result<OlderPage, BackendError> {
+        let mut older: Vec<Message> = self
+            .older
+            .get(folder)
+            .into_iter()
+            .flatten()
+            .filter(|m| m.received_at <= before && !(unread_only && m.is_read))
+            .cloned()
+            .collect();
+        older.sort_by_key(|m| std::cmp::Reverse(m.received_at));
+        let more = older.len() > OLDER_PAGE;
+        older.truncate(OLDER_PAGE);
+        Ok(OlderPage {
+            messages: older,
+            more,
+        })
+    }
+
     async fn fetch_body(&self, message: &MessageId) -> Result<Body, BackendError> {
         self.bodies
             .get(message)
@@ -70,6 +104,15 @@ impl MailBackend for FakeBackend {
         }
         let mut deleted = self.deleted.lock().expect("no test panics holding it");
         deleted.push((message.clone(), permanent));
+        Ok(())
+    }
+
+    async fn delete_folder(&self, folder: &FolderId, permanent: bool) -> Result<(), BackendError> {
+        let mut deleted = self
+            .deleted_folders
+            .lock()
+            .expect("no test panics holding it");
+        deleted.push((folder.clone(), permanent));
         Ok(())
     }
 

@@ -238,3 +238,61 @@ async fn a_change_with_only_some_fields_is_reported_as_a_change() {
         ]
     );
 }
+
+#[tokio::test]
+async fn older_mail_is_a_page_received_before_the_oldest_shown_newest_first() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/me/mailFolders/inbox/messages"))
+        .and(query_param(
+            "$filter",
+            "receivedDateTime le 2026-07-01T00:00:00Z and isRead eq false",
+        ))
+        .and(query_param("$orderby", "receivedDateTime desc"))
+        .and(query_param("$top", "50"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "value": [graph_message("m1", "Old build failed")],
+            "@odata.nextLink": format!("{}/next", server.uri()),
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let page = backend(&server)
+        .older_messages(
+            &FolderId("inbox".to_owned()),
+            "2026-07-01T00:00:00Z".parse().unwrap(),
+            true,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(page.messages, vec![message("m1", "Old build failed")]);
+    assert!(page.more);
+}
+
+#[tokio::test]
+async fn the_last_page_of_older_mail_says_there_is_no_more() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/me/mailFolders/inbox/messages"))
+        .and(query_param(
+            "$filter",
+            "receivedDateTime le 2026-07-01T00:00:00Z",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "value": [] })))
+        .mount(&server)
+        .await;
+
+    let page = backend(&server)
+        .older_messages(
+            &FolderId("inbox".to_owned()),
+            "2026-07-01T00:00:00Z".parse().unwrap(),
+            false,
+        )
+        .await
+        .unwrap();
+
+    assert!(page.messages.is_empty());
+    assert!(!page.more);
+}

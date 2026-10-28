@@ -8,6 +8,7 @@ pub mod favorites;
 pub mod folders;
 pub mod input;
 pub mod keymap;
+pub mod older;
 pub mod search;
 pub mod session;
 pub mod signature;

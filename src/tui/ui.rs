@@ -16,6 +16,7 @@ use crate::tui::{
     },
     compose::{Compose, Field},
     editor::Editor,
+    older::LOADING_OLDER,
     signature::SignatureEditor,
     vim::VimMode,
 };
@@ -182,7 +183,17 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     }
     match &app.confirm {
         Some(Confirm::Delete { ids, permanent }) => {
-            draw_confirm_delete(frame, ids.len(), *permanent);
+            let messages = match ids.len() {
+                1 => "1 message".to_owned(),
+                n => format!("{n} messages"),
+            };
+            draw_confirm_delete(frame, &messages, *permanent);
+        }
+        Some(Confirm::DeleteFolder {
+            name, permanent, ..
+        }) => {
+            let folder = format!("{} and everything in it", shown(name));
+            draw_confirm_delete(frame, &folder, *permanent);
         }
         Some(Confirm::Discard) => draw_confirm_discard(
             frame,
@@ -577,8 +588,8 @@ pub const HELP: [(&str, &str); 20] = [
         "Space, Ctrl-A",
         "Mark a message, mark them all (Esc clears)",
     ),
-    ("d", "Move the marked or selected to Deleted Items"),
-    ("D", "Delete the marked or selected for good"),
+    ("d", "Move marked, selected or folder to Deleted Items"),
+    ("D", "Delete marked, selected or folder for good"),
     (
         "c  r  R  f",
         "Write a message, reply, reply to all, forward",
@@ -626,19 +637,15 @@ pub fn help_line_width(help: &[(&str, &str)]) -> usize {
         .unwrap_or(0)
 }
 
-/// A dialog asking whether to delete the marked or selected messages.
-fn draw_confirm_delete(frame: &mut Frame, count: usize, permanent: bool) {
-    let messages = match count {
-        1 => "1 message".to_owned(),
-        n => format!("{n} messages"),
-    };
+/// A dialog asking whether to delete `what`: messages, or a folder.
+fn draw_confirm_delete(frame: &mut Frame, what: &str, permanent: bool) {
     let mut lines = if permanent {
         vec![
-            Line::raw(format!("Permanently delete {messages}?")),
+            Line::raw(format!("Permanently delete {what}?")),
             Line::raw("This cannot be undone."),
         ]
     } else {
-        vec![Line::raw(format!("Move {messages} to Deleted Items?"))]
+        vec![Line::raw(format!("Move {what} to Deleted Items?"))]
     };
     lines.push(Line::raw(""));
     lines.push(Line::from(vec![
@@ -653,9 +660,12 @@ fn draw_confirm_delete(frame: &mut Frame, count: usize, permanent: bool) {
         "Delete"
     };
     let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    // Wide enough for a long folder name, borders and a space each side.
+    let widest = lines.iter().map(Line::width).max().unwrap_or(0);
+    let width = u16::try_from(widest + 4).unwrap_or(u16::MAX).max(52);
     let area = frame
         .area()
-        .centered(Constraint::Length(52), Constraint::Length(height));
+        .centered(Constraint::Length(width), Constraint::Length(height));
     frame.render_widget(Clear, area);
     frame.render_widget(
         Paragraph::new(lines).block(
@@ -788,6 +798,8 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
     if app.messages.is_empty() {
         let empty = if query.is_some() {
             "Nothing found"
+        } else if app.loading_older.is_some() {
+            LOADING_OLDER
         } else {
             "No messages"
         };

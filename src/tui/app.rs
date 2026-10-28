@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::model::{Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId};
+use jiff::Timestamp;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::{
@@ -20,10 +21,21 @@ pub enum Effect {
     /// Show only the unread messages of a folder.
     LoadUnread(FolderId),
     LoadBody(MessageId),
+    /// Fetch a page of a folder's mail from before what sync reaches.
+    LoadOlder {
+        folder: FolderId,
+        before: Timestamp,
+        unread_only: bool,
+    },
     /// Mark a message read, as the reading pane shows it.
     MarkRead(MessageId),
     Delete {
         ids: Vec<MessageId>,
+        permanent: bool,
+    },
+    /// Delete a folder: to Deleted Items, or for good when `permanent`.
+    DeleteFolder {
+        folder: FolderId,
         permanent: bool,
     },
     /// Sync every folder.
@@ -43,6 +55,12 @@ pub enum Effect {
 pub enum Confirm {
     Delete {
         ids: Vec<MessageId>,
+        permanent: bool,
+    },
+    /// Delete a folder and everything in it.
+    DeleteFolder {
+        folder: FolderId,
+        name: String,
         permanent: bool,
     },
     /// Close the message being written, losing what is in it.
@@ -198,6 +216,12 @@ pub struct AppState {
     pub favorites: Vec<FolderId>,
     /// A search being typed, or whose results the message list shows.
     pub search: Option<Search>,
+    /// The folder whose older mail is being fetched, and whether only its
+    /// unread mail.
+    pub loading_older: Option<(FolderId, bool)>,
+    /// Folders with no older mail left to fetch, all of it or only unread.
+    /// Forgotten after each sync, as new counts may say otherwise.
+    pub no_older: HashSet<(FolderId, bool)>,
 }
 
 /// Folder ids of the rows heading each account start with this.
@@ -424,7 +448,9 @@ impl AppState {
                     self.confirm = Some(Confirm::Delete { ids, permanent });
                 }
             }
-            Action::Delete | Action::DeletePermanently => {}
+            Action::Delete | Action::DeletePermanently => {
+                self.ask_to_delete_folder(action == Action::DeletePermanently);
+            }
             Action::Refresh if self.sync.running => {
                 self.sync.forced = true;
                 self.show_busy("Syncing…");
@@ -551,7 +577,10 @@ impl AppState {
     /// account instead.
     pub fn account_for(&self, effect: &Effect) -> usize {
         match effect {
-            Effect::LoadFolder(id) | Effect::LoadUnread(id) => self
+            Effect::LoadFolder(id)
+            | Effect::LoadUnread(id)
+            | Effect::LoadOlder { folder: id, .. }
+            | Effect::DeleteFolder { folder: id, .. } => self
                 .folders
                 .iter()
                 .position(|f| &f.id == id)
@@ -693,6 +722,14 @@ impl AppState {
                 self.show_busy(format!("Deleting {} message{s}…", ids.len()));
                 Some(Effect::Delete { ids, permanent })
             }
+            Confirm::DeleteFolder {
+                folder,
+                name,
+                permanent,
+            } => {
+                self.show_busy(format!("Deleting {name}…"));
+                Some(Effect::DeleteFolder { folder, permanent })
+            }
             Confirm::Discard => {
                 self.compose = None;
                 None
@@ -746,6 +783,7 @@ impl AppState {
         }
         self.sync.running = false;
         self.sync.forced = false;
+        self.no_older.clear();
         if let Some(every) = self.sync.every {
             self.sync.due_by(now + every);
         }
@@ -1334,12 +1372,15 @@ mod tests {
     }
 
     #[test]
-    fn there_is_nothing_to_delete_in_the_folder_pane_or_an_empty_folder() {
+    fn d_in_the_folder_pane_deletes_the_folder_not_a_message() {
         let mut app = in_message_list(&["m0"]);
         app.focus = Pane::Folders;
         app.update(Action::Delete);
-        assert_eq!(app.confirm, None);
+        assert!(matches!(app.confirm, Some(Confirm::DeleteFolder { .. })));
+    }
 
+    #[test]
+    fn there_is_nothing_to_delete_in_an_empty_folder() {
         let mut app = in_message_list(&[]);
         app.update(Action::Delete);
         assert_eq!(app.confirm, None);

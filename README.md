@@ -272,6 +272,12 @@ unread messages. Mail you read stays in the list, shown as read, so you can go
 back to it, until you pick the folder again or press `F5`; after `F5` only the
 message you are reading stays. The folder stays until you leave it.
 
+tuilook keeps the last 90 days of each folder in sync. Older mail is fetched
+when you need it: move to the end of the message list, or pick a folder whose
+recent mail is all read, and the next 50 older messages are fetched while the
+folder holds more than the list shows. In the Unread section only older unread
+mail is fetched.
+
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.
 
@@ -303,6 +309,10 @@ goes back to the query to change it.
 | `Esc` | Clear the marks |
 | `d` | Move the marked (or selected) messages to Deleted Items |
 | `D` | Delete the marked (or selected) messages for good |
+
+In the folder pane, `d` moves the selected folder, with its subfolders and
+mail, to Deleted Items, and `D` deletes it for good. Outlook's own folders,
+such as Inbox and Sent Items, cannot be deleted.
 
 Both `d` and `D` ask before doing anything.
 

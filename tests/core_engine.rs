@@ -296,3 +296,114 @@ async fn a_blocked_account_is_reported_as_blocked() {
         Some(Event::SendBlocked("spam suspected".to_owned()))
     );
 }
+
+fn old(id: &str, day: i64) -> Message {
+    Message {
+        id: MessageId(id.to_owned()),
+        folder_id: FolderId("a".to_owned()),
+        conversation_id: String::new(),
+        subject: String::new(),
+        from_name: String::new(),
+        from_addr: String::new(),
+        received_at: jiff::Timestamp::from_second(day * 86_400).unwrap(),
+        is_read: false,
+        flagged: false,
+        importance: Importance::Normal,
+        has_attachments: false,
+        preview: String::new(),
+    }
+}
+
+fn load_older(before: jiff::Timestamp) -> Command {
+    Command::LoadOlder {
+        folder: FolderId("a".to_owned()),
+        before,
+        unread_only: false,
+    }
+}
+
+fn older_loaded(more: bool) -> Option<Event> {
+    Some(Event::OlderLoaded {
+        folder: FolderId("a".to_owned()),
+        unread_only: false,
+        more,
+    })
+}
+
+#[tokio::test]
+async fn older_mail_comes_a_page_at_a_time_until_there_is_no_more() {
+    let backend = FakeBackend {
+        folders: vec![folder("a")],
+        older: [(
+            FolderId("a".to_owned()),
+            vec![old("m3", 3), old("m2", 2), old("m1", 1)],
+        )]
+        .into(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    commands
+        .send(load_older(jiff::Timestamp::MAX))
+        .await
+        .unwrap();
+    assert_eq!(events.recv().await, older_loaded(true));
+
+    let day_2 = jiff::Timestamp::from_second(2 * 86_400).unwrap();
+    commands.send(load_older(day_2)).await.unwrap();
+    assert_eq!(events.recv().await, older_loaded(false));
+}
+
+#[tokio::test]
+async fn a_page_of_older_mail_already_cached_says_there_is_no_more() {
+    let backend = FakeBackend {
+        folders: vec![folder("a")],
+        older: [(
+            FolderId("a".to_owned()),
+            vec![old("m4", 4), old("m3", 3), old("m2", 2), old("m1", 1)],
+        )]
+        .into(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    commands
+        .send(load_older(jiff::Timestamp::MAX))
+        .await
+        .unwrap();
+    assert_eq!(events.recv().await, older_loaded(true));
+    commands
+        .send(load_older(jiff::Timestamp::MAX))
+        .await
+        .unwrap();
+    assert_eq!(events.recv().await, older_loaded(false));
+}
+
+#[tokio::test]
+async fn deleting_a_folder_reports_it_then_syncs_the_folder_tree() {
+    let backend = FakeBackend {
+        folders: vec![folder("a")],
+        ..Default::default()
+    };
+    let deleted = backend.deleted_folders.clone();
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::DeleteFolder {
+            folder: FolderId("a".to_owned()),
+            permanent: true,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::FolderDeleted(FolderId("a".to_owned())))
+    );
+    assert_eq!(events.recv().await, Some(Event::FoldersSynced));
+    assert_eq!(*deleted.lock().unwrap(), [(FolderId("a".to_owned()), true)]);
+}

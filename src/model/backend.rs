@@ -1,5 +1,7 @@
 use std::future::Future;
 
+use jiff::Timestamp;
+
 use crate::model::{Draft, Folder, FolderId, Message, MessageChange, MessageId};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -27,6 +29,14 @@ pub struct DeltaPage {
     pub delta_link: Option<String>,
 }
 
+/// A page of a folder's mail older than its sync reaches, newest first.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OlderPage {
+    pub messages: Vec<Message>,
+    /// Whether there is older mail still, past this page.
+    pub more: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BodyType {
     Text,
@@ -49,6 +59,16 @@ pub trait MailBackend {
         delta_link: Option<&str>,
     ) -> impl Future<Output = Result<DeltaPage, BackendError>> + Send;
 
+    /// One page of a folder's messages received at or before `before`,
+    /// newest first, and only unread ones when `unread_only`. Delta sync
+    /// reaches back only so far; this fetches past it on demand.
+    fn older_messages(
+        &self,
+        folder: &FolderId,
+        before: Timestamp,
+        unread_only: bool,
+    ) -> impl Future<Output = Result<OlderPage, BackendError>> + Send;
+
     fn fetch_body(
         &self,
         message: &MessageId,
@@ -58,6 +78,14 @@ pub trait MailBackend {
     fn delete(
         &self,
         message: &MessageId,
+        permanent: bool,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
+    /// Deletes a folder and everything in it: to Deleted Items, or for good
+    /// when `permanent`.
+    fn delete_folder(
+        &self,
+        folder: &FolderId,
         permanent: bool,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 

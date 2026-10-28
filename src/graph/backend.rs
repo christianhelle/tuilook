@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::auth::TokenSource;
 use crate::model::{
     BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
-    MailBackend, Message, MessageChange, MessageId, WellKnown,
+    MailBackend, Message, MessageChange, MessageId, OlderPage, WellKnown,
 };
 use jiff::{SignedDuration, Timestamp, Unit};
 use reqwest::StatusCode;
@@ -19,6 +19,9 @@ use crate::graph::{
 const MESSAGE_SELECT: &str = "id,conversationId,subject,from,receivedDateTime,isRead,flag,importance,hasAttachments,bodyPreview";
 
 const PAGE_SIZE: (&str, &str) = ("Prefer", "odata.maxpagesize=50");
+
+/// Messages fetched at a time from past a folder's sync window.
+const OLDER_PAGE: usize = 50;
 
 const FOLDER_SELECT: &str =
     "$select=id,displayName,parentFolderId,childFolderCount,unreadItemCount,totalItemCount";
@@ -169,6 +172,36 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(result)
     }
 
+    async fn older_messages(
+        &self,
+        folder: &FolderId,
+        before: Timestamp,
+        unread_only: bool,
+    ) -> Result<OlderPage, BackendError> {
+        let before = before
+            .round(Unit::Second)
+            .map_err(|e| BackendError::Other(e.to_string()))?;
+        // Graph wants the property sorted on to come first in the filter.
+        let unread = if unread_only {
+            " and isRead eq false"
+        } else {
+            ""
+        };
+        let path = format!(
+            "/me/mailFolders/{}/messages?$select={MESSAGE_SELECT}&$filter=receivedDateTime le {before}{unread}&$orderby=receivedDateTime desc&$top={OLDER_PAGE}",
+            folder.0
+        );
+        let page: Page<dto::Message> = self.client.get(&path, &[]).await?;
+        Ok(OlderPage {
+            more: page.next_link.is_some(),
+            messages: page
+                .value
+                .into_iter()
+                .map(|m| to_message(m, folder))
+                .collect(),
+        })
+    }
+
     async fn fetch_body(&self, message: &MessageId) -> Result<Body, BackendError> {
         let path = format!("/me/messages/{}?$select=body", message.0);
         let prefer = ("Prefer", r#"outlook.body-content-type="html""#);
@@ -189,6 +222,18 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             self.client.post_no_content(&path, None).await?;
         } else {
             let path = format!("/me/messages/{}/move", message.0);
+            let target = json!({ "destinationId": WellKnown::DeletedItems.as_graph_name() });
+            self.client.post::<dto::Id>(&path, &target).await?;
+        }
+        Ok(())
+    }
+
+    async fn delete_folder(&self, folder: &FolderId, permanent: bool) -> Result<(), BackendError> {
+        if permanent {
+            let path = format!("/me/mailFolders/{}/permanentDelete", folder.0);
+            self.client.post_no_content(&path, None).await?;
+        } else {
+            let path = format!("/me/mailFolders/{}/move", folder.0);
             let target = json!({ "destinationId": WellKnown::DeletedItems.as_graph_name() });
             self.client.post::<dto::Id>(&path, &target).await?;
         }

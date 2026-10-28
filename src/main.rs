@@ -25,7 +25,7 @@ use tuilook::auth::{
 };
 use tuilook::core::{Command, run_engine, sync_folders, sync_messages};
 use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
-use tuilook::model::{Event, MailBackend, Message};
+use tuilook::model::{Event, FolderId, MailBackend, Message};
 use tuilook::store::Store;
 use tuilook::tui::{
     app::{AppState, Effect, Mouse},
@@ -522,16 +522,21 @@ fn on_core_event(
             let effect = app.set_account_folders(account, store.folders()?);
             if let Some(query) = app.results_query() {
                 Some(Effect::Search(query.to_owned()))
-            } else if app.shown_folder().as_ref() == Some(&id) {
-                let messages = if app.shows_unread() {
-                    store.unread_in(&id, &app.kept_read())?
-                } else {
-                    store.messages_in(&id)?
-                };
-                app.refresh_messages(messages).or(effect)
             } else {
-                effect
+                refresh_shown(app, store, &id)?.or(effect)
             }
+        }
+        Event::OlderLoaded {
+            folder,
+            unread_only,
+            more,
+        } => {
+            app.older_loaded(folder.clone(), unread_only, more);
+            refresh_shown(app, store, &folder)?
+        }
+        Event::FolderDeleted(folder) => {
+            app.folder_deleted(&folder);
+            None
         }
         Event::BodyLoaded { message, text } => app.body_loaded(message, text),
         Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
@@ -557,21 +562,52 @@ fn on_core_event(
     })
 }
 
+/// Shows `folder`'s messages from the store again, if it is the one shown.
+fn refresh_shown(app: &mut AppState, store: &Store, folder: &FolderId) -> Result<Option<Effect>> {
+    if app.results_query().is_some() || app.shown_folder().as_ref() != Some(folder) {
+        return Ok(None);
+    }
+    let messages = if app.shows_unread() {
+        store.unread_in(folder, &app.kept_read())?
+    } else {
+        store.messages_in(folder)?
+    };
+    Ok(app.refresh_messages(messages))
+}
+
 /// Performs the IO an update asked for, in the account it is for, and any
-/// IO it leads to.
+/// IO it leads to. Once there is none, older mail is fetched if the message
+/// list has reached its end.
 fn apply(
     app: &mut AppState,
     mailboxes: &[Mailbox],
     accounts_file: Option<&Path>,
     mut effect: Option<Effect>,
 ) -> Result<()> {
-    while let Some(next) = effect {
+    while let Some(next) = effect.or_else(|| app.older_wanted()) {
         let Mailbox { store, commands } = &mailboxes[app.account_for(&next)];
         effect = match next {
             Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
             Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
             Effect::LoadBody(id) => {
                 commands.blocking_send(Command::LoadBody(id))?;
+                None
+            }
+            Effect::LoadOlder {
+                folder,
+                before,
+                unread_only,
+            } => {
+                let older = Command::LoadOlder {
+                    folder,
+                    before,
+                    unread_only,
+                };
+                commands.blocking_send(older)?;
+                None
+            }
+            Effect::DeleteFolder { folder, permanent } => {
+                commands.blocking_send(Command::DeleteFolder { folder, permanent })?;
                 None
             }
             Effect::MarkRead(id) => {
