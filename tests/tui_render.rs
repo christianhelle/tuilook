@@ -242,7 +242,7 @@ fn deleting_for_good_warns_it_cannot_be_undone() {
 fn question_mark_shows_the_keys() {
     let mut app = sample_app();
     app.update(tuilook::model::Action::Help);
-    let mut terminal = Terminal::new(TestBackend::new(90, 20)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
     terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
 
     insta::assert_snapshot!(terminal.backend().to_string());
