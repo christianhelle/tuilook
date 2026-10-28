@@ -40,6 +40,12 @@ impl Viewer {
         self.editor.clamp_to_line();
     }
 
+    /// Puts the cursor on a line and column, as near as the text allows.
+    pub fn move_to(&mut self, row: usize, column: usize) {
+        self.editor.move_to(row, column);
+        self.editor.clamp_to_line();
+    }
+
     /// Where the cursor is, as the line and the characters from its start.
     pub fn cursor(&self) -> Pos {
         self.editor.cursor()

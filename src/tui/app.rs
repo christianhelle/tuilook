@@ -336,6 +336,34 @@ impl AppState {
         self.reader_scroll = self.reader_scroll.max(lowest).min(top);
     }
 
+    /// Moves the reader's cursor onto the lines shown, as Vim does when
+    /// the view scrolls away from it.
+    fn keep_cursor_in_view(&mut self) {
+        let Some(text) = self.reader_text() else {
+            return;
+        };
+        self.viewer.show(&text);
+        let top = self.reader_line_at(self.reader_scroll);
+        let last_row = self.reader_scroll + self.viewport.reader.saturating_sub(1);
+        let bottom = self.reader_line_at(last_row).max(top);
+        let (line, column) = self.viewer.cursor();
+        self.viewer.move_to(line.clamp(top, bottom), column);
+    }
+
+    /// The line of the reading pane shown on wrapped row `row`, or the
+    /// last line past the end.
+    fn reader_line_at(&self, row: usize) -> usize {
+        let rows = self.reader_rows();
+        let mut top = 0;
+        for (line, height) in rows.iter().enumerate() {
+            top += height;
+            if row < top {
+                return line;
+            }
+        }
+        rows.len().saturating_sub(1)
+    }
+
     /// The pane filling the screen, which follows the focus while zoomed.
     pub fn zoomed_pane(&self) -> Option<Pane> {
         self.zoomed.then_some(self.focus)
@@ -1136,6 +1164,7 @@ impl AppState {
                     .reader_lines
                     .saturating_sub(self.viewport.reader);
                 self.reader_scroll = self.reader_scroll.saturating_add_signed(delta).min(max);
+                self.keep_cursor_in_view();
                 None
             }
         }
@@ -1344,6 +1373,26 @@ Dear Charles,"
         assert_eq!(app.reader_scroll, 7, "row 10 is the last in view");
         type_keys(&mut app, "gg");
         assert_eq!(app.reader_scroll, 0);
+    }
+
+    #[test]
+    fn scrolling_the_reader_keeps_the_cursor_in_view() {
+        let mut app = reading(4, 23);
+        app.viewport.reader_width = 80;
+        let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
+        app.body = Some(body.join(
+            "
+",
+        ));
+        let wheel = |app: &mut AppState, mouse| app.on_mouse(mouse, hit(Pane::Reader, None));
+
+        (0..3).for_each(|_| _ = wheel(&mut app, Mouse::ScrollDown));
+        assert_eq!(app.reader_scroll, 9);
+        assert_eq!(app.viewer.cursor(), (9, 0), "dragged down to the top line");
+        wheel(&mut app, Mouse::ScrollUp);
+        wheel(&mut app, Mouse::ScrollUp);
+        assert_eq!(app.reader_scroll, 3);
+        assert_eq!(app.viewer.cursor(), (6, 0), "dragged up to the bottom line");
     }
 
     #[test]
