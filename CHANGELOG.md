@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Folders: `a` in the folder pane makes a new folder inside the selected one,
+  `A` makes a top-level one, and `F2` renames the selected folder.
+- Moving mail: `m` moves the marked (or selected) messages to another folder
+  of the same account, picked from a list that narrows as you type.
 - The reading pane has a Vim normal mode: a cursor, shown while the pane is
   focused, moves with `h` `j` `k` `l` `w` `b` `e` `0` `$` `gg` `G` and the
   paging keys, and the pane scrolls to follow it.
