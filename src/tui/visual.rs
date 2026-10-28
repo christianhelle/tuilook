@@ -3,7 +3,7 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::{
-    editor::Editor,
+    editor::{Editor, Pos},
     vim::{self, Outcome, Register, VimMode},
 };
 
@@ -38,6 +38,11 @@ impl Visual {
             &mut Register::default(),
         );
         Visual { editor }
+    }
+
+    /// Where the cursor is, as the line and the characters from its start.
+    pub fn cursor(&self) -> Pos {
+        self.editor.cursor()
     }
 
     /// Acts on a key, moving `page` lines a page.

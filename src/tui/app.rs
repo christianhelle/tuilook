@@ -326,6 +326,16 @@ impl AppState {
             .collect()
     }
 
+    /// Scrolls the reading pane as little as it takes to show all of `line`.
+    fn show_reader_line(&mut self, line: usize) {
+        let rows = self.reader_rows();
+        let top: usize = rows.iter().take(line).sum();
+        let bottom = top + rows.get(line).copied().unwrap_or(1);
+        // A line taller than the pane shows from its top.
+        let lowest = bottom.saturating_sub(self.viewport.reader).min(top);
+        self.reader_scroll = self.reader_scroll.max(lowest).min(top);
+    }
+
     /// The line of the reading pane shown on wrapped row `row`.
     fn reader_line_at(&self, row: usize) -> usize {
         let mut top = 0;
@@ -410,7 +420,10 @@ impl AppState {
         }
         if let Some(visual) = &mut self.visual {
             match visual.key(key, self.viewport.reader) {
-                visual::Request::None => {}
+                visual::Request::None => {
+                    let (line, _) = visual.cursor();
+                    self.show_reader_line(line);
+                }
                 visual::Request::Copy(text) => {
                     self.visual = None;
                     return Some(Effect::Copy(text));
@@ -1324,6 +1337,22 @@ Second",
         let effect = type_keys(&mut app, "v$y");
 
         assert_eq!(effect, Some(Effect::Copy("Second".to_owned())));
+    }
+
+    #[test]
+    fn the_reader_scrolls_to_keep_the_picking_cursor_in_view() {
+        let mut app = reading(4, 23);
+        app.viewport.reader_width = 80;
+        let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
+        app.body = Some(body.join(
+            "
+",
+        ));
+
+        type_keys(&mut app, "v10j");
+        assert_eq!(app.reader_scroll, 7, "row 10 is the last in view");
+        type_keys(&mut app, "gg");
+        assert_eq!(app.reader_scroll, 0);
     }
 
     #[test]
