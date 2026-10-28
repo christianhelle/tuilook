@@ -47,7 +47,10 @@ pub fn group_of(received: Timestamp, today: Date, tz: &TimeZone) -> DateGroup {
         (DateGroup::Today, today),
         (DateGroup::Yesterday, back(1)),
         (DateGroup::ThisWeek, monday),
-        (DateGroup::LastWeek, monday.checked_sub(7.days()).unwrap_or(Date::MIN)),
+        (
+            DateGroup::LastWeek,
+            monday.checked_sub(7.days()).unwrap_or(Date::MIN),
+        ),
         (DateGroup::ThisMonth, first),
         (
             DateGroup::LastMonth,
