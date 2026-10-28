@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   subject, sender, preview and the text of messages opened before. Results
   show the folder each message is in, and can be read, answered and deleted
   like any folder's.
+- Signatures: `S` writes a signature for the account being looked at. New
+  messages, replies and forwards from that account start with it, ready to
+  edit before sending.
 
 ### Fixed
 

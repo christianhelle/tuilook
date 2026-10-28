@@ -308,6 +308,7 @@ Both `d` and `D` ask before doing anything.
 | `r` | Reply |
 | `R` | Reply to all |
 | `f` | Forward |
+| `S` | Write the account's signature |
 
 The compose screen has To, Cc and Subject fields and a body. Separate several
 addresses with `,` or `;`. Replies and forwards quote the original the way
@@ -335,6 +336,18 @@ The body is edited vim style. It starts in normal mode; press `i` to type.
 | `v` `V` | Select characters / lines |
 
 Counts work too, like `3dd` or `5j`.
+
+### Signatures
+
+Press `S` to write a signature for the account you are looking at. Each
+account has its own. New messages, replies and forwards from that account
+start with it below an empty line, where you type, so you can change or delete
+it before sending. It goes in exactly as you write it. Add a `-- ` line above it
+yourself if you want one.
+
+The signature is edited vim style like a message body. `Ctrl-S` saves it, and
+saving an empty signature turns it off. Signatures are kept in `accounts.json`.
+In `--demo` they last until tuilook closes.
 
 ### Sending limits on Outlook.com
 
@@ -383,7 +396,7 @@ otlk sync
 
 - **Sign-in:** the OS keychain (Windows Credential Manager, macOS Keychain or
   the Secret Service on Linux), one entry per account under its address.
-- **Accounts:** `accounts.json` in tuilook's data folder:
+- **Accounts and signatures:** `accounts.json` in tuilook's data folder:
   `~/.local/share/tuilook` on Linux, `~/Library/Application Support/tuilook`
   on macOS, `%APPDATA%\tuilook\data` on Windows.
 - **Mail cache:** `<address>/cache.db` in the data folder, one per account.
