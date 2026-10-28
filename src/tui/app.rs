@@ -431,6 +431,7 @@ impl AppState {
             Action::Collapse if self.focus == Pane::Folders => return self.collapse_folder(),
             Action::Expand if self.focus == Pane::Messages => return self.expand_group(),
             Action::Collapse if self.focus == Pane::Messages => return self.collapse_group(),
+            Action::Expand if self.focus == Pane::Reader => return self.step_message(1),
             Action::Expand | Action::Collapse => {}
             Action::ToggleFavorite if self.focus == Pane::Folders => {
                 return self.toggle_favorite();
@@ -956,6 +957,18 @@ impl AppState {
             collapsed: true,
         });
         moved.then(|| self.selection_changed()).flatten()
+    }
+
+    /// → or ← in the reader: shows the next or previous message in the
+    /// list, past date headers and the mail of folded groups.
+    fn step_message(&mut self, delta: isize) -> Option<Effect> {
+        let rows = self.message_rows();
+        let at = self.selected_row(&rows)?;
+        let row = rows[at + 1..]
+            .iter()
+            .find(|row| matches!(row, MessageRow::Message(_)))?;
+        self.select_row(*row);
+        self.selection_changed()
     }
 
     /// Enter or a click on a date header: folds or unfolds its group.
@@ -2218,6 +2231,18 @@ Ada"
         assert_eq!(app.update(Action::Expand), None);
         assert!(app.collapsed_groups.is_empty());
         assert_eq!(app.update(Action::Expand), load_body("t1"));
+    }
+
+    #[test]
+    fn right_in_the_reader_shows_the_next_mail_past_a_date_header() {
+        let mut app = with_folders(&["a"]);
+        app.set_messages(today_and_older(&["t1"], &["o1"]));
+        app.focus = Pane::Reader;
+        app.reader_scroll = 5;
+
+        assert_eq!(app.update(Action::Expand), load_body("o1"));
+        assert_eq!(app.focus, Pane::Reader);
+        assert_eq!(app.reader_scroll, 0);
     }
 
     #[test]
