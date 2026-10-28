@@ -19,8 +19,8 @@ use crate::tui::{
     groups::MessageRow,
     older::LOADING_OLDER,
     signature::SignatureEditor,
+    viewer::Viewer,
     vim::VimMode,
-    visual::Visual,
 };
 
 /// Mail text made safe to draw. Mail is full of characters that take no room
@@ -902,7 +902,7 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
 
 /// The selected message's headers and body, wrapped to the pane.
 fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
-    let selection = app.visual.as_ref().and_then(Visual::selection);
+    let selection = app.visual.as_ref().and_then(Viewer::selection);
     let text: Vec<Line> = app
         .reader_text()?
         .iter()

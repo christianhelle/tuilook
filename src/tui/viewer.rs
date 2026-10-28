@@ -1,4 +1,4 @@
-//! Picking text in the reading pane with Vim's visual mode, to copy it.
+//! The reading pane's cursor, moved and picking text with Vim's keys.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -9,7 +9,7 @@ use crate::tui::{
 
 /// Text being picked, in a read-only editor holding what the pane shows.
 #[derive(Debug)]
-pub struct Visual {
+pub struct Viewer {
     editor: Editor,
 }
 
@@ -23,7 +23,7 @@ pub enum Request {
     Close,
 }
 
-impl Visual {
+impl Viewer {
     /// Starts picking `lines` at the start of line `row`, whole lines when
     /// `line`.
     pub fn new(lines: &[String], row: usize, line: bool) -> Self {
@@ -37,7 +37,7 @@ impl Visual {
             1,
             &mut Register::default(),
         );
-        Visual { editor }
+        Viewer { editor }
     }
 
     /// Where the cursor is, as the line and the characters from its start.
@@ -93,13 +93,13 @@ fn reads(key: KeyEvent) -> bool {
 mod tests {
     use super::*;
 
-    fn picking(text: &str, row: usize) -> Visual {
+    fn picking(text: &str, row: usize) -> Viewer {
         let lines: Vec<String> = text.lines().map(str::to_owned).collect();
-        Visual::new(&lines, row, false)
+        Viewer::new(&lines, row, false)
     }
 
     /// Types each character as a key, `⎋` standing for Esc.
-    fn keys(visual: &mut Visual, keys: &str) -> Request {
+    fn keys(visual: &mut Viewer, keys: &str) -> Request {
         let mut request = Request::None;
         for c in keys.chars() {
             let code = match c {

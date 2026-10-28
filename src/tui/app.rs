@@ -17,7 +17,7 @@ use crate::tui::{
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
-    visual::{self, Visual},
+    viewer::{self, Viewer},
 };
 
 /// IO the event loop must perform after an update.
@@ -230,7 +230,7 @@ pub struct AppState {
     /// order they were added.
     pub favorites: Vec<FolderId>,
     /// Text being picked in the reading pane, to copy it.
-    pub visual: Option<Visual>,
+    pub visual: Option<Viewer>,
     /// A search being typed, or whose results the message list shows.
     pub search: Option<Search>,
     /// The folder whose older mail is being fetched, and whether only its
@@ -420,11 +420,11 @@ impl AppState {
         }
         if let Some(visual) = &mut self.visual {
             match visual.key(key, self.viewport.reader) {
-                visual::Request::None => {
+                viewer::Request::None => {
                     let (line, _) = visual.cursor();
                     self.show_reader_line(line);
                 }
-                visual::Request::Copy(text) => {
+                viewer::Request::Copy(text) => {
                     self.visual = None;
                     match text.lines().count() {
                         1 => self.show_info("Copied 1 line"),
@@ -432,7 +432,7 @@ impl AppState {
                     }
                     return Some(Effect::Copy(text));
                 }
-                visual::Request::Close => self.visual = None,
+                viewer::Request::Close => self.visual = None,
             }
             return None;
         }
@@ -558,7 +558,7 @@ impl AppState {
             Action::Visual | Action::VisualLine if self.focus == Pane::Reader => {
                 let line = action == Action::VisualLine;
                 let top = self.reader_line_at(self.reader_scroll);
-                self.visual = self.reader_text().map(|text| Visual::new(&text, top, line));
+                self.visual = self.reader_text().map(|text| Viewer::new(&text, top, line));
             }
             Action::Visual | Action::VisualLine => {}
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
