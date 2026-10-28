@@ -7,8 +7,8 @@ use crate::tui::{
     vim::{self, Outcome, Register, VimMode},
 };
 
-/// Text being picked, in a read-only editor holding what the pane shows.
-#[derive(Debug)]
+/// A read-only editor holding what the pane shows, with Vim's cursor.
+#[derive(Debug, Default)]
 pub struct Viewer {
     editor: Editor,
 }
@@ -38,6 +38,22 @@ impl Viewer {
             &mut Register::default(),
         );
         Viewer { editor }
+    }
+
+    /// Shows `lines`, keeping the cursor and mode as the new lines allow.
+    pub fn show(&mut self, lines: &[String]) {
+        if self.editor.lines() == lines {
+            return;
+        }
+        let (row, column) = self.editor.cursor();
+        let vim = std::mem::take(&mut self.editor.vim);
+        self.editor.set_text(&lines.join(
+            "
+",
+        ));
+        self.editor.vim = vim;
+        self.editor.move_to(row, column);
+        self.editor.clamp_to_line();
     }
 
     /// Where the cursor is, as the line and the characters from its start.
@@ -109,6 +125,26 @@ mod tests {
             request = visual.key(KeyEvent::from(code), 10);
         }
         request
+    }
+
+    fn viewing(text: &str) -> Viewer {
+        let lines: Vec<String> = text.lines().map(str::to_owned).collect();
+        let mut viewer = Viewer::default();
+        viewer.show(&lines);
+        viewer
+    }
+
+    #[test]
+    fn keys_move_the_cursor_in_normal_mode() {
+        let mut viewer = viewing(
+            "From: Ada
+Dear Charles,",
+        );
+
+        keys(&mut viewer, "jw");
+
+        assert_eq!(viewer.cursor(), (1, 5));
+        assert_eq!(viewer.mode(), VimMode::Normal);
     }
 
     #[test]
