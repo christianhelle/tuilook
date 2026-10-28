@@ -28,6 +28,8 @@ pub struct FakeBackend {
     pub older: HashMap<FolderId, Vec<Message>>,
     /// Folders created so far, listed after `folders`.
     pub created: Arc<Mutex<Vec<Folder>>>,
+    /// New names given to folders so far.
+    pub renamed: Arc<Mutex<HashMap<FolderId, String>>>,
     /// Folders deleted so far, and whether permanently.
     pub deleted_folders: Arc<Mutex<Vec<(FolderId, bool)>>>,
     /// Messages deleted so far, and whether permanently.
@@ -48,7 +50,14 @@ impl MailBackend for FakeBackend {
             return Err(error.clone());
         }
         let created = self.created.lock().expect("no test panics holding it");
-        Ok(self.folders.iter().chain(created.iter()).cloned().collect())
+        let renamed = self.renamed.lock().expect("no test panics holding it");
+        let mut folders: Vec<Folder> = self.folders.iter().chain(created.iter()).cloned().collect();
+        for folder in &mut folders {
+            if let Some(name) = renamed.get(&folder.id) {
+                folder.name.clone_from(name);
+            }
+        }
+        Ok(folders)
     }
 
     async fn delta_sync(
@@ -145,6 +154,12 @@ impl MailBackend for FakeBackend {
             unread: 0,
             total: 0,
         });
+        Ok(())
+    }
+
+    async fn rename_folder(&self, folder: &FolderId, name: &str) -> Result<(), BackendError> {
+        let mut renamed = self.renamed.lock().expect("no test panics holding it");
+        renamed.insert(folder.clone(), name.to_owned());
         Ok(())
     }
 

@@ -189,3 +189,20 @@ async fn creating_a_subfolder_posts_to_its_parent() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn renaming_a_folder_patches_its_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("PATCH"))
+        .and(path("/me/mailFolders/f1"))
+        .and(body_json(json!({"displayName": "Bills"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "f1"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .rename_folder(&FolderId("f1".to_owned()), "Bills")
+        .await
+        .unwrap();
+}

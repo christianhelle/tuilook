@@ -254,6 +254,14 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(())
     }
 
+    async fn rename_folder(&self, folder: &FolderId, name: &str) -> Result<(), BackendError> {
+        let path = format!("/me/mailFolders/{}", folder.0);
+        self.client
+            .patch(&path, &json!({ "displayName": name }))
+            .await?;
+        Ok(())
+    }
+
     async fn mark_read(&self, message: &MessageId) -> Result<(), BackendError> {
         let path = format!("/me/messages/{}", message.0);
         self.client.patch(&path, &json!({ "isRead": true })).await?;

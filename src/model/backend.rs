@@ -96,6 +96,13 @@ pub trait MailBackend {
         name: &str,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 
+    /// Gives a folder a new name.
+    fn rename_folder(
+        &self,
+        folder: &FolderId,
+        name: &str,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
     /// Marks a message as read.
     fn mark_read(
         &self,
