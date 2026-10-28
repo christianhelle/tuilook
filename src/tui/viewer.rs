@@ -17,10 +17,10 @@ pub struct Viewer {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     None,
-    /// Copy the picked text to the clipboard.
+    /// Copy the picked or yanked text to the clipboard.
     Copy(String),
-    /// Stop picking.
-    Close,
+    /// The viewer has no use for the key in normal mode, so the pane may.
+    Unhandled,
 }
 
 impl Viewer {
@@ -73,27 +73,34 @@ impl Viewer {
 
     /// Acts on a key, moving `page` lines a page.
     pub fn key(&mut self, key: KeyEvent, page: usize) -> Request {
-        if !reads(key) {
-            return Request::None;
+        let picking = self.mode() != VimMode::Normal;
+        if !reads(key, picking) {
+            if picking {
+                return Request::None;
+            }
+            // Drop a half typed command, such as the y of yy
+            vim::to_normal(&mut self.editor);
+            return Request::Unhandled;
         }
         match vim::key(&mut self.editor, key, page, &mut Register::default()) {
             Outcome::Yanked(text) => Request::Copy(text),
-            _ if self.editor.vim.mode == VimMode::Normal => Request::Close,
-            _ => Request::None,
+            Outcome::Unhandled | Outcome::Leave => Request::Unhandled,
+            Outcome::Handled => Request::None,
         }
     }
 }
 
 /// Whether a key only moves, picks or yanks, leaving the text as it is.
-fn reads(key: KeyEvent) -> bool {
+/// Out of a visual mode, ← and → are left to the pane, to show the next or
+/// previous mail.
+fn reads(key: KeyEvent, picking: bool) -> bool {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return matches!(key.code, KeyCode::Char('d' | 'u' | 'f' | 'b'));
     }
     match key.code {
-        KeyCode::Char(c) => c.is_ascii_digit() || "hjklwbe^$gGvVy ".contains(c),
-        KeyCode::Left
-        | KeyCode::Right
-        | KeyCode::Up
+        KeyCode::Char(c) => c.is_ascii_digit() || "hjklwbe^$gGvVy".contains(c),
+        KeyCode::Left | KeyCode::Right => picking,
+        KeyCode::Up
         | KeyCode::Down
         | KeyCode::Home
         | KeyCode::End
@@ -108,11 +115,6 @@ fn reads(key: KeyEvent) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn picking(text: &str, row: usize) -> Viewer {
-        let lines: Vec<String> = text.lines().map(str::to_owned).collect();
-        Viewer::new(&lines, row, false)
-    }
 
     /// Types each character as a key, `⎋` standing for Esc.
     fn keys(visual: &mut Viewer, keys: &str) -> Request {
@@ -148,28 +150,71 @@ Dear Charles,",
     }
 
     #[test]
-    fn y_copies_the_characters_picked_from_where_it_started() {
-        let mut visual = picking("From: Ada\nDear Charles,\nThe engine", 1);
+    fn v_picks_from_the_cursor_and_y_copies_it() {
+        let mut viewer = viewing(
+            "From: Ada
+Dear Charles,
+The engine",
+        );
 
-        let request = keys(&mut visual, "wey");
+        let request = keys(&mut viewer, "jvwey");
 
         assert_eq!(request, Request::Copy("Dear Charles".into()));
+        assert_eq!(viewer.mode(), VimMode::Normal);
     }
 
     #[test]
-    fn keys_that_would_change_the_text_do_nothing() {
-        let mut visual = picking("Dear Charles,", 0);
+    fn yy_copies_the_line_in_normal_mode() {
+        let mut viewer = viewing(
+            "From: Ada
+Dear Charles,",
+        );
 
-        assert_eq!(keys(&mut visual, "ldxcpPr~"), Request::None);
-        let request = keys(&mut visual, "$y");
+        assert_eq!(
+            keys(&mut viewer, "jyy"),
+            Request::Copy("Dear Charles,".into())
+        );
+    }
+
+    #[test]
+    fn keys_it_has_no_use_for_in_normal_mode_are_left_to_the_pane() {
+        let mut viewer = viewing("Dear Charles,");
+
+        for key in "dxiq ⎋".chars() {
+            assert_eq!(
+                keys(&mut viewer, &key.to_string()),
+                Request::Unhandled,
+                "{key}"
+            );
+        }
+        for code in [KeyCode::Left, KeyCode::Right, KeyCode::Tab, KeyCode::Enter] {
+            assert_eq!(viewer.key(KeyEvent::from(code), 10), Request::Unhandled);
+        }
+        assert_eq!(
+            keys(&mut viewer, "0y$"),
+            Request::Copy("Dear Charles,".into())
+        );
+    }
+
+    #[test]
+    fn keys_that_would_change_the_text_do_nothing_while_picking() {
+        let mut viewer = viewing("Dear Charles,");
+
+        assert_eq!(keys(&mut viewer, "vldxcpPr~"), Request::None);
+        let request = keys(&mut viewer, "$y");
 
         assert_eq!(request, Request::Copy("Dear Charles,".into()));
     }
 
     #[test]
     fn esc_or_v_again_stops_picking() {
-        assert_eq!(keys(&mut picking("a", 0), "⎋"), Request::Close);
-        assert_eq!(keys(&mut picking("a", 0), "v"), Request::Close);
-        assert_eq!(keys(&mut picking("a", 0), "Vv"), Request::None);
+        let mut viewer = viewing("a");
+
+        assert_eq!(keys(&mut viewer, "v⎋"), Request::None);
+        assert_eq!(viewer.mode(), VimMode::Normal);
+        keys(&mut viewer, "vv");
+        assert_eq!(viewer.mode(), VimMode::Normal);
+        keys(&mut viewer, "Vv");
+        assert_eq!(viewer.mode(), VimMode::Visual);
     }
 }

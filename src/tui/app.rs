@@ -18,6 +18,7 @@ use crate::tui::{
     signature::{self, SignatureEditor},
     ui::shown,
     viewer::{self, Viewer},
+    vim::VimMode,
 };
 
 /// IO the event loop must perform after an update.
@@ -420,6 +421,9 @@ impl AppState {
         }
         if let Some(visual) = &mut self.visual {
             match visual.key(key, self.viewport.reader) {
+                viewer::Request::None if visual.mode() == VimMode::Normal => {
+                    self.visual = None;
+                }
                 viewer::Request::None => {
                     let (line, _) = visual.cursor();
                     self.show_reader_line(line);
@@ -432,7 +436,7 @@ impl AppState {
                     }
                     return Some(Effect::Copy(text));
                 }
-                viewer::Request::Close => self.visual = None,
+                viewer::Request::Unhandled => self.visual = None,
             }
             return None;
         }
