@@ -445,7 +445,7 @@ impl AppState {
             self.viewer.show(&text);
             match self
                 .viewer
-                .key(key, self.viewport.reader, &mut Register::default())
+                .key(key, self.viewport.reader, &mut self.register)
             {
                 viewer::Request::None => {
                     let (line, _) = self.viewer.cursor();
@@ -1363,6 +1363,26 @@ Dear Charles,"
         );
         assert_eq!(app.viewer.mode(), VimMode::Normal, "copying stops picking");
         assert_eq!(app.status, Some(Status::Info("Copied 3 lines".to_owned())));
+    }
+
+    #[test]
+    fn text_yanked_in_the_reader_is_put_with_p_in_a_reply() {
+        let mut app = reading(10, 5);
+        app.body = Some("Dear Charles,".to_owned());
+        type_keys(&mut app, "Gyy");
+
+        type_keys(&mut app, "r");
+        app.on_key(KeyEvent::from(KeyCode::Esc), &mut Keymap::default());
+        type_keys(&mut app, "p");
+
+        let body = app.compose.as_ref().map(|c| c.body.text());
+        assert_eq!(
+            body.as_deref(),
+            Some(
+                "
+Dear Charles,"
+            )
+        );
     }
 
     #[test]
