@@ -432,6 +432,7 @@ impl AppState {
             Action::Expand if self.focus == Pane::Messages => return self.expand_group(),
             Action::Collapse if self.focus == Pane::Messages => return self.collapse_group(),
             Action::Expand if self.focus == Pane::Reader => return self.step_message(1),
+            Action::Collapse if self.focus == Pane::Reader => return self.step_message(-1),
             Action::Expand | Action::Collapse => {}
             Action::ToggleFavorite if self.focus == Pane::Folders => {
                 return self.toggle_favorite();
@@ -964,9 +965,12 @@ impl AppState {
     fn step_message(&mut self, delta: isize) -> Option<Effect> {
         let rows = self.message_rows();
         let at = self.selected_row(&rows)?;
-        let row = rows[at + 1..]
-            .iter()
-            .find(|row| matches!(row, MessageRow::Message(_)))?;
+        let is_message = |row: &&MessageRow| matches!(row, MessageRow::Message(_));
+        let row = if delta > 0 {
+            rows[at + 1..].iter().find(is_message)
+        } else {
+            rows[..at].iter().rev().find(is_message)
+        }?;
         self.select_row(*row);
         self.selection_changed()
     }
@@ -2243,6 +2247,17 @@ Ada"
         assert_eq!(app.update(Action::Expand), load_body("o1"));
         assert_eq!(app.focus, Pane::Reader);
         assert_eq!(app.reader_scroll, 0);
+    }
+
+    #[test]
+    fn left_in_the_reader_shows_the_previous_mail() {
+        let mut app = with_folders(&["a"]);
+        app.set_messages(today_and_older(&["t1"], &["o1"]));
+        app.focus = Pane::Reader;
+        app.update(Action::Expand);
+
+        assert_eq!(app.update(Action::Collapse), load_body("t1"));
+        assert_eq!(app.focus, Pane::Reader);
     }
 
     #[test]
