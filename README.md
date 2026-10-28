@@ -244,9 +244,9 @@ zoom, expanded folders and favorites) and picks up there next time.
 | Keys | What they do |
 | --- | --- |
 | `Tab` / `Shift-Tab` | Next pane / previous pane |
-| `Enter` | Open the folder or message |
+| `Enter` | Open the folder or message, or fold or unfold a date group |
 | `j` `k` or `↓` `↑` | Move, or scroll the message |
-| `l` `h` or `→` `←` | Expand a folder, collapse it or go up |
+| `l` `h` or `→` `←` | Expand a folder or date group, collapse it or go up |
 | `*` | Add the folder to Favorites, or take it out |
 | `PgDn` `PgUp` or `Ctrl-F` `Ctrl-B` | Move or scroll a page |
 | `Ctrl-D` `Ctrl-U` | Move or scroll half a page |
@@ -259,6 +259,12 @@ zoom, expanded folders and favorites) and picks up there next time.
 
 Subfolders start collapsed. A collapsed folder shows the unread count of
 everything inside it.
+
+The message list groups mail by date, as Outlook does: Today, Yesterday,
+This Week, Last Week, This Month, Last Month and Older. `←` on a message folds
+its group under its header, and `→`, `Enter` or a click on the header unfolds
+it again. Folded groups stay folded in every folder, and the next time tuilook
+starts.
 
 The folder pane has three parts: Favorites at the top, Unread in the middle and
 your accounts' folders below. A favorite works like the folder it stands for.

@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleting folders: `d` in the folder pane moves the selected folder and
   everything in it to Deleted Items, and `D` deletes it for good, after asking.
   Outlook's own folders cannot be deleted.
+- Date groups in the message list, as in Outlook: Today, Yesterday, This Week,
+  Last Week, This Month, Last Month and Older, each under a header with its
+  count. `←` folds a group, `→`, `Enter` or a click on its header unfolds it,
+  and folded groups stay folded in every folder and across restarts.
 
 ### Changed
 
