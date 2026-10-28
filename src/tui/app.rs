@@ -10,6 +10,7 @@ use crate::tui::{
     compose::{Compose, Request},
     keymap::Keymap,
     search::Search,
+    signature::{self, SignatureEditor},
 };
 
 /// IO the event loop must perform after an update.
@@ -28,6 +29,11 @@ pub enum Effect {
     Send(Draft),
     /// Search every account's cached mail.
     Search(String),
+    /// Keep `text` as the account's signature.
+    SaveSignature {
+        account: usize,
+        text: String,
+    },
 }
 
 /// A question the user must answer before anything else happens.
@@ -41,6 +47,8 @@ pub enum Confirm {
     Discard,
     /// Send although several messages went out just before it.
     SendAnyway { draft: Draft, sent_lately: usize },
+    /// Close the signature being written, losing the changes.
+    DiscardSignature,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -171,6 +179,10 @@ pub struct AppState {
     /// The signed-in addresses. With more than one, each account heads its
     /// own folders in the folder pane.
     pub accounts: Vec<String>,
+    /// Each account's signature, put below each new message it writes.
+    pub signatures: Vec<String>,
+    /// An account's signature being written, which takes over the screen.
+    pub signature: Option<SignatureEditor>,
     /// Each account's folders as core last reported them, or `None` before
     /// the first report.
     pub account_folders: Vec<Option<Vec<Folder>>>,
@@ -268,6 +280,27 @@ impl AppState {
             }
             return None;
         }
+        if let Some(editor) = &mut self.signature {
+            match editor.key(key, self.viewport.compose) {
+                signature::Request::None => {}
+                signature::Request::Save(text) => {
+                    let account = editor.account;
+                    if self.signatures.len() <= account {
+                        self.signatures.resize(account + 1, String::new());
+                    }
+                    self.signatures[account] = text.clone();
+                    self.signature = None;
+                    self.show_info("Signature saved");
+                    return Some(Effect::SaveSignature { account, text });
+                }
+                signature::Request::Close => self.signature = None,
+                signature::Request::ConfirmDiscard => {
+                    self.confirm = Some(Confirm::DiscardSignature);
+                }
+                signature::Request::Help => self.show_help = true,
+            }
+            return None;
+        }
         if self.typing_search() {
             return self.search_key(key);
         }
@@ -289,7 +322,7 @@ impl AppState {
             }
             return None;
         }
-        if self.confirm.is_some() || self.compose.is_some() {
+        if self.confirm.is_some() || self.compose.is_some() || self.signature.is_some() {
             return None;
         }
         let Hit { pane, item } = hit?;
@@ -376,6 +409,11 @@ impl AppState {
             Action::Help => self.show_help = true,
             Action::Search => self.start_search(),
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
+            Action::EditSignature => {
+                let account = self.current_account();
+                let signature = self.signatures.get(account).map_or("", String::as_str);
+                self.signature = Some(SignatureEditor::new(account, signature));
+            }
             Action::Reply | Action::ReplyAll | Action::Forward => {
                 if let Some(original) = self.selected() {
                     let id = original.id.clone();
@@ -479,6 +517,7 @@ impl AppState {
             Effect::LoadBody(id) | Effect::MarkRead(id) => self.message_account(id),
             Effect::Delete { .. } | Effect::Sync | Effect::Search(_) => self.current_account(),
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
+            Effect::SaveSignature { account, .. } => *account,
         }
     }
 
@@ -520,11 +559,14 @@ impl AppState {
 
     /// Opens a message to write from the account being looked at, or for
     /// a reply or forward, the account the original is in.
-    fn start_compose(&mut self, mut compose: Compose) {
-        compose.account = match (&compose.kind, self.selected()) {
+    fn start_compose(&mut self, compose: Compose) {
+        let account = match (&compose.kind, self.selected()) {
             (ComposeKind::New, _) | (_, None) => self.current_account(),
             (_, Some(original)) => self.message_account(&original.id),
         };
+        let signature = self.signatures.get(account).map_or("", String::as_str);
+        let mut compose = compose.with_signature(signature);
+        compose.account = account;
         if self.accounts.len() > 1 {
             compose.from = self.accounts.get(compose.account).cloned();
         }
@@ -608,6 +650,10 @@ impl AppState {
             }
             Confirm::Discard => {
                 self.compose = None;
+                None
+            }
+            Confirm::DiscardSignature => {
+                self.signature = None;
                 None
             }
             Confirm::SendAnyway { draft, .. } => {
@@ -1331,6 +1377,76 @@ mod tests {
         );
         assert_eq!(app.selected_message, 1, "j and k were typed, not moved");
         assert_eq!(app.status, Some(Status::Busy("Sending…".to_owned())));
+    }
+
+    fn two_accounts() -> AppState {
+        let mut app = AppState {
+            accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+            signatures: vec![String::new(), String::new()],
+            ..Default::default()
+        };
+        app.set_account_folders(0, vec![folder("a")]);
+        app.set_account_folders(1, vec![folder("b")]);
+        app
+    }
+
+    #[test]
+    fn shift_s_writes_the_signature_of_the_account_being_looked_at() {
+        let mut app = two_accounts();
+        // The rows are: account 0, a, account 1, b.
+        app.selected_folder = 3;
+
+        key(&mut app, KeyCode::Char('S'));
+        for c in "Ada".chars() {
+            key(&mut app, KeyCode::Char(c));
+        }
+        let effect = ctrl_s(&mut app);
+
+        assert_eq!(
+            effect,
+            Some(Effect::SaveSignature {
+                account: 1,
+                text: "Ada".to_owned()
+            })
+        );
+        assert!(app.signature.is_none());
+        assert_eq!(app.account_for(&effect.unwrap()), 1);
+        assert_eq!(app.status, Some(Status::Info("Signature saved".to_owned())));
+    }
+
+    #[test]
+    fn a_new_message_starts_with_its_accounts_signature() {
+        let mut app = two_accounts();
+        app.signatures[1] = "Ada".to_owned();
+
+        app.selected_folder = 3;
+        app.update(Action::Compose);
+        assert_eq!(
+            app.compose.as_ref().unwrap().body.text(),
+            "
+
+Ada"
+        );
+
+        app.compose = None;
+        app.selected_folder = 1;
+        app.update(Action::Compose);
+        assert_eq!(app.compose.as_ref().unwrap().body.text(), "");
+    }
+
+    #[test]
+    fn closing_a_changed_signature_asks_first() {
+        let mut app = two_accounts();
+        app.update(Action::EditSignature);
+
+        key(&mut app, KeyCode::Char('x'));
+        key(&mut app, KeyCode::Esc);
+        key(&mut app, KeyCode::Esc);
+        assert_eq!(app.confirm, Some(Confirm::DiscardSignature));
+        key(&mut app, KeyCode::Char('y'));
+
+        assert!(app.signature.is_none());
+        assert_eq!(app.signatures[0], "", "nothing was saved");
     }
 
     fn alt_gr(app: &mut AppState, c: char) {

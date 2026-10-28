@@ -124,7 +124,7 @@ fn main() -> Result<()> {
                 remove_db(&path)?;
                 mailboxes.push((address, backend, path));
             }
-            run_ui(&runtime, mailboxes, None, sync_every(&cli))
+            run_ui(&runtime, mailboxes, None, None, sync_every(&cli))
         }
         None => {
             let accounts = runtime.block_on(signed_in(&cli))?;
@@ -145,6 +145,7 @@ fn main() -> Result<()> {
             run_ui(
                 &runtime,
                 mailboxes,
+                Some(&accounts_path()?),
                 Some(&session_path()?),
                 sync_every(&cli),
             )
@@ -200,6 +201,7 @@ async fn login(cli: &Cli) -> Result<()> {
         address: address.clone(),
         tenant: cli.tenant.clone(),
         client_id,
+        signature: String::new(),
     });
     accounts.save(&accounts_path()?)?;
     println!("Signed in as {address}.");
@@ -276,6 +278,7 @@ async fn migrate_legacy(cli: &Cli) -> Result<Accounts> {
         address,
         tenant: cli.tenant.clone(),
         client_id,
+        signature: String::new(),
     }]))
 }
 
@@ -358,13 +361,20 @@ struct Mailbox {
 
 /// Renders from the caches at once while core syncs every account in the
 /// background. `accounts` holds each account's address, backend and cache.
+/// Their signatures are kept in `accounts_file`; without one, as in the
+/// demo, signatures last until tuilook closes.
 fn run_ui<B: MailBackend + Send + Sync + 'static>(
     runtime: &tokio::runtime::Runtime,
     accounts: Vec<(String, B, PathBuf)>,
+    accounts_file: Option<&Path>,
     session: Option<&Path>,
     sync_every: Option<Duration>,
 ) -> Result<()> {
     let mut app = AppState::default();
+    let saved = match accounts_file {
+        Some(path) => Accounts::load(path)?,
+        None => Accounts::default(),
+    };
     let mut mailboxes = Vec::new();
     let mut events = Vec::new();
     for (address, backend, path) in accounts {
@@ -377,25 +387,27 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
             event_tx,
         ));
         let store = Store::open(&path)?;
+        let signature = saved.find(&address).map(|a| a.signature.clone());
+        app.signatures.push(signature.unwrap_or_default());
         app.accounts.push(address);
         mailboxes.push(Mailbox { store, commands });
         events.push(event_rx);
     }
     app.sync.every = sync_every;
     let effect = app.start_sync();
-    apply(&mut app, &mailboxes, effect)?;
+    apply(&mut app, &mailboxes, accounts_file, effect)?;
     for (account, mailbox) in mailboxes.iter().enumerate() {
         let effect = app.set_account_folders(account, mailbox.store.folders()?);
-        apply(&mut app, &mailboxes, effect)?;
+        apply(&mut app, &mailboxes, accounts_file, effect)?;
     }
     if let Some(snapshot) = session.and_then(session::load) {
         let effect = app.restore(&snapshot);
-        apply(&mut app, &mailboxes, effect)?;
+        apply(&mut app, &mailboxes, accounts_file, effect)?;
         let effect = snapshot
             .message
             .as_deref()
             .and_then(|id| app.select_message(id));
-        apply(&mut app, &mailboxes, effect)?;
+        apply(&mut app, &mailboxes, accounts_file, effect)?;
     }
 
     let mut keymap = Keymap::default();
@@ -407,7 +419,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
             let now = Instant::now();
             app.expire_status(now);
             let effect = app.sync_if_due(now);
-            apply(&mut app, &mailboxes, effect)?;
+            apply(&mut app, &mailboxes, accounts_file, effect)?;
             terminal.draw(|frame| ui::draw(frame, &app))?;
             let shape = Cursor::of(&app);
             if shape != cursor {
@@ -418,7 +430,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
                 while let Ok(event) = events.try_recv() {
                     let store = &mailboxes[account].store;
                     let effect = on_core_event(&mut app, account, store, event)?;
-                    apply(&mut app, &mailboxes, effect)?;
+                    apply(&mut app, &mailboxes, accounts_file, effect)?;
                 }
             }
             if !event::poll(Duration::from_millis(100))? {
@@ -444,7 +456,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
                 }
                 _ => continue,
             };
-            apply(&mut app, &mailboxes, effect)?;
+            apply(&mut app, &mailboxes, accounts_file, effect)?;
         }
         Ok(())
     })();
@@ -472,7 +484,11 @@ impl Cursor {
     fn of(app: &AppState) -> Self {
         match &app.compose {
             None if app.typing_search() => Cursor::Bar,
-            None => Cursor::Default,
+            None => match &app.signature {
+                Some(editor) if editor.body.vim.mode == VimMode::Insert => Cursor::Bar,
+                Some(_) => Cursor::Block,
+                None => Cursor::Default,
+            },
             Some(compose) if compose.field != Field::Body => Cursor::Bar,
             Some(compose) if compose.body.vim.mode == VimMode::Insert => Cursor::Bar,
             Some(_) => Cursor::Block,
@@ -538,7 +554,12 @@ fn on_core_event(
 
 /// Performs the IO an update asked for, in the account it is for, and any
 /// IO it leads to.
-fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) -> Result<()> {
+fn apply(
+    app: &mut AppState,
+    mailboxes: &[Mailbox],
+    accounts_file: Option<&Path>,
+    mut effect: Option<Effect>,
+) -> Result<()> {
     while let Some(next) = effect {
         let Mailbox { store, commands } = &mailboxes[app.account_for(&next)];
         effect = match next {
@@ -562,6 +583,15 @@ fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) 
                 None
             }
             Effect::Search(query) => app.search_results(search_all(mailboxes, &query)?),
+            Effect::SaveSignature { account, text } => {
+                let saved = accounts_file.map_or(Ok(()), |path| {
+                    save_signature(path, &app.accounts[account], &text)
+                });
+                if let Err(e) = saved {
+                    app.show_error(format!("Could not save the signature: {e}"));
+                }
+                None
+            }
             Effect::Delete { ids, permanent } => {
                 // Search results may be in several accounts.
                 for (account, ids) in app.by_account(ids) {
@@ -573,6 +603,14 @@ fn apply(app: &mut AppState, mailboxes: &[Mailbox], mut effect: Option<Effect>) 
         };
     }
     Ok(())
+}
+
+/// Keeps `signature` for `address`, reading the accounts again so a sign-in
+/// since tuilook started is not lost.
+fn save_signature(path: &Path, address: &str, signature: &str) -> std::io::Result<()> {
+    let mut accounts = Accounts::load(path)?;
+    accounts.set_signature(address, signature);
+    accounts.save(path)
 }
 
 /// Every account's cached messages matching `query`, with the account each

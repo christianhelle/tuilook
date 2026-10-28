@@ -112,6 +112,24 @@ impl Compose {
         compose
     }
 
+    /// Puts `signature` below an empty first line of the body, ready to
+    /// type above it. Nothing is added for an empty signature.
+    pub fn with_signature(mut self, signature: &str) -> Self {
+        if signature.is_empty() {
+            return self;
+        }
+        let mode = self.body.vim.mode;
+        self.body.set_text(&format!(
+            "
+
+{signature}"
+        ));
+        self.body.move_to(0, 0);
+        self.body.vim.mode = mode;
+        self.opened = self.draft();
+        self
+    }
+
     /// The message as it now stands.
     pub fn draft(&self) -> Draft {
         Draft {
@@ -369,6 +387,38 @@ mod tests {
 
         assert_eq!(typing(&mut compose, "Hi⎋"), Request::None, "to normal");
         assert_eq!(typing(&mut compose, "⎋"), Request::ConfirmDiscard);
+    }
+
+    #[test]
+    fn a_signature_goes_below_where_the_message_is_typed() {
+        let mut compose = Compose::new(reply(), Some(&original())).with_signature(
+            "Grace
+Navy",
+        );
+
+        typing(&mut compose, "Agreed");
+
+        assert_eq!(
+            compose.body.text(),
+            "Agreed
+
+Grace
+Navy"
+        );
+        assert_eq!(compose.body.vim.mode, VimMode::Insert);
+    }
+
+    #[test]
+    fn a_new_message_with_only_its_signature_closes_at_once() {
+        let mut compose = Compose::new(ComposeKind::New, None).with_signature("Grace");
+
+        assert_eq!(
+            compose.body.text(),
+            "
+
+Grace"
+        );
+        assert_eq!(typing(&mut compose, "⎋"), Request::Close);
     }
 
     #[test]

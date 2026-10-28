@@ -1,0 +1,21 @@
+---
+source: tests/tui_render.rs
+assertion_line: 449
+expression: render_tall(&app)
+---
+"┏ Signature — me@work.example ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃Put below each message you write from this account                                      ┃"
+"┃                                                                                        ┃"
+"┃Ada Lovelace                                                                            ┃"
+"┃Analytical Engines                                                                      ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" INSERT  Ctrl-S save · Esc close · ? help                                                 "

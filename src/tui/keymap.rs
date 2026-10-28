@@ -64,6 +64,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('R') => Action::ReplyAll,
         KeyCode::Char('f') => Action::Forward,
         KeyCode::Char('/') => Action::Search,
+        KeyCode::Char('S') => Action::EditSignature,
         _ => return None,
     };
     Some(action)
@@ -203,6 +204,15 @@ mod tests {
     #[test]
     fn slash_searches() {
         assert_eq!(press(KeyCode::Char('/')), Some(Action::Search));
+    }
+
+    #[test]
+    fn shift_s_writes_the_signature() {
+        let shift_s = KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT);
+        assert_eq!(
+            Keymap::default().action_for(shift_s),
+            Some(Action::EditSignature)
+        );
     }
 
     #[test]

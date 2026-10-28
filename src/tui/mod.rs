@@ -10,5 +10,6 @@ pub mod input;
 pub mod keymap;
 pub mod search;
 pub mod session;
+pub mod signature;
 pub mod ui;
 pub mod vim;

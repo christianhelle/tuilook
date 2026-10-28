@@ -40,6 +40,8 @@ pub enum Action {
     Help,
     /// Write a new message.
     Compose,
+    /// Write the signature of the account being looked at.
+    EditSignature,
     /// Answer the selected message's sender.
     Reply,
     /// Answer the sender and everyone else on the selected message.

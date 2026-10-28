@@ -12,6 +12,9 @@ pub struct Account {
     /// its sign-in whatever the command line says now.
     pub tenant: String,
     pub client_id: String,
+    /// Plain text put below what the user writes in each new message.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub signature: String,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -41,15 +44,28 @@ impl Accounts {
         std::fs::write(path, text)
     }
 
-    /// Adds `account`, or replaces the one with the same address.
-    pub fn upsert(&mut self, account: Account) {
+    /// Adds `account`, or replaces the one with the same address. Signing in
+    /// again keeps the signature it had.
+    pub fn upsert(&mut self, mut account: Account) {
         match self
             .0
             .iter_mut()
             .find(|a| same(&a.address, &account.address))
         {
-            Some(known) => *known = account,
+            Some(known) => {
+                if account.signature.is_empty() {
+                    account.signature = std::mem::take(&mut known.signature);
+                }
+                *known = account;
+            }
             None => self.0.push(account),
+        }
+    }
+
+    /// Sets the signature of the account at `address`, if it is signed in.
+    pub fn set_signature(&mut self, address: &str, signature: &str) {
+        if let Some(account) = self.0.iter_mut().find(|a| same(&a.address, address)) {
+            account.signature = signature.to_owned();
         }
     }
 
@@ -93,6 +109,7 @@ mod tests {
             address: address.to_owned(),
             tenant: "consumers".to_owned(),
             client_id: "app".to_owned(),
+            signature: String::new(),
         }
     }
 
@@ -135,6 +152,38 @@ mod tests {
 
         assert_eq!(accounts.0.len(), 3);
         assert_eq!(accounts.0[1], again);
+    }
+
+    #[test]
+    fn signing_in_again_keeps_the_signature() {
+        let mut accounts = accounts();
+        accounts.set_signature(
+            "ME@work.example",
+            "Ada
+Engines",
+        );
+
+        accounts.upsert(account("me@work.example"));
+
+        assert_eq!(
+            accounts.0[1].signature,
+            "Ada
+Engines"
+        );
+    }
+
+    #[test]
+    fn a_signature_is_saved_with_the_account() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("accounts.json");
+        let mut accounts = accounts();
+        accounts.set_signature("other@outlook.com", "Grace");
+
+        accounts.save(&path).unwrap();
+
+        let loaded = Accounts::load(&path).unwrap();
+        assert_eq!(loaded.0[2].signature, "Grace");
+        assert_eq!(loaded.0[0].signature, "");
     }
 
     #[test]

@@ -310,6 +310,7 @@ fn the_writing_help_fits_too() {
     let inside = usize::from(ui::HELP_WIDTH) - 2;
 
     assert!(ui::help_line_width(&ui::COMPOSE_HELP) <= inside);
+    assert!(ui::help_line_width(&ui::SIGNATURE_HELP) <= inside);
 }
 
 #[test]
@@ -433,6 +434,30 @@ fn each_account_heads_its_own_folders() {
 #[test]
 fn a_message_says_which_account_it_is_sent_from() {
     let mut app = two_accounts();
+    app.selected_folder = 4;
+    press(&mut app, "c");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn shift_s_writes_the_accounts_signature() {
+    let mut app = two_accounts();
+    app.selected_folder = 4;
+    press(&mut app, "SAda Lovelace⏎Analytical Engines");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn a_new_message_starts_with_the_signature() {
+    let mut app = two_accounts();
+    app.signatures = vec![
+        String::new(),
+        "Ada Lovelace
+Analytical Engines"
+            .to_owned(),
+    ];
     app.selected_folder = 4;
     press(&mut app, "c");
 

@@ -15,6 +15,8 @@ use crate::tui::{
         is_favorite_row,
     },
     compose::{Compose, Field},
+    editor::Editor,
+    signature::SignatureEditor,
     vim::VimMode,
 };
 
@@ -70,7 +72,8 @@ struct Panes {
     folders: Rect,
     messages: Rect,
     reader: Rect,
-    /// The message being written, which takes the place of the panes.
+    /// The message or signature being written, which takes the place of
+    /// the panes.
     compose: Rect,
     status: Rect,
 }
@@ -83,7 +86,7 @@ fn panes(area: Rect, app: &AppState) -> Panes {
         status,
         ..Default::default()
     };
-    if app.compose.is_some() {
+    if app.compose.is_some() || app.signature.is_some() {
         panes.compose = main;
         return panes;
     }
@@ -142,6 +145,9 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     if let Some(message) = &app.compose {
         draw_compose(frame, message, compose);
     }
+    if let Some(editor) = &app.signature {
+        draw_signature(frame, app, editor, compose);
+    }
     frame.render_widget(status_line(app), status);
     if let Some(search) = app.search.as_ref().filter(|s| s.editing) {
         let typed = u16::try_from(Line::raw(search.query.as_str()).width()).unwrap_or(u16::MAX);
@@ -150,9 +156,10 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     }
 
     if app.show_help {
-        let help: &[(&str, &str)] = match app.compose {
-            Some(_) => &COMPOSE_HELP,
-            None => &HELP,
+        let help: &[(&str, &str)] = match (&app.compose, &app.signature) {
+            (Some(_), _) => &COMPOSE_HELP,
+            (None, Some(_)) => &SIGNATURE_HELP,
+            (None, None) => &HELP,
         };
         draw_help(frame, help);
     }
@@ -160,7 +167,16 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Confirm::Delete { ids, permanent }) => {
             draw_confirm_delete(frame, ids.len(), *permanent);
         }
-        Some(Confirm::Discard) => draw_confirm_discard(frame),
+        Some(Confirm::Discard) => draw_confirm_discard(
+            frame,
+            "Discard message",
+            "Close the message and lose what you wrote?",
+        ),
+        Some(Confirm::DiscardSignature) => draw_confirm_discard(
+            frame,
+            "Discard signature",
+            "Close the signature and lose your changes?",
+        ),
         Some(Confirm::SendAnyway { sent_lately, .. }) => draw_confirm_burst(frame, *sent_lately),
         None => {}
     }
@@ -245,10 +261,13 @@ fn draw_blocked(frame: &mut Frame, said: &str) {
 
 fn status_line(app: &AppState) -> Line<'static> {
     let mut spans = Vec::new();
-    if let Some(compose) = &app.compose
-        && compose.field == Field::Body
-    {
-        let mode = compose.body.vim.mode;
+    let editing = match (&app.compose, &app.signature) {
+        (Some(compose), _) if compose.field == Field::Body => Some(&compose.body),
+        (None, Some(editor)) => Some(&editor.body),
+        _ => None,
+    };
+    if let Some(body) = editing {
+        let mode = body.vim.mode;
         let color = match mode {
             VimMode::Normal => Color::Blue,
             VimMode::Insert => Color::Green,
@@ -270,6 +289,7 @@ fn status_line(app: &AppState) -> Line<'static> {
         None if app.compose.is_some() => {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
+        None if app.signature.is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
         None => Span::raw(
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",
         ),
@@ -387,12 +407,46 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
             areas.note,
         );
     }
-    draw_body(frame, compose, areas.body);
+    draw_body(
+        frame,
+        &compose.body,
+        compose.field == Field::Body,
+        areas.body,
+    );
 }
 
-/// The body being written, scrolled so the cursor is in view.
-fn draw_body(frame: &mut Frame, compose: &Compose, area: Rect) {
-    let editor = &compose.body;
+/// Where the note and the text of the signature being written go.
+fn signature_areas(area: Rect) -> [Rect; 2] {
+    let inner = Block::bordered().inner(area);
+    Layout::vertical([Constraint::Length(2), Constraint::Fill(1)]).areas(inner)
+}
+
+fn draw_signature(frame: &mut Frame, app: &AppState, editor: &SignatureEditor, area: Rect) {
+    let address = app.accounts.get(editor.account).map_or("", String::as_str);
+    let title = match address {
+        "" => " Signature ".to_owned(),
+        address => format!(" Signature — {address} "),
+    };
+    frame.render_widget(
+        Block::bordered()
+            .border_type(BorderType::Thick)
+            .title(title),
+        area,
+    );
+    let [note, body] = signature_areas(area);
+    frame.render_widget(
+        Line::styled(
+            "Put below each message you write from this account",
+            Style::new().fg(Color::DarkGray),
+        ),
+        note,
+    );
+    draw_body(frame, &editor.body, true, body);
+}
+
+/// Text being written, scrolled so the cursor is in view. The cursor shows
+/// when `focused`.
+fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
     let height = usize::from(area.height);
     let width = usize::from(area.width).max(1);
     let (row, column) = editor.cursor();
@@ -422,17 +476,17 @@ fn draw_body(frame: &mut Frame, compose: &Compose, area: Rect) {
         })
         .collect();
     frame.render_widget(Paragraph::new(lines), area);
-    if compose.field == Field::Body {
+    if focused {
         let x = u16::try_from(column - left).unwrap_or(u16::MAX);
         let y = u16::try_from(row - top).unwrap_or(u16::MAX);
         frame.set_cursor_position((area.x + x, area.y + y));
     }
 }
 
-/// A dialog asking whether to close the message being written.
-fn draw_confirm_discard(frame: &mut Frame) {
+/// A dialog asking whether to close the message or signature being written.
+fn draw_confirm_discard(frame: &mut Frame, title: &str, question: &str) {
     let lines = vec![
-        Line::raw("Close the message and lose what you wrote?"),
+        Line::raw(question.to_owned()),
         Line::raw(""),
         Line::from(vec![
             Span::styled("y / Enter", Style::new().fg(Color::Red)),
@@ -449,7 +503,7 @@ fn draw_confirm_discard(frame: &mut Frame) {
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
-                .title("Discard message")
+                .title(title.to_owned())
                 .border_style(Style::new().fg(Color::Red)),
         ),
         area,
@@ -474,8 +528,24 @@ pub const COMPOSE_HELP: [(&str, &str); 11] = [
     ("", "Press any key to close"),
 ];
 
+/// What each key does while writing a signature, shown with `?` in normal mode.
+pub const SIGNATURE_HELP: [(&str, &str); 9] = [
+    ("i a I A o O", "Type, insert mode"),
+    ("Esc", "Back to normal mode"),
+    ("h j k l w b e 0 $ gg G", "Move"),
+    ("dd cw x p u Ctrl-R v V", "Edit vim style"),
+    ("Ctrl-S", "Save"),
+    (
+        "Esc in normal mode",
+        "Close, asking first if anything changed",
+    ),
+    ("", "An empty signature adds nothing to messages"),
+    ("Ctrl-C", "Quit"),
+    ("", "Press any key to close"),
+];
+
 /// What each key does, shown with `?`.
-pub const HELP: [(&str, &str); 19] = [
+pub const HELP: [(&str, &str); 20] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
     ("Enter", "Open the folder or message"),
     ("→ ←  l h", "Expand or enter a folder, collapse it or go up"),
@@ -498,6 +568,7 @@ pub const HELP: [(&str, &str); 19] = [
     ),
     ("F5  Ctrl-R", "Sync every folder now"),
     ("/", "Search every folder (Esc goes back)"),
+    ("S", "Write this account's signature"),
     ("?", "Show this help"),
     ("q  Ctrl-C", "Quit"),
     ("", "Press any key to close"),
@@ -833,8 +904,10 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
         messages: messages / MESSAGE_ROWS,
         reader,
         reader_lines: reader_paragraph(app).map_or(0, |p| p.line_count(reader_width)),
-        compose: app.compose.as_ref().map_or(0, |compose| {
-            usize::from(compose_areas(panes.compose, compose).body.height)
-        }),
+        compose: match (&app.compose, &app.signature) {
+            (Some(compose), _) => usize::from(compose_areas(panes.compose, compose).body.height),
+            (None, Some(_)) => usize::from(signature_areas(panes.compose)[1].height),
+            (None, None) => 0,
+        },
     }
 }

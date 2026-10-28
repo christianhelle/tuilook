@@ -1,5 +1,6 @@
 ---
 source: tests/tui_render.rs
+assertion_line: 245
 expression: terminal.backend().to_string()
 ---
 "┌ Favor┌Keys──────────────────────────────────────────────────────────────────────┐──────┐"
@@ -19,6 +20,6 @@ expression: terminal.backend().to_string()
 "┃      │c  r  R  f               Write a message, reply, reply to all, forward    │      │"
 "┃      │F5  Ctrl-R               Sync every folder now                            │      │"
 "┃      │/                        Search every folder (Esc goes back)              │      │"
-"┃      │?                        Show this help                                   │      │"
-"┗━━━━━━│q  Ctrl-C                Quit                                             │──────┘"
+"┃      │S                        Write this account's signature                   │      │"
+"┗━━━━━━│?                        Show this help                                   │──────┘"
 " ? help└──────────────────────────────────────────────────────────────────────────┘q quit "
