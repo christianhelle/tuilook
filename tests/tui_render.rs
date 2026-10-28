@@ -647,3 +647,24 @@ fn the_unread_section_lists_folders_with_unread_mail() {
 
     insta::assert_snapshot!(terminal.backend().to_string());
 }
+
+#[test]
+fn picked_text_in_the_reader_is_highlighted() {
+    use ratatui::style::Modifier;
+    let mut app = sample_app();
+    app.body_loaded(MessageId("m1".to_owned()), "Dear Charles,".to_owned());
+    app.focus = Pane::Reader;
+    press(&mut app, "vj");
+    let mut terminal = Terminal::new(TestBackend::new(90, 12)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+
+    let reversed = |text| {
+        leftmost(&terminal, text)
+            .add_modifier
+            .contains(Modifier::REVERSED)
+    };
+    assert!(reversed("From: Ada"), "the first line is picked");
+    assert!(reversed("Subject:"), "up to the cursor");
+    assert!(!reversed("ubject:"), "but not past it");
+    assert!(!reversed("Dear"));
+}

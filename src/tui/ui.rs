@@ -15,11 +15,12 @@ use crate::tui::{
         is_favorite_row, is_unread_row,
     },
     compose::{Compose, Field},
-    editor::Editor,
+    editor::{Editor, Pos},
     groups::MessageRow,
     older::LOADING_OLDER,
     signature::SignatureEditor,
     vim::VimMode,
+    visual::Visual,
 };
 
 /// Mail text made safe to draw. Mail is full of characters that take no room
@@ -482,27 +483,13 @@ fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
     let top = editor.scroll(height);
     let left = column.saturating_sub(width - 1);
     let selection = editor.vim.selection((row, column));
-    let picked = Style::new().add_modifier(Modifier::REVERSED);
     let lines: Vec<Line> = editor
         .lines()
         .iter()
         .enumerate()
         .skip(top)
         .take(height)
-        .map(|(index, line)| {
-            let chars = line.chars().enumerate().skip(left);
-            let spans = chars.map(|(at, c)| {
-                let selected = selection.is_some_and(|(first, last)| {
-                    (first.0, first.1) <= (index, at) && (index, at) <= (last.0, last.1)
-                });
-                if selected {
-                    Span::styled(c.to_string(), picked)
-                } else {
-                    Span::raw(c.to_string())
-                }
-            });
-            Line::from(spans.collect::<Vec<_>>())
-        })
+        .map(|(index, line)| picked_line(line, index, left, selection))
         .collect();
     frame.render_widget(Paragraph::new(lines), area);
     if focused {
@@ -510,6 +497,31 @@ fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
         let y = u16::try_from(row - top).unwrap_or(u16::MAX);
         frame.set_cursor_position((area.x + x, area.y + y));
     }
+}
+
+/// Line `index` from its character `left` on, with the characters in a
+/// visual mode's `selection` reversed.
+fn picked_line(
+    line: &str,
+    index: usize,
+    left: usize,
+    selection: Option<(Pos, Pos)>,
+) -> Line<'static> {
+    let chars = line.chars().enumerate().skip(left);
+    if selection.is_none_or(|(first, last)| index < first.0 || last.0 < index) {
+        return Line::raw(chars.map(|(_, c)| c).collect::<String>());
+    }
+    let picked = Style::new().add_modifier(Modifier::REVERSED);
+    let spans = chars.map(|(at, c)| {
+        let selected =
+            selection.is_some_and(|(first, last)| first <= (index, at) && (index, at) <= last);
+        if selected {
+            Span::styled(c.to_string(), picked)
+        } else {
+            Span::raw(c.to_string())
+        }
+    });
+    Line::from(spans.collect::<Vec<_>>())
 }
 
 /// A dialog asking whether to close the message or signature being written.
@@ -884,7 +896,13 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
 
 /// The selected message's headers and body, wrapped to the pane.
 fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
-    let text: Vec<Line> = app.reader_text()?.into_iter().map(Line::raw).collect();
+    let selection = app.visual.as_ref().and_then(Visual::selection);
+    let text: Vec<Line> = app
+        .reader_text()?
+        .iter()
+        .enumerate()
+        .map(|(index, line)| picked_line(line, index, 0, selection))
+        .collect();
     Some(Paragraph::new(text).wrap(Wrap { trim: false }))
 }
 

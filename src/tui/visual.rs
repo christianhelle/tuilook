@@ -45,6 +45,11 @@ impl Visual {
         self.editor.cursor()
     }
 
+    /// The first and last picked places.
+    pub fn selection(&self) -> Option<(Pos, Pos)> {
+        self.editor.vim.selection(self.editor.cursor())
+    }
+
     /// Acts on a key, moving `page` lines a page.
     pub fn key(&mut self, key: KeyEvent, page: usize) -> Request {
         if !reads(key) {
