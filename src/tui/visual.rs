@@ -4,7 +4,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::{
     editor::Editor,
-    vim::{self, Outcome, Register},
+    vim::{self, Outcome, Register, VimMode},
 };
 
 /// Text being picked, in a read-only editor holding what the pane shows.
@@ -19,6 +19,8 @@ pub enum Request {
     None,
     /// Copy the picked text to the clipboard.
     Copy(String),
+    /// Stop picking.
+    Close,
 }
 
 impl Visual {
@@ -45,6 +47,7 @@ impl Visual {
         }
         match vim::key(&mut self.editor, key, page, &mut Register::default()) {
             Outcome::Yanked(text) => Request::Copy(text),
+            _ if self.editor.vim.mode == VimMode::Normal => Request::Close,
             _ => Request::None,
         }
     }
@@ -110,5 +113,12 @@ mod tests {
         let request = keys(&mut visual, "$y");
 
         assert_eq!(request, Request::Copy("Dear Charles,".into()));
+    }
+
+    #[test]
+    fn esc_or_v_again_stops_picking() {
+        assert_eq!(keys(&mut picking("a", 0), "⎋"), Request::Close);
+        assert_eq!(keys(&mut picking("a", 0), "v"), Request::Close);
+        assert_eq!(keys(&mut picking("a", 0), "Vv"), Request::None);
     }
 }
