@@ -1,18 +1,17 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 245
 expression: terminal.backend().to_string()
 ---
 "┌ Favor┌Keys──────────────────────────────────────────────────────────────────────┐──────┐"
 "│* adds│Tab / Shift-Tab          Next pane / previous pane                        │      │"
 "└──────│Enter                    Open the folder or message                       │      │"
-"┏ Folde│→ ←  l h                 Expand or enter a folder, collapse it or go up   │      │"
-"┃>   In│*                        Add the folder to Favorites or take it out       │      │"
-"┃    Se│↑ ↓  j k                 Move, or scroll the message                      │      │"
-"┃    Pr│PgUp PgDn Ctrl-B Ctrl-F  Move or scroll a page                            │      │"
-"┃      │Ctrl-U Ctrl-D            Move or scroll half a page                       │      │"
-"┃      │g g  G  Home End         Jump to the first or last                        │      │"
-"┃      │z                        Zoom the pane, or show every pane again          │      │"
+"┌ Unrea│→ ←  l h                 Expand or enter a folder, collapse it or go up   │      │"
+"│No unr│*                        Add the folder to Favorites or take it out       │      │"
+"└──────│↑ ↓  j k                 Move, or scroll the message                      │      │"
+"┏ Folde│PgUp PgDn Ctrl-B Ctrl-F  Move or scroll a page                            │      │"
+"┃>   In│Ctrl-U Ctrl-D            Move or scroll half a page                       │      │"
+"┃    Se│g g  G  Home End         Jump to the first or last                        │      │"
+"┃    Pr│z                        Zoom the pane, or show every pane again          │      │"
 "┃      │b                        Hide or show the folders                         │      │"
 "┃      │Space, Ctrl-A            Mark a message, mark them all (Esc clears)       │      │"
 "┃      │d                        Move the marked or selected to Deleted Items     │      │"

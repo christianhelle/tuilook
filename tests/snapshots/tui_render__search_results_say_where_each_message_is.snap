@@ -1,21 +1,20 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 545
 expression: render_tall(&app)
 ---
 "┌ Favorites ─────┐┏ Search: ada (3) ━━━━━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
 "│* adds the selec│┃> Ada                             ┃│From: Ada <ada@example.com>       │"
 "└────────────────┘┃    Inbox, me@outlook.com · Analyt┃│Subject: Analytical engine        │"
-"┌ Accounts ──────┐┃  Ada                             ┃│                                  │"
-"│  ▾ me@outlook.c│┃    Sent Items, me@outlook.com · R┃│Notes                             │"
-"│>     Inbox (2) │┃  Ada                             ┃│                                  │"
-"│      Sent Items│┃    Inbox, me@work.example · Engin┃│                                  │"
+"┌ Unread ────────┐┃  Ada                             ┃│                                  │"
+"│▾ me@outlook.com│┃    Sent Items, me@outlook.com · R┃│Notes                             │"
+"│    Inbox (2)   │┃  Ada                             ┃│                                  │"
+"│▾ me@work.exampl│┃    Inbox, me@work.example · Engin┃│                                  │"
+"└────────────────┘┃                                  ┃│                                  │"
+"┌ Accounts ──────┐┃                                  ┃│                                  │"
+"│  ▾ me@outlook.c│┃                                  ┃│                                  │"
+"│>     Inbox (2) │┃                                  ┃│                                  │"
+"│      Sent Items│┃                                  ┃│                                  │"
 "│  ▾ me@work.exam│┃                                  ┃│                                  │"
 "│      Inbox (5) │┃                                  ┃│                                  │"
-"│                │┃                                  ┃│                                  │"
-"│                │┃                                  ┃│                                  │"
-"│                │┃                                  ┃│                                  │"
-"│                │┃                                  ┃│                                  │"
-"│                │┃                                  ┃│                                  │"
 "└────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘"
 " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "

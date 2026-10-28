@@ -1,0 +1,20 @@
+---
+source: tests/tui_render.rs
+expression: terminal.backend().to_string()
+---
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││> Ada                             ││From: Ada <ada@example.com>       │"
+"└────────────────┘│    Analytical engine             ││Subject: Analytical engine        │"
+"┏ Unread ━━━━━━━━┓│                                  ││                                  │"
+"┃      Inbox (2) ┃│                                  ││Notes                             │"
+"┃  ▾ me@work.exam┃│                                  ││                                  │"
+"┃>     Inbox (5) ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛│                                  ││                                  │"
+"┌ Accounts ──────┐│                                  ││                                  │"
+"│▾ me@outlook.com││                                  ││                                  │"
+"│    Inbox (2)   ││                                  ││                                  │"
+"│    Sent Items  ││                                  ││                                  │"
+"│▾ me@work.exampl││                                  ││                                  │"
+"│    Inbox (5)   ││                                  ││                                  │"
+"└────────────────┘└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "

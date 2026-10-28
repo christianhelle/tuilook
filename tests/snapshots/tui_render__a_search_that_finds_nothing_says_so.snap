@@ -1,17 +1,16 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 554
 expression: render(&app)
 ---
 "┌ Favorites ─────┐┌ Search: zzz (0) ─────────────────┐┌ Reading ─────────────────────────┐"
 "│* adds the selec││Nothing found                     ││                                  │"
 "└────────────────┘│                                  ││                                  │"
+"┌ Unread ────────┐│                                  ││                                  │"
+"│No unread mail  ││                                  ││                                  │"
+"└────────────────┘│                                  ││                                  │"
 "┏ Folders ━━━━━━━┓│                                  ││                                  │"
 "┃>   Inbox (2)   ┃│                                  ││                                  │"
 "┃    Sent Items  ┃│                                  ││                                  │"
 "┃    Projects    ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
-"┃                ┃│                                  ││                                  │"
 "┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
 " /zzz                                                                                     "

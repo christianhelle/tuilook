@@ -289,6 +289,21 @@ impl Store {
         Ok(messages)
     }
 
+    /// The unread messages in one folder, newest first, along with `keep`
+    /// even once it is read, so the message being read stays in the list.
+    pub fn unread_in(&self, folder: &FolderId, keep: Option<&MessageId>) -> Result<Vec<Message>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, folder_id, conversation_id, subject, from_name, from_addr,
+                    received_at, is_read, flagged, importance, has_attachments, preview
+             FROM messages WHERE folder_id = ?1 AND (is_read = 0 OR id = ?2)
+             ORDER BY received_at DESC",
+        )?;
+        let messages = stmt
+            .query_map((&folder.0, keep.map(|id| &id.0)), message_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(messages)
+    }
+
     /// Messages in any folder whose subject, sender, preview or fetched body
     /// contains `query`, ignoring case, newest first, at most `limit` of them.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<Message>> {

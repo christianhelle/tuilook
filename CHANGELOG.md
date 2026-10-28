@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Signatures: `S` writes a signature for the account being looked at. New
   messages, replies and forwards from that account start with it, ready to
   edit before sending.
+- An Unread section in the folder pane, between Favorites and the accounts. It
+  lists each account's folders that have unread mail, leaving out Junk Email
+  and Deleted Items, and picking one shows only its unread messages.
 
 ### Changed
 

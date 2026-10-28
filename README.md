@@ -260,11 +260,16 @@ zoom, expanded folders and favorites) and picks up there next time.
 Subfolders start collapsed. A collapsed folder shows the unread count of
 everything inside it.
 
-The folder pane has two parts, as in Outlook: Favorites at the top and your
-accounts' folders below. A favorite works like the folder it stands for. When
-the same folder name is a favorite from more than one account, such as each
-account's Inbox, the favorite also shows the account, as in
+The folder pane has three parts: Favorites at the top, Unread in the middle and
+your accounts' folders below. A favorite works like the folder it stands for.
+When the same folder name is a favorite from more than one account, such as
+each account's Inbox, the favorite also shows the account, as in
 `Inbox - me@outlook.com`.
+
+Unread lists your accounts' folders again, but only those with unread mail,
+leaving out Junk Email and Deleted Items. Picking a folder there shows only its
+unread messages. A message you open stays in the list, shown as read, until you
+move on and the list is loaded again, and the folder stays until you leave it.
 
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.

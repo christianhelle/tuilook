@@ -137,12 +137,12 @@ fn a_click_finds_the_folder_drawn_under_it_past_collapsed_ones() {
     let mut app = with_subfolders();
     let area = ratatui::layout::Rect::new(0, 0, 90, 12);
 
-    // The empty favorites take the first three rows.
-    let hit = ui::hit(area, &app, 4, 5).unwrap();
+    // The empty favorites and unread section take the first six rows.
+    let hit = ui::hit(area, &app, 4, 8).unwrap();
     assert_eq!(hit.item, Some(3), "Projects, below the collapsed Inbox");
 
     app.update(tuilook::model::Action::Expand);
-    assert_eq!(ui::hit(area, &app, 4, 5).unwrap().item, Some(1), "Receipts");
+    assert_eq!(ui::hit(area, &app, 4, 8).unwrap().item, Some(1), "Receipts");
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn viewport_measures_what_each_pane_can_show() {
     assert_eq!(
         viewport,
         tuilook::tui::app::Viewport {
-            folders: 6,
+            folders: 3,
             messages: 4,
             reader: 9,
             // From, Subject, blank, "Hi", then the long line wrapped in three
@@ -361,7 +361,7 @@ fn a_click_on_a_border_or_past_the_last_row_hits_no_row() {
         "no message there"
     );
     assert_eq!(
-        ui::hit(area, &app, 2, 5).unwrap().item,
+        ui::hit(area, &app, 2, 8).unwrap().item,
         Some(1),
         "Sent Items"
     );
@@ -434,7 +434,7 @@ fn each_account_heads_its_own_folders() {
 #[test]
 fn a_message_says_which_account_it_is_sent_from() {
     let mut app = two_accounts();
-    app.selected_folder = 4;
+    app.selected_folder = app.folders.iter().position(|f| f.id.0 == "work").unwrap();
     press(&mut app, "c");
 
     insta::assert_snapshot!(render_tall(&app));
@@ -443,7 +443,7 @@ fn a_message_says_which_account_it_is_sent_from() {
 #[test]
 fn shift_s_writes_the_accounts_signature() {
     let mut app = two_accounts();
-    app.selected_folder = 4;
+    app.selected_folder = app.folders.iter().position(|f| f.id.0 == "work").unwrap();
     press(&mut app, "SAda Lovelace⏎Analytical Engines");
 
     insta::assert_snapshot!(render_tall(&app));
@@ -458,7 +458,7 @@ fn a_new_message_starts_with_the_signature() {
 Analytical Engines"
             .to_owned(),
     ];
-    app.selected_folder = 4;
+    app.selected_folder = app.folders.iter().position(|f| f.id.0 == "work").unwrap();
     press(&mut app, "c");
 
     insta::assert_snapshot!(render_tall(&app));
@@ -514,10 +514,14 @@ fn a_click_in_the_favorites_selects_the_favorite() {
     app.on_mouse(tuilook::tui::app::Mouse::Click, Some(hit));
 
     assert_eq!(app.shown_folder(), Some(FolderId("inbox".to_owned())));
+    let first_account = app
+        .folders
+        .iter()
+        .position(|f| f.id.0 == "account:me@outlook.com");
     assert_eq!(
-        ui::hit(area, &app, 4, 6).unwrap().item,
-        Some(3),
-        "the first account, below the favorites"
+        ui::hit(area, &app, 4, 11).unwrap().item,
+        first_account,
+        "the first account, below the favorites and the unread section"
     );
 }
 
@@ -620,4 +624,19 @@ fn read_mail_is_dimmed_and_unread_mail_is_bold() {
         assert_eq!(style.fg, Some(Color::DarkGray), "{read}");
         assert!(!style.add_modifier.contains(Modifier::BOLD), "{read}");
     }
+}
+
+#[test]
+fn the_unread_section_lists_folders_with_unread_mail() {
+    let mut app = two_accounts();
+    app.focus = Pane::Folders;
+    app.selected_folder = app
+        .folders
+        .iter()
+        .position(|f| f.id.0 == "unread:work")
+        .unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(90, 16)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+
+    insta::assert_snapshot!(terminal.backend().to_string());
 }

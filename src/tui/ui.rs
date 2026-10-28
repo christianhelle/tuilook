@@ -12,7 +12,7 @@ use ratatui::{
 use crate::tui::{
     app::{
         AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport, is_account_row,
-        is_favorite_row,
+        is_favorite_row, is_unread_row,
     },
     compose::{Compose, Field},
     editor::Editor,
@@ -69,6 +69,9 @@ const MESSAGE_ROWS: usize = 2;
 struct Panes {
     /// The favorites, above the accounts' folders.
     favorites: Rect,
+    /// The folders with unread mail, between the favorites and the
+    /// accounts' folders.
+    unread: Rect,
     folders: Rect,
     messages: Rect,
     reader: Rect,
@@ -109,23 +112,37 @@ fn panes(area: Rect, app: &AppState) -> Panes {
         }
     }
     if !panes.folders.is_empty() {
-        [panes.favorites, panes.folders] = split_favorites(panes.folders, app);
+        [panes.favorites, panes.unread, panes.folders] = split_folders(panes.folders, app);
     }
     panes
 }
 
-/// Splits the folder pane into the favorites, as tall as they need up to
-/// half the pane, and the accounts' folders below them.
-fn split_favorites(area: Rect, app: &AppState) -> [Rect; 2] {
-    // An empty favorites box still has a row, for the hint.
-    let rows = u16::try_from(app.favorite_count().max(1)).unwrap_or(u16::MAX);
-    let height = rows.saturating_add(2).min(area.height / 2);
-    Layout::vertical([Constraint::Length(height), Constraint::Fill(1)]).areas(area)
+/// Splits the folder pane into the favorites and the unread section, each
+/// as tall as it needs up to a third of the pane, and the accounts' folders
+/// below them.
+fn split_folders(area: Rect, app: &AppState) -> [Rect; 3] {
+    // An empty box still has a row, for its hint.
+    let height = |rows: usize| {
+        let rows = u16::try_from(rows.max(1)).unwrap_or(u16::MAX);
+        rows.saturating_add(2).min(area.height / 3)
+    };
+    let unread_rows = app
+        .visible_folders()
+        .into_iter()
+        .filter(|&i| is_unread_row(&app.folders[i]))
+        .count();
+    Layout::vertical([
+        Constraint::Length(height(app.favorite_count())),
+        Constraint::Length(height(unread_rows)),
+        Constraint::Fill(1),
+    ])
+    .areas(area)
 }
 
 pub fn draw(frame: &mut Frame, app: &AppState) {
     let Panes {
         favorites,
+        unread,
         folders,
         messages,
         reader,
@@ -134,7 +151,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     } = panes(frame.area(), app);
 
     if !folders.is_empty() {
-        draw_folders(frame, app, favorites, folders);
+        draw_folders(frame, app, [favorites, unread, folders]);
     }
     if !messages.is_empty() {
         draw_messages(frame, app, messages);
@@ -665,45 +682,57 @@ fn section_block(focused: bool, title: &str) -> Block<'static> {
         .title(format!(" {title} "))
 }
 
-/// The rows shown in the favorites and below them, as indexes into
-/// `folders`.
-fn folder_sections(app: &AppState) -> (Vec<usize>, Vec<usize>) {
+/// The rows shown in the favorites, in the unread section and below them,
+/// as indexes into `folders`.
+fn folder_sections(app: &AppState) -> [Vec<usize>; 3] {
     let favorites = app.favorite_count();
-    app.visible_folders()
-        .into_iter()
-        .partition(|&i| i < favorites)
+    let unread = favorites + app.unread_count();
+    let mut sections: [Vec<usize>; 3] = Default::default();
+    for i in app.visible_folders() {
+        let section = if i < favorites {
+            0
+        } else if i < unread {
+            1
+        } else {
+            2
+        };
+        sections[section].push(i);
+    }
+    sections
 }
 
-fn draw_folders(frame: &mut Frame, app: &AppState, favorites: Rect, folders: Rect) {
+/// Draws the favorites, the unread section and the accounts' folders in
+/// the areas given, in that order.
+fn draw_folders(frame: &mut Frame, app: &AppState, areas: [Rect; 3]) {
     let depths = folder_depths(&app.folders);
-    let (favorite_rows, folder_rows) = folder_sections(app);
-    let in_favorites = app.selected_folder < app.favorite_count();
-    let focused = app.focus == Pane::Folders;
-    let favorites_block = section_block(focused && in_favorites, "Favorites");
-    if favorite_rows.is_empty() {
-        let hint = Line::styled(
-            "* adds the selected folder",
-            Style::new().fg(Color::DarkGray),
-        );
-        frame.render_widget(Paragraph::new(hint).block(favorites_block), favorites);
+    let favorites = app.favorite_count();
+    let unread = favorites + app.unread_count();
+    let selected = app.selected_folder;
+    let section = if selected < favorites {
+        0
+    } else if selected < unread {
+        1
     } else {
-        draw_folder_rows(
-            frame,
-            app,
-            &depths,
-            &favorite_rows,
-            favorites_block,
-            favorites,
-        );
-    }
-    let title = match (app.accounts.len() > 1, app.sync.running) {
+        2
+    };
+    let focused = app.focus == Pane::Folders;
+    let accounts = match (app.accounts.len() > 1, app.sync.running) {
         (true, true) => "Accounts ⟳",
         (true, false) => "Accounts",
         (false, true) => "Folders ⟳",
         (false, false) => "Folders",
     };
-    let block = section_block(focused && !in_favorites, title);
-    draw_folder_rows(frame, app, &depths, &folder_rows, block, folders);
+    let titles = ["Favorites", "Unread", accounts];
+    let hints = ["* adds the selected folder", "No unread mail", ""];
+    for (index, rows) in folder_sections(app).iter().enumerate() {
+        let block = section_block(focused && section == index, titles[index]);
+        if rows.is_empty() && index < 2 {
+            let hint = Line::styled(hints[index], Style::new().fg(Color::DarkGray));
+            frame.render_widget(Paragraph::new(hint).block(block), areas[index]);
+        } else {
+            draw_folder_rows(frame, app, &depths, rows, block, areas[index]);
+        }
+    }
 }
 
 fn draw_folder_rows(
@@ -798,7 +827,7 @@ fn found_in(app: &AppState, message: &Message) -> String {
     let folder = app
         .folders
         .iter()
-        .find(|f| f.id == message.folder_id && !is_favorite_row(f))
+        .find(|f| f.id == message.folder_id && !is_favorite_row(f) && !is_unread_row(f))
         .map_or("?", |f| f.name.as_str());
     let account = app
         .accounts
@@ -847,6 +876,7 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
     let at = Position::new(column, row);
     let (pane, rect) = [
         (Pane::Folders, panes.favorites),
+        (Pane::Folders, panes.unread),
         (Pane::Folders, panes.folders),
         (Pane::Messages, panes.messages),
         (Pane::Reader, panes.reader),
@@ -859,9 +889,11 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
     let item = match pane {
         Pane::Folders => line.and_then(|line| {
             // Rows are the folders shown; the hit is the folder's index.
-            let (favorites, folders) = folder_sections(app);
+            let [favorites, unread, folders] = folder_sections(app);
             let section = if rect == panes.favorites {
                 favorites
+            } else if rect == panes.unread {
+                unread
             } else {
                 folders
             };

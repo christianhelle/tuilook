@@ -3,7 +3,7 @@
 use crate::model::Folder;
 
 use crate::tui::app::{
-    AppState, Effect, favorite_row, favorite_target, is_account_row, is_favorite_row,
+    AppState, Effect, favorite_row, is_account_row, is_favorite_row, row_target,
 };
 
 impl AppState {
@@ -65,7 +65,7 @@ impl AppState {
         if is_account_row(row) {
             return None;
         }
-        let id = favorite_target(&row.id);
+        let id = row_target(&row.id);
         // A favorite's own name may say which account it is from.
         let name = self
             .folders
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn moving_down_goes_from_the_favorites_into_the_accounts() {
+    fn moving_down_goes_from_the_favorites_into_the_unread_section() {
         let mut app = two_accounts();
         select(&mut app, "projects");
         app.update(Action::ToggleFavorite);
@@ -228,7 +228,9 @@ mod tests {
 
         assert_eq!(
             app.update(Action::SelectNext),
-            load("account:me@outlook.com")
+            Some(Effect::LoadUnread(FolderId(
+                "account:me@outlook.com".to_owned()
+            )))
         );
     }
 

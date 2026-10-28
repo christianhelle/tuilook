@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use crate::model::FolderId;
 
-use crate::tui::app::{AppState, Effect, favorite_target};
+use crate::tui::app::{AppState, Effect};
 
 impl AppState {
     /// Indexes into `folders` of the folders shown, in order: the top-level
@@ -100,7 +100,7 @@ impl AppState {
             return None;
         }
         self.selected_folder = index;
-        Some(Effect::LoadFolder(favorite_target(&self.folders[index].id)))
+        self.load_shown()
     }
 
     /// Expands every folder above the selected one, so it is shown.
@@ -153,11 +153,18 @@ mod tests {
         app
     }
 
+    /// The folders shown below the unread section.
     fn names(app: &AppState) -> Vec<&str> {
         app.visible_folders()
             .into_iter()
+            .filter(|&i| i >= app.unread_count())
             .map(|i| app.folders[i].name.as_str())
             .collect()
+    }
+
+    /// The index in `folders` of the row with `id`.
+    fn at(app: &AppState, id: &str) -> usize {
+        app.folders.iter().position(|f| f.id.0 == id).unwrap()
     }
 
     fn selected(app: &AppState) -> &str {
@@ -238,17 +245,21 @@ mod tests {
     fn a_collapsed_folder_counts_the_unread_mail_inside_it() {
         let mut app = tree();
 
-        assert_eq!(app.unread_shown(0), 7);
+        assert_eq!(app.unread_shown(at(&app, "inbox")), 7);
         app.update(Action::Expand);
-        assert_eq!(app.unread_shown(0), 1);
-        assert_eq!(app.unread_shown(1), 6, "receipts is still collapsed");
-        assert_eq!(app.unread_shown(4), 0);
+        assert_eq!(app.unread_shown(at(&app, "inbox")), 1);
+        assert_eq!(
+            app.unread_shown(at(&app, "receipts")),
+            6,
+            "receipts is still collapsed"
+        );
+        assert_eq!(app.unread_shown(at(&app, "archive")), 0);
     }
 
     #[test]
     fn the_folders_above_the_selected_one_are_expanded_to_show_it() {
         let mut app = tree();
-        app.selected_folder = 2;
+        app.selected_folder = at(&app, "2026");
 
         app.reveal_selected_folder();
 
@@ -292,13 +303,13 @@ mod tests {
             names(&app),
             ["me@outlook.com", "inbox", "me@work.example", "work-inbox"]
         );
-        assert_eq!(app.folder_account, [0, 0, 0, 1, 1]);
+        assert_eq!(app.folder_account[app.unread_count()..], [0, 0, 0, 1, 1]);
     }
 
     #[test]
     fn a_folded_account_counts_the_unread_mail_inside_it() {
         let mut app = two_accounts();
-        app.selected_folder = 4;
+        app.selected_folder = at(&app, "work-inbox");
 
         assert_eq!(
             app.update(Action::Collapse),
@@ -307,13 +318,13 @@ mod tests {
         app.update(Action::Collapse);
 
         assert_eq!(names(&app), ["me@outlook.com", "inbox", "me@work.example"]);
-        assert_eq!(app.unread_shown(3), 4);
+        assert_eq!(app.unread_shown(at(&app, "account:me@work.example")), 4);
     }
 
     #[test]
     fn a_folded_account_stays_folded_after_a_sync() {
         let mut app = two_accounts();
-        app.selected_folder = 0;
+        app.selected_folder = at(&app, "account:me@outlook.com");
         app.update(Action::Collapse);
 
         app.set_account_folders(0, vec![folder("inbox", Some("root"), 1)]);
@@ -346,7 +357,7 @@ mod tests {
     #[test]
     fn effects_go_to_the_account_of_the_folder_looked_at() {
         let mut app = two_accounts();
-        app.selected_folder = 4;
+        app.selected_folder = at(&app, "work-inbox");
 
         assert_eq!(app.account_for(&load("inbox").unwrap()), 0);
         assert_eq!(app.account_for(&load("work-inbox").unwrap()), 1);
@@ -359,7 +370,7 @@ mod tests {
     #[test]
     fn a_message_is_written_from_the_account_looked_at() {
         let mut app = two_accounts();
-        app.selected_folder = 4;
+        app.selected_folder = at(&app, "work-inbox");
 
         app.update(Action::Compose);
 
@@ -384,7 +395,7 @@ mod tests {
     fn each_account_has_its_own_sending_pace() {
         let mut app = two_accounts();
         let now = std::time::Instant::now();
-        app.selected_folder = 4;
+        app.selected_folder = at(&app, "work-inbox");
         app.update(Action::Compose);
 
         app.mail_sent(now);

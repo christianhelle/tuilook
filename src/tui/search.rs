@@ -59,7 +59,7 @@ impl AppState {
         }
         // Nothing to look for: show the folder again while typing goes on.
         search.results.take()?;
-        self.shown_folder().map(Effect::LoadFolder)
+        self.load_shown()
     }
 
     /// Shows what a search found, with the account each came from, newest
@@ -74,7 +74,7 @@ impl AppState {
     /// Drops the search, and shows the folder again if results replaced it.
     pub(crate) fn leave_search(&mut self) -> Option<Effect> {
         self.search.take()?.results?;
-        self.shown_folder().map(Effect::LoadFolder)
+        self.load_shown()
     }
 
     /// The query whose results the message list shows, if it shows any.

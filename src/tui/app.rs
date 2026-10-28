@@ -17,6 +17,8 @@ use crate::tui::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     LoadFolder(FolderId),
+    /// Show only the unread messages of a folder.
+    LoadUnread(FolderId),
     LoadBody(MessageId),
     /// Mark a message read, as the reading pane shows it.
     MarkRead(MessageId),
@@ -202,6 +204,10 @@ const ACCOUNT_ROW: &str = "account:";
 /// the id of the folder they show.
 const FAVORITE_ROW: &str = "favorite:";
 
+/// Folder ids of the rows in the unread section start with this, followed
+/// by the id of the folder or account row they stand for.
+const UNREAD_ROW: &str = "unread:";
+
 /// The id of the favorites row showing folder `id`.
 pub fn favorite_row(id: &FolderId) -> FolderId {
     FolderId(format!("{FAVORITE_ROW}{}", id.0))
@@ -212,10 +218,24 @@ pub fn is_favorite_row(folder: &Folder) -> bool {
     folder.id.0.starts_with(FAVORITE_ROW)
 }
 
+/// The id of the unread section's row standing for `id`.
+pub fn unread_row(id: &FolderId) -> FolderId {
+    FolderId(format!("{UNREAD_ROW}{}", id.0))
+}
+
+/// Whether `folder` is a row in the unread section.
+pub fn is_unread_row(folder: &Folder) -> bool {
+    folder.id.0.starts_with(UNREAD_ROW)
+}
+
 /// The folder whose messages a row shows: the folder itself, or the one a
-/// favorite stands for.
-pub fn favorite_target(row: &FolderId) -> FolderId {
-    match row.0.strip_prefix(FAVORITE_ROW) {
+/// favorite or unread row stands for.
+pub fn row_target(row: &FolderId) -> FolderId {
+    let id = &row.0;
+    match id
+        .strip_prefix(FAVORITE_ROW)
+        .or_else(|| id.strip_prefix(UNREAD_ROW))
+    {
         Some(id) => FolderId(id.to_owned()),
         None => row.clone(),
     }
@@ -226,9 +246,10 @@ pub fn account_row(address: &str) -> FolderId {
     FolderId(format!("{ACCOUNT_ROW}{address}"))
 }
 
-/// Whether `folder` is the row heading an account, not a real folder.
+/// Whether `folder` is the row heading an account, not a real folder,
+/// here or in the unread section.
 pub fn is_account_row(folder: &Folder) -> bool {
-    folder.id.0.starts_with(ACCOUNT_ROW)
+    row_target(&folder.id).0.starts_with(ACCOUNT_ROW)
 }
 
 impl AppState {
@@ -451,48 +472,61 @@ impl AppState {
         }
         let first = self.account_folders[account].replace(folders).is_none();
         if first && let Some(address) = self.accounts.get(account) {
-            // An account starts with its folders shown.
+            // An account starts with its folders shown, in both sections.
             self.expanded.insert(account_row(address));
+            self.expanded.insert(unread_row(&account_row(address)));
         }
         self.rebuild_folders()
     }
 
-    /// Lays out the folder pane again from the accounts' folders and the
-    /// favorites, keeping the selected row, or failing that the folder it
-    /// showed.
+    /// Lays out the folder pane again from the accounts' folders, the
+    /// unread section and the favorites, keeping the selected row, or
+    /// failing that the folder it showed.
     pub(crate) fn rebuild_folders(&mut self) -> Option<Effect> {
         let previous = self.current_folder().cloned();
+        let shown = self.load_shown();
         let (folders, owners) = self.folder_tree();
         let find = |id: &FolderId| folders.iter().position(|f| &f.id == id);
         self.selected_folder = previous
             .as_ref()
-            .and_then(|id| find(id).or_else(|| find(&favorite_target(id))))
+            .and_then(|id| find(id).or_else(|| find(&row_target(id))))
             // Otherwise the first real folder, so there is mail to look at.
             .or_else(|| {
                 folders
                     .iter()
-                    .position(|f| !is_account_row(f) && !is_favorite_row(f))
+                    .position(|f| !is_account_row(f) && !is_favorite_row(f) && !is_unread_row(f))
             })
             .unwrap_or(0);
         self.folders = folders;
         self.folder_account = owners;
         self.reveal_selected_folder();
-        let current = self.shown_folder();
+        let current = self.load_shown();
         // Search results stay until the search is left.
-        (current != previous.as_ref().map(favorite_target) && self.results_query().is_none())
+        (current != shown && self.results_query().is_none())
             .then_some(current)
             .flatten()
-            .map(Effect::LoadFolder)
     }
 
-    /// The id of the selected row, which for a favorite is not the folder's.
+    /// Loads what the selected row shows: its folder's messages, or only
+    /// the unread ones for a row in the unread section.
+    pub(crate) fn load_shown(&self) -> Option<Effect> {
+        let id = self.shown_folder()?;
+        Some(if self.shows_unread() {
+            Effect::LoadUnread(id)
+        } else {
+            Effect::LoadFolder(id)
+        })
+    }
+
+    /// The id of the selected row, which for a favorite or unread row is not
+    /// the folder's.
     pub fn current_folder(&self) -> Option<&FolderId> {
         self.folders.get(self.selected_folder).map(|f| &f.id)
     }
 
     /// The folder whose messages are shown.
     pub fn shown_folder(&self) -> Option<FolderId> {
-        self.current_folder().map(favorite_target)
+        self.current_folder().map(row_target)
     }
 
     /// The account of the selected folder, and so of the messages shown.
@@ -509,7 +543,7 @@ impl AppState {
     /// account instead.
     pub fn account_for(&self, effect: &Effect) -> usize {
         match effect {
-            Effect::LoadFolder(id) => self
+            Effect::LoadFolder(id) | Effect::LoadUnread(id) => self
                 .folders
                 .iter()
                 .position(|f| &f.id == id)
@@ -523,10 +557,13 @@ impl AppState {
 
     /// Every account's folders as one tree, with the account each is in.
     /// With several accounts, each heads a row of its own above its folders.
-    /// The favorites come first.
+    /// The favorites come first, then the unread section.
     fn folder_tree(&self) -> (Vec<Folder>, Vec<usize>) {
         let several = self.accounts.len() > 1;
         let (mut tree, mut owners) = self.favorite_rows();
+        let (unread, unread_owners) = self.unread_rows();
+        tree.extend(unread);
+        owners.extend(unread_owners);
         for (account, folders) in self.account_folders.iter().enumerate() {
             let folders = folders.as_deref().unwrap_or_default();
             let Some(address) = self.accounts.get(account).filter(|_| several) else {
