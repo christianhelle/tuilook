@@ -504,7 +504,8 @@ fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
 }
 
 /// Line `index` from its character `left` on, with the characters in a
-/// visual mode's `selection` reversed.
+/// visual mode's `selection` reversed. An empty line in it shows one
+/// reversed cell.
 fn picked_line(
     line: &str,
     index: usize,
@@ -516,10 +517,13 @@ fn picked_line(
         return Line::raw(chars.map(|(_, c)| c).collect::<String>());
     }
     let picked = Style::new().add_modifier(Modifier::REVERSED);
+    let selected =
+        |at| selection.is_some_and(|(first, last)| first <= (index, at) && (index, at) <= last);
+    if line.is_empty() && selected(0) {
+        return Line::styled(" ", picked);
+    }
     let spans = chars.map(|(at, c)| {
-        let selected =
-            selection.is_some_and(|(first, last)| first <= (index, at) && (index, at) <= last);
-        if selected {
+        if selected(at) {
             Span::styled(c.to_string(), picked)
         } else {
             Span::raw(c.to_string())
@@ -901,7 +905,13 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
 
 /// The selected message's headers and body, wrapped to the pane.
 fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
-    let selection = app.viewer.selection();
+    // The cursor shows as a selection of its own character.
+    let cursor = app.viewer.cursor();
+    let focused = app.focus == Pane::Reader;
+    let selection = app
+        .viewer
+        .selection()
+        .or_else(|| focused.then_some((cursor, cursor)));
     let text: Vec<Line> = app
         .reader_text()?
         .iter()

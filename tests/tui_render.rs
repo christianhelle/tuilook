@@ -677,3 +677,39 @@ fn picking_in_the_reader_shows_the_mode_and_how_to_copy() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn the_focused_reader_shows_its_cursor() {
+    use ratatui::style::Modifier;
+    let mut app = sample_app();
+    let mut terminal = Terminal::new(TestBackend::new(90, 12)).unwrap();
+    let reversed = |terminal: &Terminal<TestBackend>, text| {
+        leftmost(terminal, text)
+            .add_modifier
+            .contains(Modifier::REVERSED)
+    };
+
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+    assert!(!reversed(&terminal, "From: Ada"), "only while focused");
+
+    app.focus = Pane::Reader;
+    press(&mut app, "jj");
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+    let cursor = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .filter(|c| c.style().add_modifier.contains(Modifier::REVERSED));
+    assert_eq!(
+        cursor.count(),
+        1,
+        "the cursor is one cell, on the empty line"
+    );
+    assert!(!reversed(&terminal, "From: Ada"));
+
+    press(&mut app, "k");
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+    assert!(reversed(&terminal, "Subject:"));
+    assert!(!reversed(&terminal, "ubject:"));
+}
