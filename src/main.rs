@@ -1,5 +1,5 @@
 use std::{
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -29,6 +29,7 @@ use tuilook::model::{Event, FolderId, MailBackend, Message};
 use tuilook::store::Store;
 use tuilook::tui::{
     app::{AppState, Effect, Mouse},
+    clipboard,
     compose::Field,
     demo,
     keymap::Keymap,
@@ -634,7 +635,12 @@ fn apply(
                 }
                 None
             }
-            Effect::Copy(_) => None,
+            Effect::Copy(text) => {
+                let mut out = io::stdout();
+                out.write_all(clipboard::osc52(&text).as_bytes())?;
+                out.flush()?;
+                None
+            }
             Effect::Delete { ids, permanent } => {
                 // Search results may be in several accounts.
                 for (account, ids) in app.by_account(ids) {
