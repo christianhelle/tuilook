@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Copying from a message: `v` in the reading pane picks text from the cursor
   with Vim's visual mode, `V` picks whole lines, and `y` copies them to the
   clipboard through the terminal (OSC 52). `yy`, `yw` and `y$` copy without
-  picking first.
+  picking first. What is copied is put with `p` or `P` while writing a
+  message or a signature, and text yanked while writing is kept for the next
+  message too.
 - Install scripts: `curl -fsSL https://christianhelle.com/tuilook/install | bash`
   on macOS and Linux, and `irm https://christianhelle.com/tuilook/install.ps1 | iex`
   on Windows. Both install the latest release, or the one `VERSION` / `-Version`
