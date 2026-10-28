@@ -13,6 +13,7 @@ use crate::tui::{
     keymap::Keymap,
     search::Search,
     signature::{self, SignatureEditor},
+    ui::shown,
 };
 
 /// IO the event loop must perform after an update.
@@ -286,6 +287,21 @@ pub fn is_account_row(folder: &Folder) -> bool {
 }
 
 impl AppState {
+    /// The lines of the reading pane, before wrapping: the selected
+    /// message's headers and body.
+    pub fn reader_text(&self) -> Option<Vec<String>> {
+        let m = self.messages.get(self.selected_message)?;
+        let mut text = vec![
+            format!("From: {} <{}>", shown(&m.from_name), shown(&m.from_addr)),
+            format!("Subject: {}", shown(&m.subject)),
+            String::new(),
+        ];
+        // The preview stands in until core has loaded the body.
+        let body = self.body.as_deref().unwrap_or(&m.preview);
+        text.extend(shown(body).lines().map(str::to_owned));
+        Some(text)
+    }
+
     /// The pane filling the screen, which follows the focus while zoomed.
     pub fn zoomed_pane(&self) -> Option<Pane> {
         self.zoomed.then_some(self.focus)

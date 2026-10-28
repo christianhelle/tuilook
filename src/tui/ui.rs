@@ -884,19 +884,7 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
 
 /// The selected message's headers and body, wrapped to the pane.
 fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
-    let m = app.messages.get(app.selected_message)?;
-    let mut text = vec![
-        Line::raw(format!(
-            "From: {} <{}>",
-            shown(&m.from_name),
-            shown(&m.from_addr)
-        )),
-        Line::raw(format!("Subject: {}", shown(&m.subject))),
-        Line::raw(""),
-    ];
-    // The preview stands in until core has loaded the body.
-    let body = app.body.as_deref().unwrap_or(&m.preview);
-    text.extend(shown(body).lines().map(|l| Line::raw(l.to_owned())));
+    let text: Vec<Line> = app.reader_text()?.into_iter().map(Line::raw).collect();
     Some(Paragraph::new(text).wrap(Wrap { trim: false }))
 }
 
