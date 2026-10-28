@@ -336,21 +336,38 @@ You can read, reply to and delete the results as in any folder. `Esc` in the
 results (once nothing is marked) or picking a folder ends the search, and `/`
 goes back to the query to change it.
 
-## Deleting
+## Moving and deleting
 
 | Keys | What they do |
 | --- | --- |
 | `Space` | Mark or unmark the selected message |
 | `Ctrl-A` | Mark every message in the folder |
 | `Esc` | Clear the marks |
+| `m` | Move the marked (or selected) messages to another folder |
 | `d` | Move the marked (or selected) messages to Deleted Items |
 | `D` | Delete the marked (or selected) messages for good |
 
-In the folder pane, `d` moves the selected folder, with its subfolders and
-mail, to Deleted Items, and `D` deletes it for good. Outlook's own folders,
-such as Inbox and Sent Items, cannot be deleted.
+`m` opens a list of the account's folders. Type part of a folder's name to
+narrow it, pick one with `↑` `↓`, and press `Enter` to move the mail there, or
+`Esc` to leave it where it is. Mail can only be moved within its own account.
 
 Both `d` and `D` ask before doing anything.
+
+## Folders
+
+In the folder pane:
+
+| Keys | What they do |
+| --- | --- |
+| `a` | Make a new folder inside the selected one |
+| `A` | Make a new top-level folder in the selected folder's account |
+| `F2` | Rename the selected folder |
+| `d` | Move the selected folder, with its subfolders and mail, to Deleted Items |
+| `D` | Delete the selected folder for good |
+
+`a`, `A` and `F2` ask for the name: `Enter` saves it and `Esc` cancels. On an
+account's row, `a` makes a top-level folder too. Outlook's own folders, such
+as Inbox and Sent Items, cannot be renamed or deleted.
 
 ## Writing mail
 
