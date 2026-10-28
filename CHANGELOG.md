@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Last Week, This Month, Last Month and Older, each under a header with its
   count. `←` folds a group, `→`, `Enter` or a click on its header unfolds it,
   and folded groups stay folded in every folder and across restarts.
+- `l`/`→` and `h`/`←` in the reading pane show the next or previous mail,
+  zoomed or not, past date headers and folded groups.
 
 ### Changed
 
