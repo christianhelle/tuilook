@@ -1,0 +1,16 @@
+---
+source: tests/tui_render.rs
+expression: render(&app)
+---
+"┌ Favorites ─────┐┏ Messages ━━━━━━━━━━━━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
+"│* adds the selec│┃  ▾ Older (2)                     ┃│From: Ada <ada@example.com>       │"
+"└────────────────┘┃> Ada                             ┃│Subject: Analytical engine        │"
+"┌ Unread ────────┐┃┌Move 1 message to─────────────────────────────────┐                  │"
+"│  Inbox (2)     │┃│Folder:                                           │ine               │"
+"└────────────────┘┃│                                                  │                  │"
+"┌ Folders ───────┐┃│> Sent Items                                      │                  │"
+"│>   Inbox (2)   │┃│  Projects                                        │                  │"
+"│    Sent Items  │┃│Enter move   ↑ ↓ pick   Esc cancel                │                  │"
+"│    Projects    │┃└──────────────────────────────────────────────────┘                  │"
+"└────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "

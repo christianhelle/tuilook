@@ -628,6 +628,10 @@ fn apply(
                 commands.blocking_send(Command::RenameFolder { folder, name })?;
                 None
             }
+            Effect::Move { ids, to, .. } => {
+                commands.blocking_send(Command::Move { ids, to })?;
+                None
+            }
             Effect::MarkRead(id) => {
                 commands.blocking_send(Command::MarkRead(id))?;
                 None

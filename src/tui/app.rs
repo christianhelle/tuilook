@@ -15,6 +15,7 @@ use crate::tui::{
     folder_edit::NamePrompt,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
+    mover::MovePicker,
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
@@ -57,6 +58,12 @@ pub enum Effect {
         account: usize,
         folder: FolderId,
         name: String,
+    },
+    /// Move messages of `account` into folder `to`.
+    Move {
+        account: usize,
+        ids: Vec<MessageId>,
+        to: FolderId,
     },
     /// Sync every folder.
     Sync,
@@ -222,6 +229,8 @@ pub struct AppState {
     pub confirm: Option<Confirm>,
     /// A folder name being typed, to make or rename a folder.
     pub prompt: Option<NamePrompt>,
+    /// The folder being picked to move mail to.
+    pub mover: Option<MovePicker>,
     pub show_help: bool,
     /// What the mail service said when it blocked sending, shown in a
     /// dialog until the next key.
@@ -413,6 +422,9 @@ impl AppState {
         if self.prompt.is_some() {
             return self.prompt_key(key);
         }
+        if self.mover.is_some() {
+            return self.mover_key(key);
+        }
         if let Some(compose) = &mut self.compose {
             match compose.key(key, self.viewport.compose, &mut self.register) {
                 Request::None => {}
@@ -500,6 +512,7 @@ impl AppState {
         }
         if self.confirm.is_some()
             || self.prompt.is_some()
+            || self.mover.is_some()
             || self.compose.is_some()
             || self.signature.is_some()
         {
@@ -593,7 +606,7 @@ impl AppState {
             }
             Action::RenameFolder if self.focus == Pane::Folders => self.ask_new_name(),
             Action::AddFolder | Action::AddTopFolder | Action::RenameFolder => {}
-            Action::Move => {}
+            Action::Move => self.ask_where_to_move(),
             Action::Refresh if self.sync.running => {
                 self.sync.forced = true;
                 self.show_busy("Syncing…");
@@ -736,7 +749,8 @@ impl AppState {
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
             Effect::SaveSignature { account, .. }
             | Effect::CreateFolder { account, .. }
-            | Effect::RenameFolder { account, .. } => *account,
+            | Effect::RenameFolder { account, .. }
+            | Effect::Move { account, .. } => *account,
         }
     }
 

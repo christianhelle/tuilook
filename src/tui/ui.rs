@@ -18,6 +18,7 @@ use crate::tui::{
     editor::{Editor, Pos},
     folder_edit::NamePrompt,
     groups::MessageRow,
+    mover::MovePicker,
     older::LOADING_OLDER,
     signature::SignatureEditor,
     vim::VimMode,
@@ -213,9 +214,73 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     if let Some(prompt) = &app.prompt {
         draw_name_prompt(frame, prompt);
     }
+    if let Some(mover) = &app.mover {
+        draw_move_picker(frame, mover);
+    }
     if let Some(said) = &app.blocked {
         draw_blocked(frame, said);
     }
+}
+
+/// Folders the move dialog lists at most at once.
+const MOVE_ROWS: usize = 12;
+
+/// A dialog picking the folder to move mail to: the filter typed, then the
+/// folders it leaves, in a tree.
+fn draw_move_picker(frame: &mut Frame, mover: &MovePicker) {
+    let choices = mover.choices();
+    // Borders, the filter, the gap below it and the keys take 5 lines.
+    let fits = usize::from(frame.area().height).saturating_sub(5);
+    let visible = choices.len().clamp(1, MOVE_ROWS).min(fits.max(1));
+    let first = list_offset(mover.selected, visible);
+    let filter = format!("Folder: {}", shown(&mover.filter));
+    let mut lines = vec![Line::raw(filter.clone()), Line::raw("")];
+    if choices.is_empty() {
+        lines.push(Line::styled(
+            "No folder matches",
+            Style::new().fg(Color::DarkGray),
+        ));
+    }
+    for (row, &index) in choices.iter().enumerate().skip(first).take(visible) {
+        let (folder, depth) = &mover.folders[index];
+        let picked = row == mover.selected;
+        let text = format!(
+            "{}{}{}",
+            if picked { "> " } else { "  " },
+            "  ".repeat(*depth),
+            shown(&folder.name)
+        );
+        let style = if picked {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::new()
+        };
+        lines.push(Line::styled(text, style));
+    }
+    lines.push(Line::from(vec![
+        Span::styled("Enter", Style::new().fg(Color::Yellow)),
+        Span::raw(" move   "),
+        Span::styled("↑ ↓", Style::new().fg(Color::Cyan)),
+        Span::raw(" pick   "),
+        Span::styled("Esc", Style::new().fg(Color::Cyan)),
+        Span::raw(" cancel"),
+    ]));
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(PROMPT_WIDTH), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title(mover.title())
+                .border_style(Style::new().fg(Color::Yellow)),
+        ),
+        area,
+    );
+    let width = u16::try_from(Line::raw(filter).width()).unwrap_or(u16::MAX);
+    let x = area.x.saturating_add(1).saturating_add(width);
+    frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 1));
 }
 
 /// Width of the dialog asking a folder's name, borders included.

@@ -736,3 +736,14 @@ fn a_new_folder_asks_its_name() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+#[test]
+fn moving_mail_picks_a_folder() {
+    let mut app = sample_app();
+    let folders = app.folders.clone();
+    app.set_account_folders(0, folders);
+    app.focus = Pane::Messages;
+    app.update(tuilook::model::Action::Move);
+
+    insta::assert_snapshot!(render(&app));
+}
