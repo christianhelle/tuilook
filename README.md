@@ -245,8 +245,8 @@ zoom, expanded folders and favorites) and picks up there next time.
 | --- | --- |
 | `Tab` / `Shift-Tab` | Next pane / previous pane |
 | `Enter` | Open the folder or message, or fold or unfold a date group |
-| `j` `k` or `↓` `↑` | Move, or scroll the message |
-| `l` `h` or `→` `←` | Expand a folder or date group, collapse it or go up; in the reading pane, show the next or previous mail |
+| `j` `k` or `↓` `↑` | Move |
+| `l` `h` or `→` `←` | Expand a folder or date group, collapse it or go up; in the reading pane, `→` `←` show the next or previous mail |
 | `*` | Add the folder to Favorites, or take it out |
 | `PgDn` `PgUp` or `Ctrl-F` `Ctrl-B` | Move or scroll a page |
 | `Ctrl-D` `Ctrl-U` | Move or scroll half a page |
@@ -287,19 +287,27 @@ mail is fetched.
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.
 
-### Copying from a message
+### Moving in a message and copying from it
 
-In the reading pane, `v` starts picking text at the top of the pane, as Vim's
-visual mode does, and `V` picks whole lines. Move with the Vim motions, then
-`y` copies what is picked to the clipboard.
+The reading pane works like Vim's normal mode: it has a cursor, shown while
+the pane is focused, and the status bar says `NORMAL`. The pane scrolls to keep
+the cursor in view, and scrolling with the mouse wheel drags the cursor along.
+`v` starts picking text at the cursor, as Vim's visual mode does, and `V` picks
+whole lines; `y` then copies what is picked to the clipboard.
 
 | Keys | What they do |
 | --- | --- |
-| `v` / `V` | Pick characters / whole lines |
-| `h` `j` `k` `l` `w` `b` `e` `0` `^` `$` `gg` `G` | Move |
-| `Ctrl-D` `Ctrl-U` `Ctrl-F` `Ctrl-B` | Move half a page or a page |
-| `y` | Copy to the clipboard |
+| `h` `j` `k` `l` `w` `b` `e` `0` `^` `$` `gg` `G` | Move the cursor |
+| `Ctrl-D` `Ctrl-U` `Ctrl-F` `Ctrl-B` or `PgDn` `PgUp` | Move half a page or a page |
+| `v` / `V` | Pick characters / whole lines from the cursor |
+| `y` | Copy what is picked to the clipboard |
+| `yy` `yw` `y$` and so on | Copy a line, a word, to the end of the line |
 | `Esc` | Stop picking |
+| `→` `←` | Show the next or previous mail |
+
+Keys the cursor has no use for work as they do in the other panes, so `r`
+replies and `d` deletes. In the reading pane `b` moves back a word; hide the
+folders from another pane.
 
 tuilook copies through the terminal with an OSC 52 escape sequence, so it works
 over SSH too. Windows Terminal, WezTerm, kitty, Alacritty, iTerm2 and most
