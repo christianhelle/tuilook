@@ -18,6 +18,7 @@ use crate::tui::{
     signature::{self, SignatureEditor},
     ui::shown,
     viewer::{self, Viewer},
+    vim::Register,
 };
 
 /// IO the event loop must perform after an update.
@@ -440,7 +441,10 @@ impl AppState {
             && let Some(text) = self.reader_text()
         {
             self.viewer.show(&text);
-            match self.viewer.key(key, self.viewport.reader) {
+            match self
+                .viewer
+                .key(key, self.viewport.reader, &mut Register::default())
+            {
                 viewer::Request::None => {
                     let (line, _) = self.viewer.cursor();
                     self.show_reader_line(line);

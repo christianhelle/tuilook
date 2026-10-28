@@ -61,8 +61,8 @@ impl Viewer {
         self.editor.vim.selection(self.editor.cursor())
     }
 
-    /// Acts on a key, moving `page` lines a page.
-    pub fn key(&mut self, key: KeyEvent, page: usize) -> Request {
+    /// Acts on a key, moving `page` lines a page and yanking into `register`.
+    pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
         let picking = self.mode() != VimMode::Normal;
         if !reads(key, picking) {
             if picking {
@@ -72,7 +72,7 @@ impl Viewer {
             vim::to_normal(&mut self.editor);
             return Request::Unhandled;
         }
-        match vim::key(&mut self.editor, key, page, &mut Register::default()) {
+        match vim::key(&mut self.editor, key, page, register) {
             Outcome::Yanked(text) => Request::Copy(text),
             Outcome::Unhandled | Outcome::Leave => Request::Unhandled,
             Outcome::Handled => Request::None,
@@ -114,7 +114,7 @@ mod tests {
                 '⎋' => KeyCode::Esc,
                 c => KeyCode::Char(c),
             };
-            request = visual.key(KeyEvent::from(code), 10);
+            request = visual.key(KeyEvent::from(code), 10, &mut Register::default());
         }
         request
     }
@@ -124,6 +124,27 @@ mod tests {
         let mut viewer = Viewer::default();
         viewer.show(&lines);
         viewer
+    }
+
+    #[test]
+    fn a_yank_goes_to_the_register_to_put_elsewhere() {
+        let mut viewer = viewing(
+            "From: Ada
+Dear Charles,",
+        );
+        let mut register = Register::default();
+
+        for c in "jyy".chars() {
+            viewer.key(KeyEvent::from(KeyCode::Char(c)), 10, &mut register);
+        }
+
+        assert_eq!(
+            register,
+            Register {
+                text: "Dear Charles,".into(),
+                linewise: true
+            }
+        );
     }
 
     #[test]
@@ -178,7 +199,8 @@ Dear Charles,",
             );
         }
         for code in [KeyCode::Left, KeyCode::Right, KeyCode::Tab, KeyCode::Enter] {
-            assert_eq!(viewer.key(KeyEvent::from(code), 10), Request::Unhandled);
+            let request = viewer.key(KeyEvent::from(code), 10, &mut Register::default());
+            assert_eq!(request, Request::Unhandled);
         }
         assert_eq!(
             keys(&mut viewer, "0y$"),
