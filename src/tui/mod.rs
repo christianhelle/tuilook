@@ -6,6 +6,7 @@ pub mod demo;
 pub mod editor;
 pub mod favorites;
 pub mod folders;
+pub mod groups;
 pub mod input;
 pub mod keymap;
 pub mod older;
