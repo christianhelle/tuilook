@@ -3,8 +3,8 @@ source: tests/tui_render.rs
 expression: render(&app)
 ---
 "┌ Favorites ─────┐┏ Messages (2 marked) ━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
-"│* adds the selec│┃> ● Ada                           ┃│From: Ada <ada@example.com>       │"
-"└────────────────┘┃    Analytical engine             ┃│Subject: Analytical engine        │"
+"│* adds the selec│┃  ▾ Older (2)                     ┃│From: Ada <ada@example.com>       │"
+"└────────────────┘┃> ● Ada                           ┃│Subject: Analytical engine        │"
 "┌ Unread ────────┐┃┌Delete permanently────────────────────────────────┐                  │"
 "│No unread mail  │┃│Permanently delete 2 messages?                    │ine               │"
 "└────────────────┘┃│This cannot be undone.                            │                  │"

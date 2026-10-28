@@ -6,7 +6,9 @@ use ratatui::{
 use tuilook::model::{Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders};
 use tuilook::tui::{
     app::{AppState, Pane},
-    demo, ui,
+    demo,
+    groups::MessageRow,
+    ui,
 };
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>, unread: u32) -> Folder {
@@ -336,10 +338,14 @@ fn a_click_finds_the_message_drawn_under_it_in_a_scrolled_list() {
     let hit = ui::hit(area, &app, 30, 1).unwrap();
 
     assert_eq!(hit.pane, Pane::Messages);
+    // The hit is a row of the list, which starts with the date header.
     let item = hit.item.unwrap();
+    let MessageRow::Message(index) = app.message_rows()[item] else {
+        panic!("row {item} is a message");
+    };
     assert!(
-        first_row.contains(&names[item]),
-        "{first_row} shows Sender{item}"
+        first_row.contains(&names[index]),
+        "{first_row} shows Sender{index}"
     );
     assert_eq!(
         ui::hit(area, &app, 30, 2).unwrap().item,
