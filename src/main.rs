@@ -634,6 +634,7 @@ fn apply(
                 }
                 None
             }
+            Effect::Copy(_) => None,
             Effect::Delete { ids, permanent } => {
                 // Search results may be in several accounts.
                 for (account, ids) in app.by_account(ids) {

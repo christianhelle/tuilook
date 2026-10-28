@@ -14,6 +14,7 @@ use crate::tui::{
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
+    visual::{self, Visual},
 };
 
 /// IO the event loop must perform after an update.
@@ -50,6 +51,8 @@ pub enum Effect {
         account: usize,
         text: String,
     },
+    /// Put text on the clipboard.
+    Copy(String),
 }
 
 /// A question the user must answer before anything else happens.
@@ -221,6 +224,8 @@ pub struct AppState {
     /// Folders shown again in the favorites above the accounts, in the
     /// order they were added.
     pub favorites: Vec<FolderId>,
+    /// Text being picked in the reading pane, to copy it.
+    pub visual: Option<Visual>,
     /// A search being typed, or whose results the message list shows.
     pub search: Option<Search>,
     /// The folder whose older mail is being fetched, and whether only its
@@ -371,6 +376,17 @@ impl AppState {
             }
             return None;
         }
+        if let Some(visual) = &mut self.visual {
+            match visual.key(key, self.viewport.reader) {
+                visual::Request::None => {}
+                visual::Request::Copy(text) => {
+                    self.visual = None;
+                    return Some(Effect::Copy(text));
+                }
+                visual::Request::Close => self.visual = None,
+            }
+            return None;
+        }
         if self.typing_search() {
             return self.search_key(key);
         }
@@ -490,6 +506,10 @@ impl AppState {
             }
             Action::Help => self.show_help = true,
             Action::Search => self.start_search(),
+            Action::Visual | Action::VisualLine if self.focus == Pane::Reader => {
+                let line = action == Action::VisualLine;
+                self.visual = self.reader_text().map(|text| Visual::new(&text, 0, line));
+            }
             Action::Visual | Action::VisualLine => {}
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::EditSignature => {
@@ -615,7 +635,9 @@ impl AppState {
                 .position(|f| &f.id == id)
                 .map_or(0, |index| self.account_of(index)),
             Effect::LoadBody(id) | Effect::MarkRead(id) => self.message_account(id),
-            Effect::Delete { .. } | Effect::Sync | Effect::Search(_) => self.current_account(),
+            Effect::Delete { .. } | Effect::Sync | Effect::Search(_) | Effect::Copy(_) => {
+                self.current_account()
+            }
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
             Effect::SaveSignature { account, .. } => *account,
         }
@@ -1223,6 +1245,35 @@ mod tests {
         assert_eq!(app.reader_scroll, 90);
         app.update(Action::Top);
         assert_eq!(app.reader_scroll, 0);
+    }
+
+    /// Types each character as a key into the app.
+    fn type_keys(app: &mut AppState, keys: &str) -> Option<Effect> {
+        let mut keymap = Keymap::default();
+        keys.chars()
+            .map(|c| app.on_key(KeyEvent::from(KeyCode::Char(c)), &mut keymap))
+            .last()
+            .flatten()
+    }
+
+    #[test]
+    fn v_in_the_reader_picks_text_and_y_copies_it() {
+        let mut app = reading(10, 5);
+        app.body = Some("Dear Charles,".to_owned());
+
+        let effect = type_keys(&mut app, "vjjj$y");
+
+        assert_eq!(
+            effect,
+            Some(Effect::Copy(
+                "From:  <>
+Subject: m0
+
+Dear Charles,"
+                    .to_owned()
+            ))
+        );
+        assert!(app.visual.is_none(), "copying stops picking");
     }
 
     #[test]
