@@ -416,7 +416,7 @@ impl AppState {
             return None;
         }
         if let Some(editor) = &mut self.signature {
-            match editor.key(key, self.viewport.compose) {
+            match editor.key(key, self.viewport.compose, &mut self.register) {
                 signature::Request::None => {}
                 signature::Request::Save(text) => {
                     let account = editor.account;

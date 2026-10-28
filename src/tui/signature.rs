@@ -26,7 +26,6 @@ pub struct SignatureEditor {
     /// The account it belongs to.
     pub account: usize,
     pub body: Editor,
-    register: Register,
     /// The signature as it was opened, to tell whether anything changed.
     opened: String,
 }
@@ -41,7 +40,6 @@ impl SignatureEditor {
             account,
             opened: body.text(),
             body,
-            register: Register::default(),
         }
     }
 
@@ -50,12 +48,13 @@ impl SignatureEditor {
         self.body.text().trim_end().to_owned()
     }
 
-    /// Acts on a key, paging by `page` lines.
-    pub fn key(&mut self, key: KeyEvent, page: usize) -> Request {
+    /// Acts on a key, paging by `page` lines. Text is deleted or yanked
+    /// into `register` and put from it.
+    pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
         if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Request::Save(self.text());
         }
-        let outcome = vim::key(&mut self.body, key, page, &mut self.register);
+        let outcome = vim::key(&mut self.body, key, page, register);
         self.body.follow(page);
         match outcome {
             Outcome::Leave if self.body.text() == self.opened => Request::Close,
@@ -79,13 +78,14 @@ mod tests {
                 '⏎' => KeyCode::Enter,
                 c => KeyCode::Char(c),
             };
-            last = editor.key(KeyEvent::from(code), 10);
+            last = editor.key(KeyEvent::from(code), 10, &mut Register::default());
         }
         last
     }
 
     fn ctrl_s(editor: &mut SignatureEditor) -> Request {
-        editor.key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL), 10)
+        let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        editor.key(ctrl_s, 10, &mut Register::default())
     }
 
     #[test]
