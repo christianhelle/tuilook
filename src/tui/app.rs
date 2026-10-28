@@ -230,8 +230,10 @@ pub struct AppState {
     /// Folders shown again in the favorites above the accounts, in the
     /// order they were added.
     pub favorites: Vec<FolderId>,
-    /// Text being picked in the reading pane, to copy it.
+    /// The reading pane's cursor, which picks text to copy.
     pub viewer: Viewer,
+    /// The text last deleted or yanked, to put with `p`.
+    pub register: Register,
     /// A search being typed, or whose results the message list shows.
     pub search: Option<Search>,
     /// The folder whose older mail is being fetched, and whether only its
@@ -394,7 +396,7 @@ impl AppState {
             return None;
         }
         if let Some(compose) = &mut self.compose {
-            match compose.key(key, self.viewport.compose) {
+            match compose.key(key, self.viewport.compose, &mut self.register) {
                 Request::None => {}
                 Request::Send(draft) => {
                     let account = compose.account;

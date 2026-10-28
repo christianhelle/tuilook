@@ -67,7 +67,6 @@ pub struct Compose {
     pub account: usize,
     /// The address it is sent from, shown when there are several to send from.
     pub from: Option<String>,
-    register: Register,
     /// The message as it was opened, to tell whether anything was written.
     opened: Draft,
 }
@@ -96,7 +95,6 @@ impl Compose {
             sending: false,
             account: 0,
             from: None,
-            register: Register::default(),
             opened: Draft {
                 kind: ComposeKind::New,
                 to: vec![],
@@ -146,8 +144,9 @@ impl Compose {
         self.kind != ComposeKind::New
     }
 
-    /// Acts on a key, paging the body by `page` lines.
-    pub fn key(&mut self, key: KeyEvent, page: usize) -> Request {
+    /// Acts on a key, paging the body by `page` lines. Text is deleted or
+    /// yanked into `register` and put from it.
+    pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
         if self.sending {
             return Request::None;
         }
@@ -156,14 +155,14 @@ impl Compose {
             KeyCode::Char('s') if ctrl => return self.send(),
             KeyCode::Tab => self.field = self.field.next(),
             KeyCode::BackTab => self.field = self.field.prev(),
-            _ if self.field == Field::Body => return self.body_key(key, page),
+            _ if self.field == Field::Body => return self.body_key(key, page, register),
             _ => return self.header_key(key, ctrl),
         }
         Request::None
     }
 
-    fn body_key(&mut self, key: KeyEvent, page: usize) -> Request {
-        let outcome = vim::key(&mut self.body, key, page, &mut self.register);
+    fn body_key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
+        let outcome = vim::key(&mut self.body, key, page, register);
         self.body.follow(page);
         match outcome {
             Outcome::Leave => self.close(),
@@ -272,13 +271,14 @@ mod tests {
                 '⏎' => KeyCode::Enter,
                 c => KeyCode::Char(c),
             };
-            last = compose.key(KeyEvent::from(code), 10);
+            last = compose.key(KeyEvent::from(code), 10, &mut Register::default());
         }
         last
     }
 
     fn ctrl_s(compose: &mut Compose) -> Request {
-        compose.key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL), 10)
+        let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        compose.key(ctrl_s, 10, &mut Register::default())
     }
 
     #[test]
