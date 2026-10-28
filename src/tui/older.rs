@@ -5,7 +5,10 @@
 use crate::model::FolderId;
 use jiff::Timestamp;
 
-use crate::tui::app::{AppState, Effect, Status, is_account_row, row_target};
+use crate::tui::{
+    app::{AppState, Effect, Status, is_account_row, row_target},
+    groups::MessageRow,
+};
 
 /// Shown while older mail is fetched.
 pub const LOADING_OLDER: &str = "Loading older mail…";
@@ -21,7 +24,13 @@ impl AppState {
         if is_account_row(row) {
             return None;
         }
-        let at_end = self.selected_message + 1 >= self.messages.len();
+        // The end is a message: a folded last group hides the mail fetched.
+        let rows = self.message_rows();
+        let at_end = match rows.last() {
+            None => true,
+            Some(MessageRow::Message(_)) => self.selected_row(&rows) == Some(rows.len() - 1),
+            Some(MessageRow::Header { .. }) => false,
+        };
         let unread_only = self.shows_unread();
         let folder = row_target(&row.id);
         let key = (folder.clone(), unread_only);
@@ -145,6 +154,16 @@ mod tests {
 
         let before = Timestamp::from_second(86_400).unwrap();
         assert_eq!(app.older_wanted(), older(before, false));
+    }
+
+    #[test]
+    fn a_folded_last_group_fetches_nothing() {
+        let mut app = devops(0, 5);
+        app.set_messages(vec![message("m1", 1, true)]);
+        app.focus = Pane::Messages;
+        app.update(Action::Collapse);
+
+        assert_eq!(app.older_wanted(), None);
     }
 
     #[test]
