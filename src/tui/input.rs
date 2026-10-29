@@ -29,6 +29,14 @@ impl TextInput {
         self.cursor
     }
 
+    /// The part of the text that fits in `width` characters with the cursor
+    /// in view, scrolled as little as it takes, and the cursor's place in it.
+    pub fn view(&self, width: usize) -> (String, usize) {
+        let skip = self.cursor.saturating_sub(width.saturating_sub(1));
+        let text = self.text.chars().skip(skip).take(width).collect();
+        (text, self.cursor - skip)
+    }
+
     /// Edits the text or moves the cursor for an editing key, and says
     /// whether `key` was one.
     pub fn key(&mut self, key: KeyEvent) -> bool {
@@ -119,6 +127,15 @@ mod tests {
 
         assert_eq!(input.text(), "ab");
         assert!(!input.key(KeyEvent::from(KeyCode::Enter)));
+    }
+
+    #[test]
+    fn a_long_text_scrolls_to_keep_the_cursor_in_view() {
+        let mut input = TextInput::from("abcdef");
+
+        assert_eq!(input.view(4), ("def".to_owned(), 3));
+        input.home();
+        assert_eq!(input.view(4), ("abcd".to_owned(), 0));
     }
 
     #[test]

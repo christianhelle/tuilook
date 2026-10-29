@@ -519,12 +519,11 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
         };
         // Long text scrolls so the cursor stays in view.
         let width = usize::from(row.width.saturating_sub(LABEL_WIDTH)).max(1);
-        let skip = if focused {
-            input.cursor().saturating_sub(width - 1)
+        let (text, column) = if focused {
+            input.view(width)
         } else {
-            0
+            (input.text().to_owned(), 0)
         };
-        let text: String = input.text().chars().skip(skip).collect();
         let line = Line::from(vec![
             Span::styled(
                 format!("{label:<width$}", width = usize::from(LABEL_WIDTH)),
@@ -534,7 +533,7 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
         ]);
         frame.render_widget(line, row);
         if focused {
-            let column = u16::try_from(input.cursor() - skip).unwrap_or(u16::MAX);
+            let column = u16::try_from(column).unwrap_or(u16::MAX);
             frame.set_cursor_position((row.x + LABEL_WIDTH + column, row.y));
         }
     }
