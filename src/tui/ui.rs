@@ -235,8 +235,10 @@ fn draw_move_picker(frame: &mut Frame, mover: &MovePicker) {
     let fits = usize::from(frame.area().height).saturating_sub(5);
     let visible = choices.len().clamp(1, MOVE_ROWS).min(fits.max(1));
     let first = list_offset(mover.selected, visible);
-    let filter = format!("Folder: {}", shown(&mover.filter));
-    let mut lines = vec![Line::raw(filter.clone()), Line::raw("")];
+    // Room for the filter and the cursor after it, inside the borders.
+    let room = usize::from(PROMPT_WIDTH - 3).saturating_sub(FILTER_LABEL.len());
+    let (filter, column) = typed(&mover.filter, room);
+    let mut lines = vec![Line::raw(format!("{FILTER_LABEL}{filter}")), Line::raw("")];
     if choices.is_empty() {
         lines.push(Line::styled(
             "No folder matches",
@@ -280,10 +282,13 @@ fn draw_move_picker(frame: &mut Frame, mover: &MovePicker) {
         ),
         area,
     );
-    let width = u16::try_from(Line::raw(filter).width()).unwrap_or(u16::MAX);
-    let x = area.x.saturating_add(1).saturating_add(width);
+    let label = u16::try_from(FILTER_LABEL.len()).unwrap_or(u16::MAX);
+    let x = area.x.saturating_add(1 + label).saturating_add(column);
     frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 1));
 }
+
+/// What the move dialog's filter is labelled with.
+const FILTER_LABEL: &str = "Folder: ";
 
 /// Width of the dialog asking a folder's name, borders included.
 const PROMPT_WIDTH: u16 = 52;

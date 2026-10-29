@@ -7,6 +7,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::tui::{
     app::{AppState, Effect, Pane},
     dialog::Dialog,
+    input::TextInput,
 };
 
 /// What a key asks for while picking where to move mail.
@@ -31,7 +32,7 @@ pub struct MovePicker {
     /// nested.
     pub folders: Vec<(Folder, usize)>,
     /// Part of a folder's name, to narrow the folders shown.
-    pub filter: String,
+    pub filter: TextInput,
     /// The picked one of the folders shown.
     pub selected: usize,
 }
@@ -56,7 +57,7 @@ impl MovePicker {
             account,
             ids,
             folders,
-            filter: String::new(),
+            filter: TextInput::default(),
             selected: 0,
         }
     }
@@ -64,7 +65,7 @@ impl MovePicker {
     /// The folders whose name has the filter in it, as indexes into
     /// `folders`.
     pub fn choices(&self) -> Vec<usize> {
-        let filter = self.filter.trim().to_lowercase();
+        let filter = self.filter.text().trim().to_lowercase();
         (0..self.folders.len())
             .filter(|&i| self.folders[i].0.name.to_lowercase().contains(&filter))
             .collect()
@@ -103,15 +104,12 @@ impl MovePicker {
             KeyCode::Char('n') if ctrl => self.step(1),
             KeyCode::Up | KeyCode::BackTab => self.step(-1),
             KeyCode::Char('p') if ctrl => self.step(-1),
-            KeyCode::Backspace => {
-                self.filter.pop();
-                self.selected = 0;
+            _ => {
+                let before = self.filter.text().to_owned();
+                if self.filter.key(key) && self.filter.text() != before {
+                    self.selected = 0;
+                }
             }
-            KeyCode::Char(c) if !ctrl => {
-                self.filter.push(c);
-                self.selected = 0;
-            }
-            _ => {}
         }
         Request::None
     }
@@ -301,6 +299,17 @@ mod tests {
         type_keys(&mut mover, &chars("arch"));
 
         assert_eq!(names(&mover), ["Archive"]);
+    }
+
+    #[test]
+    fn typing_inside_the_filter_narrows_by_the_whole_of_it() {
+        let mut mover = picker();
+
+        type_keys(&mut mover, &chars("rc"));
+        type_keys(&mut mover, &[KeyCode::Left, KeyCode::Char('e')]);
+
+        assert_eq!(mover.filter.text(), "rec");
+        assert_eq!(names(&mover), ["Receipts"]);
     }
 
     #[test]
