@@ -284,7 +284,13 @@ impl AppState {
 
     /// The rows each line of the reading pane takes once wrapped.
     fn reader_rows(&self) -> Vec<usize> {
-        let width = self.viewport.reader_width.max(1);
+        self.reader_rows_at(self.viewport.reader_width)
+    }
+
+    /// The rows each line of the reading pane takes once wrapped to `width`
+    /// columns. Scrolling, the cursor and the drawing all count with this.
+    pub fn reader_rows_at(&self, width: u16) -> Vec<usize> {
+        let width = width.max(1);
         self.reader_text()
             .unwrap_or_default()
             .into_iter()
