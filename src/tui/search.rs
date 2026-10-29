@@ -4,16 +4,19 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::model::{Message, MessageId};
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
-use crate::tui::app::{AppState, Effect, Pane};
+use crate::tui::{
+    app::{AppState, Effect, Pane},
+    input::TextInput,
+};
 
 /// The most results a search shows.
 pub const SEARCH_LIMIT: usize = 500;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Search {
-    pub query: String,
+    pub query: TextInput,
     /// Whether keys go to the query rather than the keymap.
     pub editing: bool,
     /// The account each result came from, once results replace the folder's
@@ -32,7 +35,7 @@ impl AppState {
         let search = self.search.as_mut()?;
         match key.code {
             KeyCode::Esc => self.leave_search(),
-            KeyCode::Enter if search.query.trim().is_empty() => self.leave_search(),
+            KeyCode::Enter if search.query.text().trim().is_empty() => self.leave_search(),
             KeyCode::Enter => {
                 search.editing = false;
                 if search.results.is_some() {
@@ -40,22 +43,21 @@ impl AppState {
                 }
                 None
             }
-            KeyCode::Backspace => {
-                search.query.pop();
-                self.query_changed()
+            _ => {
+                let before = search.query.text().to_owned();
+                if search.query.key(key) && search.query.text() != before {
+                    return self.query_changed();
+                }
+                None
             }
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                search.query.push(c);
-                self.query_changed()
-            }
-            _ => None,
         }
     }
 
     fn query_changed(&mut self) -> Option<Effect> {
         let search = self.search.as_mut()?;
-        if !search.query.trim().is_empty() {
-            return Some(Effect::Search(search.query.clone()));
+        let query = search.query.text();
+        if !query.trim().is_empty() {
+            return Some(Effect::Search(query.to_owned()));
         }
         // Nothing to look for: show the folder again while typing goes on.
         search.results.take()?;
@@ -80,7 +82,7 @@ impl AppState {
     /// The query whose results the message list shows, if it shows any.
     pub fn results_query(&self) -> Option<&str> {
         let search = self.search.as_ref()?;
-        search.results.as_ref().map(|_| search.query.as_str())
+        search.results.as_ref().map(|_| search.query.text())
     }
 
     /// Whether keys go to the search query.
@@ -113,6 +115,7 @@ mod tests {
 
     use super::*;
     use crate::tui::keymap::Keymap;
+    use ratatui::crossterm::event::KeyModifiers;
 
     fn folder(id: &str) -> Folder {
         Folder {
@@ -194,6 +197,16 @@ mod tests {
             Some(Effect::Search("lq".to_owned()))
         );
         assert!(!app.should_quit, "q is typed, not quitting");
+    }
+
+    #[test]
+    fn arrows_move_the_cursor_without_searching_again() {
+        let mut app = in_folder();
+        app.update(Action::Search);
+        typed(&mut app, "lu");
+
+        assert_eq!(press(&mut app, KeyCode::Home), None);
+        assert_eq!(typed(&mut app, "b"), Some(Effect::Search("blu".to_owned())));
     }
 
     #[test]

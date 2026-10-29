@@ -171,10 +171,10 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     if let Some(editor) = &app.signature {
         draw_signature(frame, app, editor, compose);
     }
-    frame.render_widget(status_line(app), status);
-    if let Some(search) = app.search.as_ref().filter(|s| s.editing) {
-        let typed = u16::try_from(Line::raw(search.query.as_str()).width()).unwrap_or(u16::MAX);
-        let x = status.x.saturating_add(2).saturating_add(typed);
+    let (line, cursor) = status_line(app, status.width);
+    frame.render_widget(line, status);
+    if let Some(column) = cursor {
+        let x = status.x.saturating_add(column);
         frame.set_cursor_position((x.min(status.right().saturating_sub(1)), status.y));
     }
 
@@ -408,7 +408,9 @@ fn draw_blocked(frame: &mut Frame, said: &str) {
     );
 }
 
-fn status_line(app: &AppState) -> Line<'static> {
+/// The status line `width` columns wide, and the column of the cursor in it
+/// while a search is typed.
+fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     let mut spans = Vec::new();
     let editing = match (&app.compose, &app.signature) {
         (Some(compose), _) if compose.field == Field::Body => Some(&compose.body),
@@ -431,8 +433,11 @@ fn status_line(app: &AppState) -> Line<'static> {
     }
     if let Some(search) = app.search.as_ref().filter(|s| s.editing) {
         spans.push(Span::styled(" /", Style::new().fg(Color::Cyan)));
-        spans.push(Span::raw(search.query.clone()));
-        return Line::from(spans);
+        let used = Line::from(spans.clone()).width();
+        let (query, column) = typed(&search.query, usize::from(width).saturating_sub(used));
+        spans.push(Span::raw(query));
+        let used = u16::try_from(used).unwrap_or(u16::MAX);
+        return (Line::from(spans), Some(used.saturating_add(column)));
     }
     spans.push(match &app.status {
         Some(Status::Error(error)) => {
@@ -451,7 +456,7 @@ fn status_line(app: &AppState) -> Line<'static> {
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",
         ),
     });
-    Line::from(spans)
+    (Line::from(spans), None)
 }
 
 /// Where each part of the message being written goes.
