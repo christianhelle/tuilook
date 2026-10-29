@@ -192,11 +192,6 @@ impl AppState {
             }
         }
     }
-
-    /// The folder `id` itself, not a favorite or unread row standing for it.
-    pub(crate) fn real_folder(&self, id: &FolderId) -> Option<&Folder> {
-        self.folders.iter().find(|f| &f.id == id)
-    }
 }
 
 #[cfg(test)]
