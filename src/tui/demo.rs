@@ -61,7 +61,7 @@ fn personal() -> FakeBackend {
             ("photography", Some("hobbies"), "Photography", None),
             ("woodworking", Some("hobbies"), "Woodworking", None),
         ],
-        &[
+        [
             (
                 "inbox",
                 "Charles Babbage",
@@ -223,22 +223,6 @@ fn personal() -> FakeBackend {
                 true,
             ),
             (
-                "junk",
-                "Prince of Ruritania",
-                "An urgent business proposal",
-                "I write to you in strictest confidence about a fortune.",
-                5,
-                false,
-            ),
-            (
-                "junk",
-                "Miracle Tonics",
-                "Feel twenty years younger",
-                "Our elixir is trusted by thousands of satisfied customers.",
-                40,
-                false,
-            ),
-            (
                 "family",
                 "Byron Ockham",
                 "Can we get a dog?",
@@ -270,7 +254,9 @@ fn personal() -> FakeBackend {
                 120,
                 true,
             ),
-        ],
+        ]
+        .into_iter()
+        .chain(spam()),
     )
 }
 
@@ -299,7 +285,7 @@ fn work() -> FakeBackend {
             ("compiler", Some("projects"), "Compiler", None),
             ("hr", None, "HR", None),
         ],
-        &[
+        [
             (
                 "inbox",
                 "Charles Babbage",
@@ -538,7 +524,7 @@ fn university() -> FakeBackend {
             ("drafts-research", Some("papers"), "In progress", None),
             ("conferences", Some("research"), "Conferences", None),
         ],
-        &[
+        [
             (
                 "inbox",
                 "Augustus De Morgan",
@@ -631,14 +617,135 @@ fn university() -> FakeBackend {
     )
 }
 
+/// Who sends the junk.
+const SPAMMERS: &[&str] = &[
+    "Prince of Ruritania",
+    "Miracle Tonics",
+    "Lottery Office",
+    "Dr. Bartholomew's Remedies",
+    "Gold Mine Shares Ltd",
+    "Secret Admirer",
+    "Bank Security Dept",
+    "Free Railway Tickets",
+    "Phrenology Institute",
+    "Perpetual Motion Co",
+    "Widow of a Sea Captain",
+    "Discount Snuff",
+    "Clairvoyant Madame Zora",
+];
+
+/// What the junk is about: a subject and an opening line.
+const PITCHES: &[(&str, &str)] = &[
+    (
+        "An urgent business proposal",
+        "I write to you in strictest confidence about a fortune.",
+    ),
+    (
+        "Feel twenty years younger",
+        "Our elixir is trusted by thousands of satisfied customers.",
+    ),
+    (
+        "You have won!!!",
+        "Claim your prize of ten thousand guineas before Friday.",
+    ),
+    (
+        "Your account is suspended",
+        "Confirm your details at once to keep your savings safe.",
+    ),
+    (
+        "Invest in a sure thing",
+        "Shares in our Peruvian silver mine can only go up.",
+    ),
+    (
+        "Someone fancies you",
+        "A lady of means has noticed you at the opera.",
+    ),
+    (
+        "Final notice",
+        "This is your last chance to settle the invoice enclosed.",
+    ),
+    (
+        "Free first-class travel",
+        "Answer three questions and ride anywhere in the kingdom.",
+    ),
+    (
+        "Know your true character",
+        "Send us a sketch of your skull for a full reading.",
+    ),
+    (
+        "The machine that never stops",
+        "Free power forever, patent pending, investors wanted.",
+    ),
+    (
+        "A sad inheritance",
+        "My late husband left a chest of pearls with no heir.",
+    ),
+    (
+        "Half price, today only",
+        "Every tin in the shop at half price until midnight.",
+    ),
+    (
+        "Your future revealed",
+        "The cards have spoken; a stranger brings great news.",
+    ),
+    (
+        "Re: your parcel",
+        "We could not deliver your parcel. Pay the fee to rebook.",
+    ),
+    (
+        "Lose a stone in a week",
+        "No diet, no exercise, just one spoon before bed.",
+    ),
+    (
+        "Exclusive offer for you",
+        "Selected customers only: a gift is waiting to be claimed.",
+    ),
+    (
+        "Act now",
+        "Prices rise tomorrow. Reply with your bank details.",
+    ),
+    (
+        "Congratulations, Ada",
+        "You have been chosen for a once-in-a-lifetime opportunity.",
+    ),
+    (
+        "Work from home",
+        "Earn a pound a day folding letters from your parlour.",
+    ),
+    (
+        "Unclaimed funds in your name",
+        "A sum has lain unclaimed at the Bank for forty years.",
+    ),
+];
+
+/// A hundred junk mails, a few hours apart, mixing every spammer with
+/// every pitch, so the Junk Email folder is long enough to scroll.
+fn spam() -> impl Iterator<Item = MessageSpec> {
+    (0..100).map(|i| {
+        let (subject, preview) = PITCHES[i % PITCHES.len()];
+        (
+            "junk",
+            SPAMMERS[i % SPAMMERS.len()],
+            subject,
+            preview,
+            5 + 3 * i as i64,
+            i % 4 == 3,
+        )
+    })
+}
+
 /// A mailbox with `folders` holding `messages`, with every id prefixed by
 /// `key` so that no two accounts share one.
-fn mailbox(key: &str, folders: &[FolderSpec], messages: &[MessageSpec]) -> FakeBackend {
+fn mailbox(
+    key: &str,
+    folders: &[FolderSpec],
+    messages: impl IntoIterator<Item = MessageSpec>,
+) -> FakeBackend {
     let id = |local: &str| FolderId(format!("{key}-{local}"));
     let now: Timestamp = NOW.parse().expect("valid demo timestamp");
     let mut by_folder: HashMap<FolderId, Vec<Message>> = HashMap::new();
-    for (index, &(folder, from, subject, preview, hours_ago, is_read)) in
-        messages.iter().enumerate()
+    for (index, (folder, from, subject, preview, hours_ago, is_read)) in
+        messages.into_iter().enumerate()
     {
         let message = Message {
             id: MessageId(format!("{key}-m{index}")),
@@ -746,6 +853,13 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_personal_junk_folder_holds_a_hundred_mails() {
+        let (_, personal) = &accounts()[0];
+        let junk = &personal.messages[&FolderId("p-junk".to_owned())];
+        assert_eq!(junk.len(), 100);
     }
 
     #[test]
