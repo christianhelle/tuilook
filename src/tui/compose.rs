@@ -87,9 +87,9 @@ impl Compose {
         };
         let mut compose = Compose {
             kind,
-            to: input(&to),
+            to: TextInput::from(to.as_str()),
             cc: TextInput::default(),
-            subject: input(&subject),
+            subject: TextInput::from(subject.as_str()),
             body: Editor::default(),
             field,
             sending: false,
@@ -214,12 +214,6 @@ impl Compose {
         self.sending = true;
         Request::Send(draft)
     }
-}
-
-fn input(text: &str) -> TextInput {
-    let mut input = TextInput::default();
-    text.chars().for_each(|c| input.insert(c));
-    input
 }
 
 /// `subject` with `prefix` in front, unless it already starts with it.

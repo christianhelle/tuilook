@@ -1,10 +1,20 @@
 //! A single line of editable text.
 
 /// Text with a cursor, counted in characters.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TextInput {
     text: String,
     cursor: usize,
+}
+
+/// The text, with the cursor after it.
+impl From<&str> for TextInput {
+    fn from(text: &str) -> Self {
+        Self {
+            text: text.to_owned(),
+            cursor: text.chars().count(),
+        }
+    }
 }
 
 impl TextInput {
