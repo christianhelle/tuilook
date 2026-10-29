@@ -20,3 +20,7 @@ mail to, narrowed by typing part of its name.
 **Folder-pane row**: one row of the folder pane: an account's heading, one of
 its folders, or a favorite or unread row showing a folder again. What a row
 stands for is asked of the app as a `Row`, never read from its id.
+
+**Mailbox**: one account's cache, read on the UI thread, and the channel to
+the core that syncs it. The mailboxes perform the effects the app asks for
+and show it the events each core reports.
