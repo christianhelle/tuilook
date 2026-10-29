@@ -27,6 +27,29 @@ pub struct NamePrompt {
 }
 
 impl NamePrompt {
+    /// Asks the name of a new folder in `account`, inside `parent`, called
+    /// `under`, or at the top level without one.
+    pub fn new_folder(account: usize, parent: Option<FolderId>, under: Option<String>) -> Self {
+        Self {
+            account,
+            naming: Naming::New { parent, under },
+            text: String::new(),
+        }
+    }
+
+    /// Asks a new name for `folder` in `account`, starting from the one it
+    /// has.
+    pub fn rename(account: usize, folder: &Folder) -> Self {
+        Self {
+            account,
+            naming: Naming::Rename {
+                folder: folder.id.clone(),
+                old: folder.name.clone(),
+            },
+            text: folder.name.clone(),
+        }
+    }
+
     /// What the dialog asks for.
     pub fn title(&self) -> String {
         match &self.naming {
@@ -53,12 +76,7 @@ impl AppState {
             .as_ref()
             .and_then(|id| self.real_folder(id))
             .map(|f| f.name.clone());
-        let naming = Naming::New { parent, under };
-        self.prompt = Some(NamePrompt {
-            account,
-            naming,
-            text: String::new(),
-        });
+        self.prompt = Some(NamePrompt::new_folder(account, parent, under));
     }
 
     /// F2 in the folder pane: asks a new name for the selected folder,
@@ -74,22 +92,14 @@ impl AppState {
         let Some(folder) = self.real_folder(&row_target(&row.id)) else {
             return;
         };
-        let old = folder.name.clone();
         if folder.well_known.is_some() {
+            let old = &folder.name;
             self.show_error(format!(
                 "{old} is one of Outlook's own folders and cannot be renamed"
             ));
             return;
         }
-        let naming = Naming::Rename {
-            folder: folder.id.clone(),
-            old: old.clone(),
-        };
-        self.prompt = Some(NamePrompt {
-            account,
-            naming,
-            text: old,
-        });
+        self.prompt = Some(NamePrompt::rename(account, folder));
     }
 
     /// A key while typing a folder name. Enter makes or renames the folder,
