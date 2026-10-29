@@ -177,7 +177,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         frame.set_cursor_position((x.min(status.right().saturating_sub(1)), status.y));
     }
 
-    if app.show_help {
+    if app.dialog == Some(Dialog::Help) {
         let help: &[(&str, &str)] = match (&app.compose, &app.signature) {
             (Some(_), _) => &COMPOSE_HELP,
             (None, Some(_)) => &SIGNATURE_HELP,
@@ -215,9 +215,9 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     match &app.dialog {
         Some(Dialog::Name(prompt)) => draw_name_prompt(frame, prompt),
         Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
-        Some(Dialog::Confirm(_)) | None => {}
+        Some(Dialog::Help | Dialog::Blocked(_) | Dialog::Confirm(_)) | None => {}
     }
-    if let Some(said) = &app.blocked {
+    if let Some(Dialog::Blocked(said)) = &app.dialog {
         draw_blocked(frame, said);
     }
 }

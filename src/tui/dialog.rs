@@ -5,6 +5,11 @@ use crate::tui::{app::Confirm, folder_edit::NamePrompt, mover::MovePicker};
 /// At most one dialog is open at a time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Dialog {
+    /// The keys, until the next key or click.
+    Help,
+    /// What the mail service said when it blocked sending, until the next
+    /// key or click.
+    Blocked(String),
     /// A question to answer with y or Enter before anything else happens.
     Confirm(Confirm),
     /// A folder name being typed, to make or rename a folder.

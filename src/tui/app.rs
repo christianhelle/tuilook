@@ -227,10 +227,6 @@ pub struct AppState {
     pub expanded: BTreeSet<FolderId>,
     /// The dialog over the panes, which takes every key.
     pub dialog: Option<Dialog>,
-    pub show_help: bool,
-    /// What the mail service said when it blocked sending, shown in a
-    /// dialog until the next key.
-    pub blocked: Option<String>,
     /// Which account sent recent messages, and when, to notice a burst.
     pub sent: Vec<(usize, Instant)>,
     /// A message being written, which takes over the screen.
@@ -407,11 +403,8 @@ impl AppState {
             self.should_quit = true;
             return None;
         }
-        if self.show_help {
-            self.show_help = false;
-            return None;
-        }
-        if self.blocked.take().is_some() {
+        if matches!(self.dialog, Some(Dialog::Help | Dialog::Blocked(_))) {
+            self.dialog = None;
             return None;
         }
         if matches!(self.dialog, Some(Dialog::Confirm(_))) {
@@ -429,7 +422,7 @@ impl AppState {
         match &self.dialog {
             Some(Dialog::Name(_)) => return self.prompt_key(key),
             Some(Dialog::Move(_)) => return self.mover_key(key),
-            Some(Dialog::Confirm(_)) | None => {}
+            Some(Dialog::Help | Dialog::Blocked(_) | Dialog::Confirm(_)) | None => {}
         }
         if let Some(compose) = &mut self.compose {
             match compose.key(key, self.viewport.compose, &mut self.register) {
@@ -447,7 +440,7 @@ impl AppState {
                 }
                 Request::Close => self.compose = None,
                 Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
-                Request::Help => self.show_help = true,
+                Request::Help => self.dialog = Some(Dialog::Help),
                 Request::Invalid(why) => self.show_error(why),
             }
             return None;
@@ -469,7 +462,7 @@ impl AppState {
                 signature::Request::ConfirmDiscard => {
                     self.dialog = Some(Dialog::Confirm(Confirm::DiscardSignature));
                 }
-                signature::Request::Help => self.show_help = true,
+                signature::Request::Help => self.dialog = Some(Dialog::Help),
             }
             return None;
         }
@@ -507,13 +500,9 @@ impl AppState {
     /// Handles the mouse at `hit`. A click focuses the pane and selects the
     /// row; the wheel moves the pane under the pointer without focusing it.
     pub fn on_mouse(&mut self, mouse: Mouse, hit: Option<Hit>) -> Option<Effect> {
-        if self.show_help {
-            self.show_help = mouse != Mouse::Click;
-            return None;
-        }
-        if self.blocked.is_some() {
+        if matches!(self.dialog, Some(Dialog::Help | Dialog::Blocked(_))) {
             if mouse == Mouse::Click {
-                self.blocked = None;
+                self.dialog = None;
             }
             return None;
         }
@@ -619,7 +608,7 @@ impl AppState {
                 self.sync.forced = true;
                 return effect;
             }
-            Action::Help => self.show_help = true,
+            Action::Help => self.dialog = Some(Dialog::Help),
             Action::Search => self.start_search(),
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::EditSignature => {
@@ -1003,7 +992,7 @@ impl AppState {
             compose.sending = false;
         }
         self.show_error("Outlook.com has blocked sending from this account".to_owned());
-        self.blocked = Some(said);
+        self.dialog = Some(Dialog::Blocked(said));
     }
 
     pub fn show_error(&mut self, message: String) {
@@ -1873,10 +1862,10 @@ Dear Charles,"
         let mut app = in_message_list(&["m0", "m1"]);
 
         key(&mut app, KeyCode::Char('?'));
-        assert!(app.show_help);
+        assert_eq!(app.dialog, Some(Dialog::Help));
 
         assert_eq!(key(&mut app, KeyCode::Char('j')), None);
-        assert!(!app.show_help);
+        assert_eq!(app.dialog, None);
         assert_eq!(app.selected_message, 0, "the key only closed the help");
     }
 
@@ -2128,10 +2117,10 @@ Ada"
 
         app.send_blocked("ErrorMessageSubmissionBlocked: blocked".to_owned());
 
-        assert!(app.blocked.is_some());
+        assert!(matches!(app.dialog, Some(Dialog::Blocked(_))));
         assert!(app.compose.as_ref().is_some_and(|c| !c.sending));
         assert_eq!(key(&mut app, KeyCode::Char('y')), None);
-        assert!(app.blocked.is_none(), "any key closes it");
+        assert_eq!(app.dialog, None, "any key closes it");
         assert_eq!(
             app.compose.as_ref().map(|c| c.body.text()),
             Some("x".to_owned()),
@@ -2190,14 +2179,14 @@ Ada"
     #[test]
     fn a_click_only_closes_the_help() {
         let mut app = in_message_list(&["m0", "m1"]);
-        app.show_help = true;
+        app.dialog = Some(Dialog::Help);
 
         assert_eq!(
             app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(1))),
             None
         );
 
-        assert!(!app.show_help);
+        assert_eq!(app.dialog, None);
         assert_eq!(app.selected_message, 0);
     }
 
