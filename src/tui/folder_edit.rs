@@ -18,6 +18,27 @@ pub enum Naming {
     Rename { folder: FolderId, old: String },
 }
 
+/// What a key asks for while typing a folder name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Request {
+    None,
+    Close,
+    /// Make a folder called `name` in `account`, inside `parent` or at the
+    /// top level.
+    Create {
+        account: usize,
+        parent: Option<FolderId>,
+        name: String,
+    },
+    /// Rename `folder` in `account` from `old` to `name`.
+    Rename {
+        account: usize,
+        folder: FolderId,
+        old: String,
+        name: String,
+    },
+}
+
 /// A folder name being typed, shown in a dialog.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamePrompt {
@@ -48,6 +69,43 @@ impl NamePrompt {
             },
             text: folder.name.clone(),
         }
+    }
+
+    /// Typing goes into the name, Enter makes or renames the folder and Esc
+    /// gives up. A blank name keeps asking; the same name renames nothing.
+    pub fn key(&mut self, key: KeyEvent) -> Request {
+        match key.code {
+            KeyCode::Esc => return Request::Close,
+            KeyCode::Backspace => {
+                self.text.pop();
+            }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.text.push(c);
+            }
+            KeyCode::Enter => {
+                let name = self.text.trim().to_owned();
+                if name.is_empty() {
+                    return Request::None;
+                }
+                let account = self.account;
+                return match &self.naming {
+                    Naming::New { parent, .. } => Request::Create {
+                        account,
+                        parent: parent.clone(),
+                        name,
+                    },
+                    Naming::Rename { old, .. } if *old == name => Request::Close,
+                    Naming::Rename { folder, old } => Request::Rename {
+                        account,
+                        folder: folder.clone(),
+                        old: old.clone(),
+                        name,
+                    },
+                };
+            }
+            _ => {}
+        }
+        Request::None
     }
 
     /// What the dialog asks for.
@@ -102,49 +160,40 @@ impl AppState {
         self.prompt = Some(NamePrompt::rename(account, folder));
     }
 
-    /// A key while typing a folder name. Enter makes or renames the folder,
-    /// Esc gives up.
+    /// A key while typing a folder name.
     pub(crate) fn prompt_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let prompt = self.prompt.as_mut()?;
-        match key.code {
-            KeyCode::Esc => self.prompt = None,
-            KeyCode::Backspace => {
-                prompt.text.pop();
-            }
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                prompt.text.push(c);
-            }
-            KeyCode::Enter => {
-                let name = prompt.text.trim().to_owned();
-                if name.is_empty() {
-                    return None;
-                }
-                let NamePrompt {
-                    account, naming, ..
-                } = self.prompt.take()?;
-                return match naming {
-                    Naming::New { parent, .. } => {
-                        self.show_busy(format!("Creating {name}…"));
-                        Some(Effect::CreateFolder {
-                            account,
-                            parent,
-                            name,
-                        })
-                    }
-                    Naming::Rename { old, .. } if old == name => None,
-                    Naming::Rename { folder, old } => {
-                        self.show_busy(format!("Renaming {old}…"));
-                        Some(Effect::RenameFolder {
-                            account,
-                            folder,
-                            name,
-                        })
-                    }
-                };
-            }
-            _ => {}
+        let request = self.prompt.as_mut()?.key(key);
+        if request != Request::None {
+            self.prompt = None;
         }
-        None
+        match request {
+            Request::None | Request::Close => None,
+            Request::Create {
+                account,
+                parent,
+                name,
+            } => {
+                self.show_busy(format!("Creating {name}…"));
+                Some(Effect::CreateFolder {
+                    account,
+                    parent,
+                    name,
+                })
+            }
+            Request::Rename {
+                account,
+                folder,
+                old,
+                name,
+            } => {
+                self.show_busy(format!("Renaming {old}…"));
+                Some(Effect::RenameFolder {
+                    account,
+                    folder,
+                    name,
+                })
+            }
+        }
     }
 
     /// The folder `id` itself, not a favorite or unread row standing for it.
