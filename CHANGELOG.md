@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Typing a folder's name or the folder to move mail to shows the same bar
+  cursor as typing a search.
+
 ## [0.1.1] - 2026-10-29
 
 ### Added
