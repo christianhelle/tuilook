@@ -185,7 +185,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         };
         draw_help(frame, help);
     }
-    match &app.confirm {
+    match app.confirm() {
         Some(Confirm::Delete { ids, permanent }) => {
             let messages = match ids.len() {
                 1 => "1 message".to_owned(),
@@ -215,7 +215,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     match &app.dialog {
         Some(Dialog::Name(prompt)) => draw_name_prompt(frame, prompt),
         Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
-        None => {}
+        Some(Dialog::Confirm(_)) | None => {}
     }
     if let Some(said) = &app.blocked {
         draw_blocked(frame, said);

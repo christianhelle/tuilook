@@ -225,7 +225,6 @@ pub struct AppState {
     pub marked: BTreeSet<MessageId>,
     /// Folders whose subfolders are shown.
     pub expanded: BTreeSet<FolderId>,
-    pub confirm: Option<Confirm>,
     /// The dialog over the panes, which takes every key.
     pub dialog: Option<Dialog>,
     pub show_help: bool,
@@ -388,6 +387,14 @@ impl AppState {
         rows.len().saturating_sub(1)
     }
 
+    /// The question asked, if one is.
+    pub fn confirm(&self) -> Option<&Confirm> {
+        match &self.dialog {
+            Some(Dialog::Confirm(confirm)) => Some(confirm),
+            _ => None,
+        }
+    }
+
     /// The pane filling the screen, which follows the focus while zoomed.
     pub fn zoomed_pane(&self) -> Option<Pane> {
         self.zoomed.then_some(self.focus)
@@ -407,7 +414,10 @@ impl AppState {
         if self.blocked.take().is_some() {
             return None;
         }
-        if let Some(confirm) = self.confirm.take() {
+        if matches!(self.dialog, Some(Dialog::Confirm(_))) {
+            let Some(Dialog::Confirm(confirm)) = self.dialog.take() else {
+                unreachable!("a confirmation is open");
+            };
             // y or Enter agrees; any other key cancels and does nothing else.
             let agreed = matches!(key.code, KeyCode::Char('y') | KeyCode::Enter);
             if agreed {
@@ -419,7 +429,7 @@ impl AppState {
         match &self.dialog {
             Some(Dialog::Name(_)) => return self.prompt_key(key),
             Some(Dialog::Move(_)) => return self.mover_key(key),
-            None => {}
+            Some(Dialog::Confirm(_)) | None => {}
         }
         if let Some(compose) = &mut self.compose {
             match compose.key(key, self.viewport.compose, &mut self.register) {
@@ -428,14 +438,15 @@ impl AppState {
                     let account = compose.account;
                     let sent_lately = self.sent_lately(account, Instant::now());
                     if sent_lately >= PACE_LIMIT {
-                        self.confirm = Some(Confirm::SendAnyway { draft, sent_lately });
+                        self.dialog =
+                            Some(Dialog::Confirm(Confirm::SendAnyway { draft, sent_lately }));
                         return None;
                     }
                     self.show_busy("Sending…");
                     return Some(Effect::Send(draft));
                 }
                 Request::Close => self.compose = None,
-                Request::ConfirmDiscard => self.confirm = Some(Confirm::Discard),
+                Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
                 Request::Help => self.show_help = true,
                 Request::Invalid(why) => self.show_error(why),
             }
@@ -456,7 +467,7 @@ impl AppState {
                 }
                 signature::Request::Close => self.signature = None,
                 signature::Request::ConfirmDiscard => {
-                    self.confirm = Some(Confirm::DiscardSignature);
+                    self.dialog = Some(Dialog::Confirm(Confirm::DiscardSignature));
                 }
                 signature::Request::Help => self.show_help = true,
             }
@@ -506,11 +517,7 @@ impl AppState {
             }
             return None;
         }
-        if self.confirm.is_some()
-            || self.dialog.is_some()
-            || self.compose.is_some()
-            || self.signature.is_some()
-        {
+        if self.dialog.is_some() || self.compose.is_some() || self.signature.is_some() {
             return None;
         }
         let Hit { pane, item } = hit?;
@@ -590,7 +597,7 @@ impl AppState {
                 let ids = self.to_act_on();
                 if !ids.is_empty() {
                     let permanent = action == Action::DeletePermanently;
-                    self.confirm = Some(Confirm::Delete { ids, permanent });
+                    self.dialog = Some(Dialog::Confirm(Confirm::Delete { ids, permanent }));
                 }
             }
             Action::Delete | Action::DeletePermanently => {
@@ -1763,7 +1770,7 @@ Dear Charles,"
         let mut app = in_message_list(&["m0", "m1"]);
 
         assert_eq!(key(&mut app, KeyCode::Char('d')), None);
-        assert!(app.confirm.is_some());
+        assert!(app.confirm().is_some());
 
         let effect = key(&mut app, KeyCode::Char('y'));
         assert_eq!(
@@ -1773,7 +1780,7 @@ Dear Charles,"
                 permanent: false
             })
         );
-        assert_eq!(app.confirm, None);
+        assert_eq!(app.confirm(), None);
     }
 
     #[test]
@@ -1805,7 +1812,7 @@ Dear Charles,"
 
         assert_eq!(key(&mut app, KeyCode::Char('j')), None);
 
-        assert_eq!(app.confirm, None);
+        assert_eq!(app.confirm(), None);
         assert_eq!(app.selected_message, 0);
     }
 
@@ -1814,14 +1821,14 @@ Dear Charles,"
         let mut app = in_message_list(&["m0"]);
         app.focus = Pane::Folders;
         app.update(Action::Delete);
-        assert!(matches!(app.confirm, Some(Confirm::DeleteFolder { .. })));
+        assert!(matches!(app.confirm(), Some(Confirm::DeleteFolder { .. })));
     }
 
     #[test]
     fn there_is_nothing_to_delete_in_an_empty_folder() {
         let mut app = in_message_list(&[]);
         app.update(Action::Delete);
-        assert_eq!(app.confirm, None);
+        assert_eq!(app.confirm(), None);
     }
 
     #[test]
@@ -1967,7 +1974,7 @@ Ada"
         key(&mut app, KeyCode::Char('x'));
         key(&mut app, KeyCode::Esc);
         key(&mut app, KeyCode::Esc);
-        assert_eq!(app.confirm, Some(Confirm::DiscardSignature));
+        assert_eq!(app.confirm(), Some(&Confirm::DiscardSignature));
         key(&mut app, KeyCode::Char('y'));
 
         assert!(app.signature.is_none());
@@ -2064,7 +2071,7 @@ Ada"
         let mut app = replying_after(PACE_LIMIT - 1);
 
         assert!(matches!(ctrl_s(&mut app), Some(Effect::Send(_))));
-        assert_eq!(app.confirm, None);
+        assert_eq!(app.confirm(), None);
     }
 
     #[test]
@@ -2073,7 +2080,7 @@ Ada"
 
         assert_eq!(ctrl_s(&mut app), None);
         assert!(matches!(
-            app.confirm,
+            app.confirm(),
             Some(Confirm::SendAnyway {
                 sent_lately: PACE_LIMIT,
                 ..
@@ -2140,7 +2147,7 @@ Ada"
         key(&mut app, KeyCode::Esc);
 
         key(&mut app, KeyCode::Esc);
-        assert_eq!(app.confirm, Some(Confirm::Discard));
+        assert_eq!(app.confirm(), Some(&Confirm::Discard));
         key(&mut app, KeyCode::Char('n'));
         assert!(app.compose.is_some(), "any other key keeps writing");
 
@@ -2589,7 +2596,7 @@ Ada"
         app.update(Action::Delete);
 
         assert!(app.compose.is_none());
-        assert_eq!(app.confirm, None);
+        assert_eq!(app.confirm(), None);
     }
 
     #[test]

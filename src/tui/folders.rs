@@ -4,7 +4,10 @@ use std::collections::HashSet;
 
 use crate::model::FolderId;
 
-use crate::tui::app::{AppState, Confirm, Effect, is_account_row, row_target};
+use crate::tui::{
+    app::{AppState, Confirm, Effect, is_account_row, row_target},
+    dialog::Dialog,
+};
 
 impl AppState {
     /// Indexes into `folders` of the folders shown, in order: the top-level
@@ -119,11 +122,11 @@ impl AppState {
             ));
             return;
         }
-        self.confirm = Some(Confirm::DeleteFolder {
+        self.dialog = Some(Dialog::Confirm(Confirm::DeleteFolder {
             folder: row_target(&row.id),
             name,
             permanent,
-        });
+        }));
     }
 
     /// Says core deleted a folder; the folder tree follows.
@@ -215,8 +218,8 @@ mod tests {
 
         assert_eq!(key(&mut app, 'd'), None);
         assert_eq!(
-            app.confirm,
-            Some(Confirm::DeleteFolder {
+            app.confirm(),
+            Some(&Confirm::DeleteFolder {
                 folder: FolderId("archive".to_owned()),
                 name: "archive".to_owned(),
                 permanent: false,
@@ -238,14 +241,14 @@ mod tests {
 
         key(&mut app, 'D');
         assert!(matches!(
-            app.confirm,
+            app.confirm(),
             Some(Confirm::DeleteFolder {
                 permanent: true,
                 ..
             })
         ));
         assert_eq!(key(&mut app, 'n'), None);
-        assert_eq!(app.confirm, None);
+        assert_eq!(app.confirm(), None);
     }
 
     #[test]
@@ -257,7 +260,7 @@ mod tests {
 
         key(&mut app, 'd');
 
-        assert_eq!(app.confirm, None);
+        assert_eq!(app.confirm(), None);
         assert!(matches!(
             app.status,
             Some(crate::tui::app::Status::Error(_))
