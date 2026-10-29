@@ -256,6 +256,7 @@ fn personal() -> FakeBackend {
             ),
         ]
         .into_iter()
+        .chain(newsletters())
         .chain(spam()),
     )
 }
@@ -617,6 +618,184 @@ fn university() -> FakeBackend {
     )
 }
 
+/// Who sends the newsletters, and the issues each has sent, newest first.
+const NEWSLETTERS: &[(&str, &[(&str, &str)])] = &[
+    (
+        "Royal Institution",
+        &[
+            (
+                "Friday Evening Discourse",
+                "This week: the chemistry of a candle flame.",
+            ),
+            (
+                "New members' evening",
+                "Meet the fellows over tea in the library.",
+            ),
+            (
+                "Lecture notes now online",
+                "Last month's lectures are ready to read.",
+            ),
+            (
+                "Christmas lectures announced",
+                "Tickets for the children's lectures open soon.",
+            ),
+            (
+                "The year in science",
+                "A look back at twelve months of discovery.",
+            ),
+            (
+                "Volunteer guides wanted",
+                "Show visitors round the laboratory on Saturdays.",
+            ),
+            (
+                "Members' magazine",
+                "In this issue: electricity, magnetism and you.",
+            ),
+            (
+                "Reminder: subscriptions",
+                "Your annual subscription renews next month.",
+            ),
+        ],
+    ),
+    (
+        "The Mechanics' Magazine",
+        &[
+            (
+                "Weekly digest",
+                "Steam hammers, safety valves and a new lathe.",
+            ),
+            (
+                "Readers' inventions",
+                "A self-winding clock and a mechanical duck.",
+            ),
+            ("Patent roundup", "Forty-one new patents granted this week."),
+            (
+                "Letters to the editor",
+                "On the proper oiling of a beam engine.",
+            ),
+            (
+                "Weekly digest",
+                "Iron ships, gas lamps and a calculating machine.",
+            ),
+            ("Workshop tips", "How to true a grindstone in five minutes."),
+            ("Weekly digest", "Rail gauges compared, and why it matters."),
+            (
+                "Special issue: engines",
+                "Everything you wanted to know about governors.",
+            ),
+        ],
+    ),
+    (
+        "Kew Gardens",
+        &[
+            (
+                "Autumn in the gardens",
+                "The maples are turning; come before they fall.",
+            ),
+            (
+                "Palm House reopens",
+                "The glasshouse is open again after repairs.",
+            ),
+            (
+                "Members' plant sale",
+                "Cuttings from the collection, Saturday morning.",
+            ),
+            (
+                "Seed exchange",
+                "Bring seeds from your garden to swap with others.",
+            ),
+            (
+                "Orchid festival",
+                "Two hundred orchids on show for one week only.",
+            ),
+            (
+                "Guided walks",
+                "Learn the trees of the arboretum with a botanist.",
+            ),
+            (
+                "Winter opening hours",
+                "From November the gates close at four.",
+            ),
+            (
+                "New arrivals",
+                "Rare ferns collected in New Zealand now on display.",
+            ),
+        ],
+    ),
+    (
+        "The Gazette",
+        &[
+            (
+                "Morning briefing",
+                "Parliament sits late, and the price of corn falls.",
+            ),
+            (
+                "Weekend reading",
+                "Long reads on travel, science and the arts.",
+            ),
+            (
+                "Morning briefing",
+                "A new bridge for the Thames is approved.",
+            ),
+            ("Morning briefing", "Fog delays trains across the south."),
+            ("Weekend reading", "The best new novels of the season."),
+            ("Morning briefing", "The Queen opens a hospital in Bristol."),
+            ("Morning briefing", "Telegraph lines reach further north."),
+            ("Weekend reading", "A walking tour of the Lake District."),
+        ],
+    ),
+    (
+        "Fortnum's",
+        &[
+            (
+                "Hampers for Christmas",
+                "Order early to be sure of delivery by the 20th.",
+            ),
+            (
+                "New teas from Assam",
+                "Three new single-estate teas are in store.",
+            ),
+            (
+                "Your points balance",
+                "You have points to spend before the year ends.",
+            ),
+            (
+                "Tasting evening",
+                "Cheese and wine in the shop on Thursday.",
+            ),
+            (
+                "Marmalade season",
+                "Seville oranges have arrived; jars on sale soon.",
+            ),
+            (
+                "Free delivery this week",
+                "No delivery charge on orders over a guinea.",
+            ),
+            (
+                "Biscuit of the month",
+                "A ginger biscuit to make the autumn bearable.",
+            ),
+            (
+                "Thank you for your order",
+                "We hope you enjoyed the shortbread.",
+            ),
+        ],
+    ),
+];
+
+/// Every newsletter's issues, interleaved and half a day apart, so the
+/// personal inbox is long enough to scroll.
+fn newsletters() -> impl Iterator<Item = MessageSpec> {
+    let issues = NEWSLETTERS.iter().map(|(_, issues)| issues.len()).max();
+    (0..issues.unwrap_or(0))
+        .flat_map(|issue| NEWSLETTERS.iter().map(move |sender| (issue, sender)))
+        .filter_map(|(issue, (from, issues))| Some((*from, issues.get(issue)?)))
+        .enumerate()
+        .map(|(i, (from, &(subject, preview)))| {
+            ("inbox", from, subject, preview, 4 + 13 * i as i64, i > 3)
+        })
+}
+
 /// Who sends the junk.
 const SPAMMERS: &[&str] = &[
     "Prince of Ruritania",
@@ -860,6 +1039,13 @@ mod tests {
         let (_, personal) = &accounts()[0];
         let junk = &personal.messages[&FolderId("p-junk".to_owned())];
         assert_eq!(junk.len(), 100);
+    }
+
+    #[test]
+    fn the_personal_inbox_is_long_enough_to_scroll() {
+        let (_, personal) = &accounts()[0];
+        let inbox = &personal.messages[&FolderId("p-inbox".to_owned())];
+        assert!(inbox.len() >= 40, "only {} in the inbox", inbox.len());
     }
 
     #[test]
