@@ -261,6 +261,9 @@ pub struct AppState {
     /// Folders with no older mail left to fetch, all of it or only unread.
     /// Forgotten after each sync, as new counts may say otherwise.
     pub no_older: HashSet<(FolderId, bool)>,
+    /// When it is, read once a frame so a key and the drawing after it put
+    /// mail in the same date groups. Unset, it is read whenever asked.
+    pub clock: Option<Zoned>,
 }
 
 impl AppState {
@@ -337,6 +340,11 @@ impl AppState {
             Some(Dialog::Confirm(confirm)) => Some(confirm),
             _ => None,
         }
+    }
+
+    /// What time it is, by the clock read this frame.
+    pub fn now(&self) -> Zoned {
+        self.clock.clone().unwrap_or_else(Zoned::now)
     }
 
     /// The pane filling the screen, which follows the focus while zoomed.
@@ -767,7 +775,7 @@ impl AppState {
             .retain(|id| messages.iter().any(|m| &m.id == id));
         if let Some(group) = header {
             // A selected header stays selected while its group has mail.
-            let now = Zoned::now();
+            let now = self.now();
             let first =
                 (0..messages.len()).find(|&i| groups::group_at(&messages, i, &now) == Some(group));
             if let Some(index) = first {
@@ -1011,7 +1019,7 @@ impl AppState {
     /// The message list's rows as they are now: date headers, and the
     /// messages of the groups not folded away.
     pub fn message_rows(&self) -> Vec<MessageRow> {
-        groups::message_rows(&self.messages, &self.collapsed_groups, &Zoned::now())
+        groups::message_rows(&self.messages, &self.collapsed_groups, &self.now())
     }
 
     /// The row of `rows` the cursor is on: the selected header, or the
@@ -1034,7 +1042,7 @@ impl AppState {
 
     /// The date group of the message at `index`.
     pub(crate) fn group_at(&self, index: usize) -> Option<DateGroup> {
-        groups::group_at(&self.messages, index, &Zoned::now())
+        groups::group_at(&self.messages, index, &self.now())
     }
 
     /// A click on row `index` of the message list selects it, and on a date
@@ -1297,6 +1305,21 @@ mod tests {
             ..Default::default()
         };
         app
+    }
+
+    #[test]
+    fn date_groups_count_from_the_clock_read_this_frame() {
+        let mut app = in_message_list(&["m1"]);
+
+        app.clock = Some(jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC));
+
+        assert!(matches!(
+            app.message_rows().first(),
+            Some(MessageRow::Header {
+                group: DateGroup::Today,
+                ..
+            })
+        ));
     }
 
     #[test]

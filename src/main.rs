@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
+use jiff::Zoned;
 use ratatui::{
     crossterm::{
         cursor::SetCursorStyle,
@@ -407,6 +408,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
         mailboxes.apply(&mut app, effect)?;
     }
 
+    app.clock = Some(Zoned::now());
     let mut keymap = Keymap::default();
     let mut terminal = ratatui::init();
     let mut cursor = Cursor::Default;
@@ -428,7 +430,10 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
                     mailboxes.on_event(&mut app, account, event)?;
                 }
             }
-            if !event::poll(Duration::from_millis(100))? {
+            let ready = event::poll(Duration::from_millis(100))?;
+            // The key and the drawing after it see the same time.
+            app.clock = Some(Zoned::now());
+            if !ready {
                 continue;
             }
             let size = terminal.size()?;
