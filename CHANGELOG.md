@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-29
+
 ### Added
 
 - Folders: `a` in the folder pane makes a new folder inside the selected one,
@@ -150,5 +152,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   variation selectors) that newsletters pad their previews with, and tabs
   show as spaces.
 
-[Unreleased]: https://github.com/christianhelle/tuilook/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/christianhelle/tuilook/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/christianhelle/tuilook/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/christianhelle/tuilook/releases/tag/v0.1.0

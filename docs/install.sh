@@ -239,7 +239,7 @@ Environment variables:
 Examples:
   curl -fsSL https://christianhelle.com/tuilook/install | bash
   curl -fsSL https://christianhelle.com/tuilook/install | INSTALL_DIR=\$HOME/bin bash
-  curl -fsSL https://christianhelle.com/tuilook/install | bash -s -- --version 0.1.0
+  curl -fsSL https://christianhelle.com/tuilook/install | bash -s -- --version 0.1.1
 EOF
 }
 
