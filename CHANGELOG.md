@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Typing a folder's name, the folder to move mail to or a search moves a
+  cursor with `←` `→` `Home` `End`, and `Delete` deletes under it, as in the
+  fields of a message being written.
+
 ### Fixed
 
 - Typing a folder's name or the folder to move mail to shows the same bar
