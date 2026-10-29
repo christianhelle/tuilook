@@ -156,7 +156,7 @@ impl Compose {
             KeyCode::Tab => self.field = self.field.next(),
             KeyCode::BackTab => self.field = self.field.prev(),
             _ if self.field == Field::Body => return self.body_key(key, page, register),
-            _ => return self.header_key(key, ctrl),
+            _ => return self.header_key(key),
         }
         Request::None
     }
@@ -171,7 +171,7 @@ impl Compose {
         }
     }
 
-    fn header_key(&mut self, key: KeyEvent, ctrl: bool) -> Request {
+    fn header_key(&mut self, key: KeyEvent) -> Request {
         let input = match self.field {
             Field::To => &mut self.to,
             Field::Cc => &mut self.cc,
@@ -182,14 +182,9 @@ impl Compose {
             KeyCode::Esc => return self.close(),
             KeyCode::Enter | KeyCode::Down => self.field = self.field.next(),
             KeyCode::Up => self.field = self.field.prev(),
-            KeyCode::Char(c) if !ctrl => input.insert(c),
-            KeyCode::Backspace => input.backspace(),
-            KeyCode::Delete => input.delete(),
-            KeyCode::Left => input.left(),
-            KeyCode::Right => input.right(),
-            KeyCode::Home => input.home(),
-            KeyCode::End => input.end(),
-            _ => {}
+            _ => {
+                input.key(key);
+            }
         }
         Request::None
     }

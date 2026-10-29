@@ -1,5 +1,7 @@
 //! A single line of editable text.
 
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
 /// Text with a cursor, counted in characters.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TextInput {
@@ -25,6 +27,22 @@ impl TextInput {
     /// Where the cursor is, in characters from the start.
     pub fn cursor(&self) -> usize {
         self.cursor
+    }
+
+    /// Edits the text or moves the cursor for an editing key, and says
+    /// whether `key` was one.
+    pub fn key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => self.insert(c),
+            KeyCode::Backspace => self.backspace(),
+            KeyCode::Delete => self.delete(),
+            KeyCode::Left => self.left(),
+            KeyCode::Right => self.right(),
+            KeyCode::Home => self.home(),
+            KeyCode::End => self.end(),
+            _ => return false,
+        }
+        true
     }
 
     pub fn insert(&mut self, c: char) {
@@ -85,6 +103,23 @@ impl TextInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keys_edit_at_the_cursor() {
+        let mut input = TextInput::from("ac");
+
+        for code in [
+            KeyCode::Left,
+            KeyCode::Char('b'),
+            KeyCode::End,
+            KeyCode::Backspace,
+        ] {
+            assert!(input.key(KeyEvent::from(code)));
+        }
+
+        assert_eq!(input.text(), "ab");
+        assert!(!input.key(KeyEvent::from(KeyCode::Enter)));
+    }
 
     #[test]
     fn moving_the_cursor_stops_at_the_end_of_the_text() {
