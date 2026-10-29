@@ -7,7 +7,7 @@ use crate::model::FolderId;
 use crate::tui::{
     app::{AppState, Confirm, Effect},
     dialog::Dialog,
-    rows::{is_account_row, row_target},
+    rows::Row,
 };
 
 impl AppState {
@@ -110,21 +110,18 @@ impl AppState {
     /// d or D in the folder pane: asks before deleting the selected folder.
     /// Outlook's own folders, such as Inbox, cannot be deleted.
     pub(crate) fn ask_to_delete_folder(&mut self, permanent: bool) {
-        let Some(row) = self.folders.get(self.selected_folder) else {
+        let Some(Row::Folder(folder)) = self.selected_folder_row() else {
             return;
         };
-        if is_account_row(row) {
-            return;
-        }
-        let name = row.name.clone();
-        if row.well_known.is_some() {
+        let name = folder.name.clone();
+        if folder.well_known.is_some() {
             self.show_error(format!(
                 "{name} is one of Outlook's own folders and cannot be deleted"
             ));
             return;
         }
         self.dialog = Some(Dialog::Confirm(Confirm::DeleteFolder {
-            folder: row_target(&row.id),
+            folder: folder.id.clone(),
             name,
             permanent,
         }));
