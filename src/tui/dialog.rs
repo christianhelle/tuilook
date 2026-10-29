@@ -17,3 +17,10 @@ pub enum Dialog {
     /// The folder being picked to move mail to.
     Move(MovePicker),
 }
+
+impl Dialog {
+    /// Whether text is typed into the dialog, at a cursor.
+    pub fn takes_text(&self) -> bool {
+        matches!(self, Dialog::Name(_) | Dialog::Move(_))
+    }
+}

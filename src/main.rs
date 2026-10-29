@@ -32,6 +32,7 @@ use tuilook::tui::{
     clipboard,
     compose::Field,
     demo,
+    dialog::Dialog,
     keymap::Keymap,
     search::SEARCH_LIMIT,
     session, ui,
@@ -483,6 +484,9 @@ enum Cursor {
 
 impl Cursor {
     fn of(app: &AppState) -> Self {
+        if app.dialog.as_ref().is_some_and(Dialog::takes_text) {
+            return Cursor::Bar;
+        }
         match &app.compose {
             None if app.typing_search() => Cursor::Bar,
             None => match &app.signature {
