@@ -229,8 +229,7 @@ mod tests {
         app
     }
 
-    fn names(app: &AppState) -> Vec<&str> {
-        let mover = app.mover.as_ref().unwrap();
+    fn names(mover: &MovePicker) -> Vec<&str> {
         mover
             .choices()
             .into_iter()
@@ -238,13 +237,23 @@ mod tests {
             .collect()
     }
 
-    fn type_keys(app: &mut AppState, keys: &[KeyCode]) -> Option<Effect> {
-        let mut keymap = Keymap::default();
-        let mut effect = None;
+    /// Picks where to move m1 among Archive and Inbox > Receipts.
+    fn picker() -> MovePicker {
+        let folders = vec![
+            folder("Inbox", None),
+            folder("Receipts", Some("Inbox")),
+            folder("Archive", None),
+        ];
+        let ids = vec![MessageId("m1".to_owned())];
+        MovePicker::new(0, ids, folders, Some(&FolderId("Inbox".to_owned())))
+    }
+
+    fn type_keys(mover: &mut MovePicker, keys: &[KeyCode]) -> Request {
+        let mut request = Request::None;
         for &code in keys {
-            effect = app.on_key(KeyEvent::from(code), &mut keymap);
+            request = mover.key(KeyEvent::from(code));
         }
-        effect
+        request
     }
 
     fn chars(text: &str) -> Vec<KeyCode> {
@@ -257,22 +266,22 @@ mod tests {
 
         app.update(Action::Move);
 
-        assert_eq!(names(&app), ["Archive", "Receipts"]);
-        assert_eq!(
-            app.mover.as_ref().unwrap().ids,
-            [MessageId("m1".to_owned())]
-        );
+        let mover = app.mover.as_ref().unwrap();
+        assert_eq!(names(mover), ["Archive", "Receipts"]);
+        assert_eq!(mover.ids, [MessageId("m1".to_owned())]);
     }
 
     #[test]
-    fn typing_narrows_the_folders_and_enter_moves_the_marked_mail() {
+    fn enter_moves_the_marked_mail_to_the_folder_picked() {
         let mut app = in_inbox();
+        let mut keymap = Keymap::default();
         app.update(Action::MarkAll);
 
         app.update(Action::Move);
-        type_keys(&mut app, &chars("arch"));
-        assert_eq!(names(&app), ["Archive"]);
-        let effect = type_keys(&mut app, &[KeyCode::Enter]);
+        for c in "arch".chars() {
+            app.on_key(KeyEvent::from(KeyCode::Char(c)), &mut keymap);
+        }
+        let effect = app.on_key(KeyEvent::from(KeyCode::Enter), &mut keymap);
 
         assert_eq!(
             effect,
@@ -286,34 +295,33 @@ mod tests {
     }
 
     #[test]
+    fn typing_narrows_the_folders() {
+        let mut mover = picker();
+
+        type_keys(&mut mover, &chars("arch"));
+
+        assert_eq!(names(&mover), ["Archive"]);
+    }
+
+    #[test]
     fn arrows_pick_a_folder_and_stop_at_the_ends() {
-        let mut app = in_inbox();
+        let mut mover = picker();
 
-        app.update(Action::Move);
-        type_keys(&mut app, &[KeyCode::Down, KeyCode::Down, KeyCode::Down]);
-        assert_eq!(
-            app.mover.as_ref().unwrap().picked().unwrap().name,
-            "Receipts"
-        );
-        type_keys(&mut app, &[KeyCode::Up, KeyCode::Up]);
+        type_keys(&mut mover, &[KeyCode::Down, KeyCode::Down, KeyCode::Down]);
+        assert_eq!(mover.picked().unwrap().name, "Receipts");
+        type_keys(&mut mover, &[KeyCode::Up, KeyCode::Up]);
 
-        assert_eq!(
-            app.mover.as_ref().unwrap().picked().unwrap().name,
-            "Archive"
-        );
+        assert_eq!(mover.picked().unwrap().name, "Archive");
     }
 
     #[test]
     fn esc_gives_up_and_enter_with_nothing_shown_does_nothing() {
-        let mut app = in_inbox();
+        let mut mover = picker();
 
-        app.update(Action::Move);
-        let effect = type_keys(&mut app, &[chars("zzz"), vec![KeyCode::Enter]].concat());
-        assert_eq!(effect, None);
-        assert!(app.mover.is_some());
-        type_keys(&mut app, &[KeyCode::Esc]);
+        let request = type_keys(&mut mover, &[chars("zzz"), vec![KeyCode::Enter]].concat());
+        assert_eq!(request, Request::None);
 
-        assert_eq!(app.mover, None);
+        assert_eq!(type_keys(&mut mover, &[KeyCode::Esc]), Request::Close);
     }
 
     #[test]
