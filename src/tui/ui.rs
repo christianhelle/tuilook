@@ -177,48 +177,49 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         frame.set_cursor_position((x.min(status.right().saturating_sub(1)), status.y));
     }
 
-    if app.dialog == Some(Dialog::Help) {
-        let help: &[(&str, &str)] = match (&app.compose, &app.signature) {
-            (Some(_), _) => &COMPOSE_HELP,
-            (None, Some(_)) => &SIGNATURE_HELP,
-            (None, None) => &HELP,
-        };
-        draw_help(frame, help);
+    match &app.dialog {
+        Some(Dialog::Help) => {
+            let help: &[(&str, &str)] = match (&app.compose, &app.signature) {
+                (Some(_), _) => &COMPOSE_HELP,
+                (None, Some(_)) => &SIGNATURE_HELP,
+                (None, None) => &HELP,
+            };
+            draw_help(frame, help);
+        }
+        Some(Dialog::Blocked(said)) => draw_blocked(frame, said),
+        Some(Dialog::Confirm(confirm)) => draw_confirm(frame, confirm),
+        Some(Dialog::Name(prompt)) => draw_name_prompt(frame, prompt),
+        Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
+        None => {}
     }
-    match app.confirm() {
-        Some(Confirm::Delete { ids, permanent }) => {
+}
+
+fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
+    match confirm {
+        Confirm::Delete { ids, permanent } => {
             let messages = match ids.len() {
                 1 => "1 message".to_owned(),
                 n => format!("{n} messages"),
             };
             draw_confirm_delete(frame, &messages, *permanent);
         }
-        Some(Confirm::DeleteFolder {
+        Confirm::DeleteFolder {
             name, permanent, ..
-        }) => {
+        } => {
             let folder = format!("{} and everything in it", shown(name));
             draw_confirm_delete(frame, &folder, *permanent);
         }
-        Some(Confirm::Discard) => draw_confirm_discard(
+        Confirm::Discard => draw_confirm_discard(
             frame,
             "Discard message",
             "Close the message and lose what you wrote?",
         ),
-        Some(Confirm::DiscardSignature) => draw_confirm_discard(
+        Confirm::DiscardSignature => draw_confirm_discard(
             frame,
             "Discard signature",
             "Close the signature and lose your changes?",
         ),
-        Some(Confirm::SendAnyway { sent_lately, .. }) => draw_confirm_burst(frame, *sent_lately),
-        None => {}
-    }
-    match &app.dialog {
-        Some(Dialog::Name(prompt)) => draw_name_prompt(frame, prompt),
-        Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
-        Some(Dialog::Help | Dialog::Blocked(_) | Dialog::Confirm(_)) | None => {}
-    }
-    if let Some(Dialog::Blocked(said)) = &app.dialog {
-        draw_blocked(frame, said);
+        Confirm::SendAnyway { sent_lately, .. } => draw_confirm_burst(frame, *sent_lately),
     }
 }
 
