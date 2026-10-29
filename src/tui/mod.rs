@@ -12,6 +12,7 @@ pub mod folders;
 pub mod groups;
 pub mod input;
 pub mod keymap;
+pub mod mailboxes;
 pub mod mover;
 pub mod older;
 pub mod rows;

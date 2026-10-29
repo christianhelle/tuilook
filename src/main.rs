@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Write},
+    io,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -23,18 +23,17 @@ use tuilook::accounts::{Account, Accounts};
 use tuilook::auth::{
     KeyringStore, MemoryStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider,
 };
-use tuilook::core::{Command, run_engine, sync_folders, sync_messages};
+use tuilook::core::{run_engine, sync_folders, sync_messages};
 use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
-use tuilook::model::{Event, FolderId, MailBackend, Message};
+use tuilook::model::MailBackend;
 use tuilook::store::Store;
 use tuilook::tui::{
-    app::{AppState, Effect, Mouse},
-    clipboard,
+    app::{AppState, Mouse},
     compose::Field,
     demo,
     dialog::Dialog,
     keymap::Keymap,
-    search::SEARCH_LIMIT,
+    mailboxes::{Mailbox, Mailboxes},
     session, ui,
     vim::VimMode,
 };
@@ -355,12 +354,6 @@ fn remove_db(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// One account's cache, and the core that syncs it.
-struct Mailbox {
-    store: Store,
-    commands: mpsc::Sender<Command>,
-}
-
 /// Renders from the caches at once while core syncs every account in the
 /// background. `accounts` holds each account's address, backend and cache.
 /// Their signatures are kept in `accounts_file`; without one, as in the
@@ -395,21 +388,23 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
         mailboxes.push(Mailbox { store, commands });
         events.push(event_rx);
     }
+    let accounts_file = accounts_file.map(Path::to_path_buf);
+    let mut mailboxes = Mailboxes::new(mailboxes, accounts_file, Box::new(io::stdout()));
     app.sync.every = sync_every;
     let effect = app.start_sync();
-    apply(&mut app, &mailboxes, accounts_file, effect)?;
-    for (account, mailbox) in mailboxes.iter().enumerate() {
-        let effect = app.set_account_folders(account, mailbox.store.folders()?);
-        apply(&mut app, &mailboxes, accounts_file, effect)?;
+    mailboxes.apply(&mut app, effect)?;
+    for account in 0..mailboxes.len() {
+        let effect = app.set_account_folders(account, mailboxes.store(account).folders()?);
+        mailboxes.apply(&mut app, effect)?;
     }
     if let Some(snapshot) = session.and_then(session::load) {
         let effect = app.restore(&snapshot);
-        apply(&mut app, &mailboxes, accounts_file, effect)?;
+        mailboxes.apply(&mut app, effect)?;
         let effect = snapshot
             .message
             .as_deref()
             .and_then(|id| app.select_message(id));
-        apply(&mut app, &mailboxes, accounts_file, effect)?;
+        mailboxes.apply(&mut app, effect)?;
     }
 
     let mut keymap = Keymap::default();
@@ -421,7 +416,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
             let now = Instant::now();
             app.expire_status(now);
             let effect = app.sync_if_due(now);
-            apply(&mut app, &mailboxes, accounts_file, effect)?;
+            mailboxes.apply(&mut app, effect)?;
             terminal.draw(|frame| ui::draw(frame, &app))?;
             let shape = Cursor::of(&app);
             if shape != cursor {
@@ -430,9 +425,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
             }
             for (account, events) in events.iter_mut().enumerate() {
                 while let Ok(event) = events.try_recv() {
-                    let store = &mailboxes[account].store;
-                    let effect = on_core_event(&mut app, account, store, event)?;
-                    apply(&mut app, &mailboxes, accounts_file, effect)?;
+                    mailboxes.on_event(&mut app, account, event)?;
                 }
             }
             if !event::poll(Duration::from_millis(100))? {
@@ -458,7 +451,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
                 }
                 _ => continue,
             };
-            apply(&mut app, &mailboxes, accounts_file, effect)?;
+            mailboxes.apply(&mut app, effect)?;
         }
         Ok(())
     })();
@@ -507,197 +500,6 @@ impl Cursor {
             Cursor::Block => SetCursorStyle::SteadyBlock,
         }
     }
-}
-
-/// Shows what an account's core did.
-fn on_core_event(
-    app: &mut AppState,
-    account: usize,
-    store: &Store,
-    event: Event,
-) -> Result<Option<Effect>> {
-    Ok(match event {
-        Event::FoldersSynced => app.set_account_folders(account, store.folders()?),
-        Event::SyncFinished => {
-            app.sync_finished(Instant::now());
-            None
-        }
-        Event::FolderSynced(id) => {
-            // Unread counts may have changed along with the messages.
-            let effect = app.set_account_folders(account, store.folders()?);
-            if let Some(query) = app.results_query() {
-                Some(Effect::Search(query.to_owned()))
-            } else {
-                refresh_shown(app, store, &id)?.or(effect)
-            }
-        }
-        Event::OlderLoaded {
-            folder,
-            unread_only,
-            more,
-        } => {
-            app.older_loaded(folder.clone(), unread_only, more);
-            refresh_shown(app, store, &folder)?
-        }
-        Event::FolderDeleted(folder) => {
-            app.folder_deleted(&folder);
-            None
-        }
-        Event::FolderCreated(name) => {
-            app.show_info(format!("Created {name}"));
-            None
-        }
-        Event::FolderRenamed { name, .. } => {
-            app.show_info(format!("Renamed to {name}"));
-            None
-        }
-        Event::BodyLoaded { message, text } => app.body_loaded(message, text),
-        Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
-        Event::MessagesMoved { ids, to } => app.messages_moved(&ids, &to),
-        Event::Sent => {
-            app.mail_sent(Instant::now());
-            None
-        }
-        Event::SendFailed(error) => {
-            app.send_failed(&error);
-            None
-        }
-        Event::SendBlocked(said) => {
-            app.send_blocked(said);
-            None
-        }
-        Event::Error(error) => {
-            match app.accounts.get(account).filter(|_| app.accounts.len() > 1) {
-                Some(address) => app.show_error(format!("{address}: {error}")),
-                None => app.show_error(error),
-            }
-            None
-        }
-    })
-}
-
-/// Shows `folder`'s messages from the store again, if it is the one shown.
-fn refresh_shown(app: &mut AppState, store: &Store, folder: &FolderId) -> Result<Option<Effect>> {
-    if app.results_query().is_some() || app.shown_folder().as_ref() != Some(folder) {
-        return Ok(None);
-    }
-    let messages = if app.shows_unread() {
-        store.unread_in(folder, &app.kept_read())?
-    } else {
-        store.messages_in(folder)?
-    };
-    Ok(app.refresh_messages(messages))
-}
-
-/// Performs the IO an update asked for, in the account it is for, and any
-/// IO it leads to. Once there is none, older mail is fetched if the message
-/// list has reached its end.
-fn apply(
-    app: &mut AppState,
-    mailboxes: &[Mailbox],
-    accounts_file: Option<&Path>,
-    mut effect: Option<Effect>,
-) -> Result<()> {
-    while let Some(next) = effect.or_else(|| app.older_wanted()) {
-        let Mailbox { store, commands } = &mailboxes[app.account_for(&next)];
-        effect = match next {
-            Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
-            Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
-            Effect::LoadBody(id) => {
-                commands.blocking_send(Command::LoadBody(id))?;
-                None
-            }
-            Effect::LoadOlder {
-                folder,
-                before,
-                unread_only,
-            } => {
-                let older = Command::LoadOlder {
-                    folder,
-                    before,
-                    unread_only,
-                };
-                commands.blocking_send(older)?;
-                None
-            }
-            Effect::DeleteFolder { folder, permanent } => {
-                commands.blocking_send(Command::DeleteFolder { folder, permanent })?;
-                None
-            }
-            Effect::CreateFolder { parent, name, .. } => {
-                commands.blocking_send(Command::CreateFolder { parent, name })?;
-                None
-            }
-            Effect::RenameFolder { folder, name, .. } => {
-                commands.blocking_send(Command::RenameFolder { folder, name })?;
-                None
-            }
-            Effect::Move { ids, to, .. } => {
-                commands.blocking_send(Command::Move { ids, to })?;
-                None
-            }
-            Effect::MarkRead(id) => {
-                commands.blocking_send(Command::MarkRead(id))?;
-                None
-            }
-            Effect::Sync => {
-                for mailbox in mailboxes {
-                    mailbox.commands.blocking_send(Command::SyncAll)?;
-                }
-                None
-            }
-            Effect::Send(draft) => {
-                commands.blocking_send(Command::Send(draft))?;
-                None
-            }
-            Effect::Search(query) => app.search_results(search_all(mailboxes, &query)?),
-            Effect::SaveSignature { account, text } => {
-                let saved = accounts_file.map_or(Ok(()), |path| {
-                    save_signature(path, &app.accounts[account], &text)
-                });
-                if let Err(e) = saved {
-                    app.show_error(format!("Could not save the signature: {e}"));
-                }
-                None
-            }
-            Effect::Copy(text) => {
-                let mut out = io::stdout();
-                out.write_all(clipboard::osc52(&text).as_bytes())?;
-                out.flush()?;
-                None
-            }
-            Effect::Delete { ids, permanent } => {
-                // Search results may be in several accounts.
-                for (account, ids) in app.by_account(ids) {
-                    let delete = Command::Delete { ids, permanent };
-                    mailboxes[account].commands.blocking_send(delete)?;
-                }
-                None
-            }
-        };
-    }
-    Ok(())
-}
-
-/// Keeps `signature` for `address`, reading the accounts again so a sign-in
-/// since tuilook started is not lost.
-fn save_signature(path: &Path, address: &str, signature: &str) -> std::io::Result<()> {
-    let mut accounts = Accounts::load(path)?;
-    accounts.set_signature(address, signature);
-    accounts.save(path)
-}
-
-/// Every account's cached messages matching `query`, with the account each
-/// is in, newest first.
-fn search_all(mailboxes: &[Mailbox], query: &str) -> Result<Vec<(usize, Message)>> {
-    let mut found = Vec::new();
-    for (account, mailbox) in mailboxes.iter().enumerate() {
-        let messages = mailbox.store.search(query, SEARCH_LIMIT)?;
-        found.extend(messages.into_iter().map(|m| (account, m)));
-    }
-    found.sort_by_key(|(_, m)| std::cmp::Reverse(m.received_at));
-    found.truncate(SEARCH_LIMIT);
-    Ok(found)
 }
 
 #[cfg(test)]
