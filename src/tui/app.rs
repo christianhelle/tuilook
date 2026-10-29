@@ -12,10 +12,9 @@ use ratatui::{
 
 use crate::tui::{
     compose::{Compose, Request},
-    folder_edit::NamePrompt,
+    dialog::Dialog,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
-    mover::MovePicker,
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
@@ -227,10 +226,8 @@ pub struct AppState {
     /// Folders whose subfolders are shown.
     pub expanded: BTreeSet<FolderId>,
     pub confirm: Option<Confirm>,
-    /// A folder name being typed, to make or rename a folder.
-    pub prompt: Option<NamePrompt>,
-    /// The folder being picked to move mail to.
-    pub mover: Option<MovePicker>,
+    /// The dialog over the panes, which takes every key.
+    pub dialog: Option<Dialog>,
     pub show_help: bool,
     /// What the mail service said when it blocked sending, shown in a
     /// dialog until the next key.
@@ -419,11 +416,10 @@ impl AppState {
             self.cancelled(confirm);
             return None;
         }
-        if self.prompt.is_some() {
-            return self.prompt_key(key);
-        }
-        if self.mover.is_some() {
-            return self.mover_key(key);
+        match &self.dialog {
+            Some(Dialog::Name(_)) => return self.prompt_key(key),
+            Some(Dialog::Move(_)) => return self.mover_key(key),
+            None => {}
         }
         if let Some(compose) = &mut self.compose {
             match compose.key(key, self.viewport.compose, &mut self.register) {
@@ -511,8 +507,7 @@ impl AppState {
             return None;
         }
         if self.confirm.is_some()
-            || self.prompt.is_some()
-            || self.mover.is_some()
+            || self.dialog.is_some()
             || self.compose.is_some()
             || self.signature.is_some()
         {

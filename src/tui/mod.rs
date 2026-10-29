@@ -4,6 +4,7 @@ pub mod app;
 pub mod clipboard;
 pub mod compose;
 pub mod demo;
+pub mod dialog;
 pub mod editor;
 pub mod favorites;
 pub mod folder_edit;

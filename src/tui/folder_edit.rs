@@ -3,7 +3,10 @@
 use crate::model::{Folder, FolderId};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::tui::app::{AppState, Effect, is_account_row, row_target};
+use crate::tui::{
+    app::{AppState, Effect, is_account_row, row_target},
+    dialog::Dialog,
+};
 
 /// What the name being typed is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,7 +137,7 @@ impl AppState {
             .as_ref()
             .and_then(|id| self.real_folder(id))
             .map(|f| f.name.clone());
-        self.prompt = Some(NamePrompt::new_folder(account, parent, under));
+        self.dialog = Some(Dialog::Name(NamePrompt::new_folder(account, parent, under)));
     }
 
     /// F2 in the folder pane: asks a new name for the selected folder,
@@ -157,14 +160,17 @@ impl AppState {
             ));
             return;
         }
-        self.prompt = Some(NamePrompt::rename(account, folder));
+        self.dialog = Some(Dialog::Name(NamePrompt::rename(account, folder)));
     }
 
     /// A key while typing a folder name.
     pub(crate) fn prompt_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let request = self.prompt.as_mut()?.key(key);
+        let Some(Dialog::Name(prompt)) = &mut self.dialog else {
+            return None;
+        };
+        let request = prompt.key(key);
         if request != Request::None {
-            self.prompt = None;
+            self.dialog = None;
         }
         match request {
             Request::None | Request::Close => None,
@@ -248,6 +254,13 @@ mod tests {
         effect
     }
 
+    fn prompt(app: &AppState) -> &NamePrompt {
+        match &app.dialog {
+            Some(Dialog::Name(prompt)) => prompt,
+            dialog => panic!("no name prompt but {dialog:?}"),
+        }
+    }
+
     fn type_into(prompt: &mut NamePrompt, text: &str) -> Request {
         let mut request = Request::None;
         for c in text.chars() {
@@ -267,10 +280,7 @@ mod tests {
         let mut app = on_receipts();
 
         app.update(Action::AddFolder);
-        assert_eq!(
-            app.prompt.as_ref().unwrap().title(),
-            "New folder in Receipts"
-        );
+        assert_eq!(prompt(&app).title(), "New folder in Receipts");
         let effect = type_text(&mut app, "2026\n");
 
         assert_eq!(
@@ -281,7 +291,7 @@ mod tests {
                 name: "2026".to_owned(),
             })
         );
-        assert_eq!(app.prompt, None);
+        assert_eq!(app.dialog, None);
     }
 
     #[test]
@@ -289,7 +299,7 @@ mod tests {
         let mut app = on_receipts();
 
         app.update(Action::AddTopFolder);
-        assert_eq!(app.prompt.as_ref().unwrap().title(), "New folder");
+        assert_eq!(prompt(&app).title(), "New folder");
         let effect = type_text(&mut app, "Travel\n");
 
         assert_eq!(
@@ -308,12 +318,12 @@ mod tests {
 
         app.update(Action::AddFolder);
         type_text(&mut app, "q");
-        assert_eq!(app.prompt.as_ref().unwrap().text, "q");
+        assert_eq!(prompt(&app).text, "q");
         assert!(!app.should_quit, "q is typed, not a quit");
         let effect = type_text(&mut app, "\u{1b}");
 
         assert_eq!(effect, None);
-        assert_eq!(app.prompt, None);
+        assert_eq!(app.dialog, None);
     }
 
     #[test]
@@ -338,7 +348,7 @@ mod tests {
         let mut app = on_receipts();
 
         app.update(Action::RenameFolder);
-        assert_eq!(app.prompt.as_ref().unwrap().text, "Receipts");
+        assert_eq!(prompt(&app).text, "Receipts");
         let effect = type_text(&mut app, "\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}Bills\n");
 
         assert_eq!(
@@ -365,7 +375,7 @@ mod tests {
 
         app.update(Action::RenameFolder);
 
-        assert_eq!(app.prompt, None);
+        assert_eq!(app.dialog, None);
         assert!(app.status.is_some());
     }
 
@@ -377,6 +387,6 @@ mod tests {
         app.update(Action::AddFolder);
         app.update(Action::RenameFolder);
 
-        assert_eq!(app.prompt, None);
+        assert_eq!(app.dialog, None);
     }
 }

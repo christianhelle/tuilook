@@ -15,6 +15,7 @@ use crate::tui::{
         is_favorite_row, is_unread_row,
     },
     compose::{Compose, Field},
+    dialog::Dialog,
     editor::{Editor, Pos},
     folder_edit::NamePrompt,
     groups::MessageRow,
@@ -211,11 +212,10 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Confirm::SendAnyway { sent_lately, .. }) => draw_confirm_burst(frame, *sent_lately),
         None => {}
     }
-    if let Some(prompt) = &app.prompt {
-        draw_name_prompt(frame, prompt);
-    }
-    if let Some(mover) = &app.mover {
-        draw_move_picker(frame, mover);
+    match &app.dialog {
+        Some(Dialog::Name(prompt)) => draw_name_prompt(frame, prompt),
+        Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
+        None => {}
     }
     if let Some(said) = &app.blocked {
         draw_blocked(frame, said);

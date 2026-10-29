@@ -4,7 +4,10 @@
 use crate::model::{Folder, FolderId, MessageId, folder_depths, sort_folders};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::tui::app::{AppState, Effect, Pane};
+use crate::tui::{
+    app::{AppState, Effect, Pane},
+    dialog::Dialog,
+};
 
 /// What a key asks for while picking where to move mail.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,19 +155,22 @@ impl AppState {
             .get(account)
             .and_then(Option::clone)
             .unwrap_or_default();
-        self.mover = Some(MovePicker::new(account, ids, folders, all_in));
+        self.dialog = Some(Dialog::Move(MovePicker::new(account, ids, folders, all_in)));
     }
 
     /// A key while picking where to move mail.
     pub(crate) fn mover_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        match self.mover.as_mut()?.key(key) {
+        let Some(Dialog::Move(mover)) = &mut self.dialog else {
+            return None;
+        };
+        match mover.key(key) {
             Request::None => None,
             Request::Close => {
-                self.mover = None;
+                self.dialog = None;
                 None
             }
             Request::Move { account, ids, to } => {
-                self.mover = None;
+                self.dialog = None;
                 let s = if ids.len() == 1 { "" } else { "s" };
                 self.show_busy(format!("Moving {} message{s} to {}…", ids.len(), to.name));
                 Some(Effect::Move {
@@ -266,7 +272,9 @@ mod tests {
 
         app.update(Action::Move);
 
-        let mover = app.mover.as_ref().unwrap();
+        let Some(Dialog::Move(mover)) = &app.dialog else {
+            panic!("no move picker");
+        };
         assert_eq!(names(mover), ["Archive", "Receipts"]);
         assert_eq!(mover.ids, [MessageId("m1".to_owned())]);
     }
@@ -291,7 +299,7 @@ mod tests {
                 to: FolderId("Archive".to_owned()),
             })
         );
-        assert_eq!(app.mover, None);
+        assert_eq!(app.dialog, None);
     }
 
     #[test]
@@ -331,7 +339,7 @@ mod tests {
 
         app.update(Action::Move);
 
-        assert_eq!(app.mover, None);
+        assert_eq!(app.dialog, None);
     }
 
     #[test]
