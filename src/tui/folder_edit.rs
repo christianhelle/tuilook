@@ -1,11 +1,12 @@
 //! Making and renaming folders: the name being typed for one.
 
 use crate::model::{Folder, FolderId};
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use crate::tui::{
     app::{AppState, Effect, is_account_row, row_target},
     dialog::Dialog,
+    input::TextInput,
 };
 
 /// What the name being typed is for.
@@ -47,7 +48,7 @@ pub enum Request {
 pub struct NamePrompt {
     pub account: usize,
     pub naming: Naming,
-    pub text: String,
+    pub name: TextInput,
 }
 
 impl NamePrompt {
@@ -57,7 +58,7 @@ impl NamePrompt {
         Self {
             account,
             naming: Naming::New { parent, under },
-            text: String::new(),
+            name: TextInput::default(),
         }
     }
 
@@ -70,7 +71,7 @@ impl NamePrompt {
                 folder: folder.id.clone(),
                 old: folder.name.clone(),
             },
-            text: folder.name.clone(),
+            name: TextInput::from(folder.name.as_str()),
         }
     }
 
@@ -79,14 +80,8 @@ impl NamePrompt {
     pub fn key(&mut self, key: KeyEvent) -> Request {
         match key.code {
             KeyCode::Esc => return Request::Close,
-            KeyCode::Backspace => {
-                self.text.pop();
-            }
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.text.push(c);
-            }
             KeyCode::Enter => {
-                let name = self.text.trim().to_owned();
+                let name = self.name.text().trim().to_owned();
                 if name.is_empty() {
                     return Request::None;
                 }
@@ -106,7 +101,9 @@ impl NamePrompt {
                     },
                 };
             }
-            _ => {}
+            _ => {
+                self.name.key(key);
+            }
         }
         Request::None
     }
@@ -207,6 +204,7 @@ mod tests {
 
     use super::*;
     use crate::tui::{app::Pane, keymap::Keymap};
+    use ratatui::crossterm::event::KeyModifiers;
 
     fn folder(id: &str, parent: Option<&str>) -> Folder {
         Folder {
@@ -311,7 +309,7 @@ mod tests {
 
         app.update(Action::AddFolder);
         type_text(&mut app, "q");
-        assert_eq!(prompt(&app).text, "q");
+        assert_eq!(prompt(&app).name.text(), "q");
         assert!(!app.should_quit, "q is typed, not a quit");
         let effect = type_text(&mut app, "\u{1b}");
 
@@ -331,7 +329,7 @@ mod tests {
         let mut prompt = NamePrompt::new_folder(0, None, None);
 
         type_into(&mut prompt, "qj\u{8}");
-        assert_eq!(prompt.text, "q");
+        assert_eq!(prompt.name.text(), "q");
 
         assert_eq!(type_into(&mut prompt, "\u{1b}"), Request::Close);
     }
@@ -341,7 +339,7 @@ mod tests {
         let mut app = on_receipts();
 
         app.update(Action::RenameFolder);
-        assert_eq!(prompt(&app).text, "Receipts");
+        assert_eq!(prompt(&app).name.text(), "Receipts");
         let effect = type_text(&mut app, "\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}Bills\n");
 
         assert_eq!(
@@ -351,6 +349,29 @@ mod tests {
                 folder: FolderId("Receipts".to_owned()),
                 name: "Bills".to_owned(),
             })
+        );
+    }
+
+    #[test]
+    fn arrows_move_the_cursor_to_type_inside_the_name() {
+        let mut prompt = NamePrompt::rename(0, &folder("Bils", None));
+        prompt.key(KeyEvent::from(KeyCode::Left));
+        prompt.key(KeyEvent::from(KeyCode::Left));
+
+        let request = type_into(
+            &mut prompt,
+            "l
+",
+        );
+
+        assert_eq!(
+            request,
+            Request::Rename {
+                account: 0,
+                folder: FolderId("Bils".to_owned()),
+                old: "Bils".to_owned(),
+                name: "Bills".to_owned(),
+            }
         );
     }
 

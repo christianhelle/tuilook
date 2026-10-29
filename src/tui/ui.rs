@@ -19,6 +19,7 @@ use crate::tui::{
     editor::{Editor, Pos},
     folder_edit::NamePrompt,
     groups::MessageRow,
+    input::TextInput,
     mover::MovePicker,
     older::LOADING_OLDER,
     signature::SignatureEditor,
@@ -291,11 +292,9 @@ const PROMPT_WIDTH: u16 = 52;
 fn draw_name_prompt(frame: &mut Frame, prompt: &NamePrompt) {
     // Room for the name and the cursor after it, inside the borders.
     let room = usize::from(PROMPT_WIDTH - 3);
-    let text = shown(&prompt.text);
-    let skip = text.chars().count().saturating_sub(room);
-    let typed: String = text.chars().skip(skip).collect();
+    let (typed, column) = typed(&prompt.name, room);
     let lines = vec![
-        Line::raw(typed.clone()),
+        Line::raw(typed),
         Line::raw(""),
         Line::from(vec![
             Span::styled("Enter", Style::new().fg(Color::Yellow)),
@@ -317,9 +316,17 @@ fn draw_name_prompt(frame: &mut Frame, prompt: &NamePrompt) {
         ),
         area,
     );
-    let width = u16::try_from(Line::raw(typed).width()).unwrap_or(u16::MAX);
-    let x = area.x.saturating_add(1).saturating_add(width);
+    let x = area.x.saturating_add(1).saturating_add(column);
     frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 1));
+}
+
+/// The part of `input` shown in `room` characters, made safe to draw, and
+/// the column of its cursor.
+fn typed(input: &TextInput, room: usize) -> (String, u16) {
+    let (text, cursor) = input.view(room);
+    let before: String = text.chars().take(cursor).collect();
+    let column = u16::try_from(Line::raw(shown(&before)).width()).unwrap_or(u16::MAX);
+    (shown(&text), column)
 }
 
 /// A dialog asking whether to send one more message in a burst of them.
