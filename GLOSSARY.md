@@ -16,3 +16,7 @@ one.
 
 **Move picker**: the dialog picking the folder to move the marked or selected
 mail to, narrowed by typing part of its name.
+
+**Folder-pane row**: one row of the folder pane: an account's heading, one of
+its folders, or a favorite or unread row showing a folder again. What a row
+stands for is asked of the app as a `Row`, never read from its id.
