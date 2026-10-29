@@ -6,6 +6,19 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::app::{AppState, Effect, Pane};
 
+/// What a key asks for while picking where to move mail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Request {
+    None,
+    Close,
+    /// Move `ids` in `account` to `to`.
+    Move {
+        account: usize,
+        ids: Vec<MessageId>,
+        to: Folder,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MovePicker {
     /// The account the messages are in, and so the folders to pick from.
@@ -67,6 +80,44 @@ impl MovePicker {
             n => format!("Move {n} messages to"),
         }
     }
+
+    /// Typing narrows the folders, ↑ ↓ pick one, Enter moves the mail there
+    /// and Esc gives up.
+    pub fn key(&mut self, key: KeyEvent) -> Request {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match key.code {
+            KeyCode::Esc => return Request::Close,
+            KeyCode::Enter => {
+                if let Some(to) = self.picked() {
+                    return Request::Move {
+                        account: self.account,
+                        ids: self.ids.clone(),
+                        to: to.clone(),
+                    };
+                }
+            }
+            KeyCode::Down | KeyCode::Tab => self.step(1),
+            KeyCode::Char('n') if ctrl => self.step(1),
+            KeyCode::Up | KeyCode::BackTab => self.step(-1),
+            KeyCode::Char('p') if ctrl => self.step(-1),
+            KeyCode::Backspace => {
+                self.filter.pop();
+                self.selected = 0;
+            }
+            KeyCode::Char(c) if !ctrl => {
+                self.filter.push(c);
+                self.selected = 0;
+            }
+            _ => {}
+        }
+        Request::None
+    }
+
+    /// Picks the folder `delta` rows away, stopping at the ends.
+    fn step(&mut self, delta: isize) {
+        let last = self.choices().len().saturating_sub(1);
+        self.selected = self.selected.saturating_add_signed(delta).min(last);
+    }
 }
 
 impl AppState {
@@ -104,46 +155,26 @@ impl AppState {
         self.mover = Some(MovePicker::new(account, ids, folders, all_in));
     }
 
-    /// A key while picking where to move mail. Typing narrows the folders,
-    /// ↑ ↓ pick one, Enter moves the mail there and Esc gives up.
+    /// A key while picking where to move mail.
     pub(crate) fn mover_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let mover = self.mover.as_mut()?;
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        match key.code {
-            KeyCode::Esc => self.mover = None,
-            KeyCode::Enter => {
-                let to = mover.picked()?.clone();
-                let MovePicker { account, ids, .. } = self.mover.take()?;
+        match self.mover.as_mut()?.key(key) {
+            Request::None => None,
+            Request::Close => {
+                self.mover = None;
+                None
+            }
+            Request::Move { account, ids, to } => {
+                self.mover = None;
                 let s = if ids.len() == 1 { "" } else { "s" };
                 self.show_busy(format!("Moving {} message{s} to {}…", ids.len(), to.name));
-                return Some(Effect::Move {
+                Some(Effect::Move {
                     account,
                     ids,
                     to: to.id,
-                });
+                })
             }
-            KeyCode::Down | KeyCode::Tab => step(mover, 1),
-            KeyCode::Char('n') if ctrl => step(mover, 1),
-            KeyCode::Up | KeyCode::BackTab => step(mover, -1),
-            KeyCode::Char('p') if ctrl => step(mover, -1),
-            KeyCode::Backspace => {
-                mover.filter.pop();
-                mover.selected = 0;
-            }
-            KeyCode::Char(c) if !ctrl => {
-                mover.filter.push(c);
-                mover.selected = 0;
-            }
-            _ => {}
         }
-        None
     }
-}
-
-/// Picks the folder `delta` rows away, stopping at the ends.
-fn step(mover: &mut MovePicker, delta: isize) {
-    let last = mover.choices().len().saturating_sub(1);
-    mover.selected = mover.selected.saturating_add_signed(delta).min(last);
 }
 
 #[cfg(test)]
