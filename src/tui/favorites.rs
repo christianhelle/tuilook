@@ -4,7 +4,7 @@ use crate::model::Folder;
 
 use crate::tui::{
     app::{AppState, Effect},
-    rows::{favorite_row, is_account_row, is_favorite_row, row_target},
+    rows::{Row, favorite_row, is_favorite_row},
 };
 
 impl AppState {
@@ -62,17 +62,10 @@ impl AppState {
     /// `*` in the folder pane: adds the selected folder to the favorites,
     /// or takes it out if it is in them already.
     pub(crate) fn toggle_favorite(&mut self) -> Option<Effect> {
-        let row = self.folders.get(self.selected_folder)?;
-        if is_account_row(row) {
+        let Row::Folder(folder) = self.selected_folder_row()? else {
             return None;
-        }
-        let id = row_target(&row.id);
-        // A favorite's own name may say which account it is from.
-        let name = self
-            .folders
-            .iter()
-            .find(|f| f.id == id)
-            .map_or_else(|| row.name.clone(), |f| f.name.clone());
+        };
+        let (id, name) = (folder.id.clone(), folder.name.clone());
         match self.favorites.iter().position(|f| f == &id) {
             Some(index) => {
                 self.favorites.remove(index);
