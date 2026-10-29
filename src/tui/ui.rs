@@ -19,7 +19,7 @@ use crate::tui::{
     input::TextInput,
     mover::MovePicker,
     older::LOADING_OLDER,
-    rows::{Row, is_unread_row},
+    rows::Row,
     signature::SignatureEditor,
     vim::VimMode,
 };
@@ -130,14 +130,9 @@ fn split_folders(area: Rect, app: &AppState) -> [Rect; 3] {
         let rows = u16::try_from(rows.max(1)).unwrap_or(u16::MAX);
         rows.saturating_add(2).min(area.height / 3)
     };
-    let unread_rows = app
-        .visible_folders()
-        .into_iter()
-        .filter(|&i| is_unread_row(&app.folders[i]))
-        .count();
     Layout::vertical([
         Constraint::Length(height(app.favorite_count())),
-        Constraint::Length(height(unread_rows)),
+        Constraint::Length(height(app.unread_rows_shown())),
         Constraint::Fill(1),
     ])
     .areas(area)

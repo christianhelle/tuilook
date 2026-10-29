@@ -100,6 +100,15 @@ impl AppState {
         (rows, owners)
     }
 
+    /// How many rows of the unread section are shown, its folded folders'
+    /// subfolders left out.
+    pub fn unread_rows_shown(&self) -> usize {
+        self.visible_folders()
+            .into_iter()
+            .filter(|&i| is_unread_row(&self.folders[i]))
+            .count()
+    }
+
     /// How many rows the unread section takes, below the favorites.
     pub fn unread_count(&self) -> usize {
         self.folders
