@@ -21,6 +21,30 @@ pub struct MovePicker {
 }
 
 impl MovePicker {
+    /// Picks where to move `ids` among the account's `folders`, leaving out
+    /// `all_in`, the folder they are all in already, if any.
+    pub fn new(
+        account: usize,
+        ids: Vec<MessageId>,
+        mut folders: Vec<Folder>,
+        all_in: Option<&FolderId>,
+    ) -> Self {
+        sort_folders(&mut folders);
+        let depths = folder_depths(&folders);
+        let folders = folders
+            .into_iter()
+            .zip(depths)
+            .filter(|(f, _)| Some(&f.id) != all_in)
+            .collect();
+        Self {
+            account,
+            ids,
+            folders,
+            filter: String::new(),
+            selected: 0,
+        }
+    }
+
     /// The folders whose name has the filter in it, as indexes into
     /// `folders`.
     pub fn choices(&self) -> Vec<usize> {
@@ -72,25 +96,12 @@ impl AppState {
         });
         let first = from.next().flatten();
         let all_in: Option<&FolderId> = from.all(|f| f == first).then_some(first).flatten();
-        let mut folders = self
+        let folders = self
             .account_folders
             .get(account)
             .and_then(Option::clone)
             .unwrap_or_default();
-        sort_folders(&mut folders);
-        let depths = folder_depths(&folders);
-        let folders = folders
-            .into_iter()
-            .zip(depths)
-            .filter(|(f, _)| Some(&f.id) != all_in)
-            .collect();
-        self.mover = Some(MovePicker {
-            account,
-            ids,
-            folders,
-            filter: String::new(),
-            selected: 0,
-        });
+        self.mover = Some(MovePicker::new(account, ids, folders, all_in));
     }
 
     /// A key while picking where to move mail. Typing narrows the folders,
