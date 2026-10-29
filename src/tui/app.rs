@@ -17,7 +17,7 @@ use crate::tui::{
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
     mover,
-    rows::{account_row, is_account_row, is_favorite_row, is_unread_row, row_target, unread_row},
+    rows::{account_row, is_own_row, row_target, unread_row},
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
@@ -635,11 +635,7 @@ impl AppState {
             .as_ref()
             .and_then(|id| find(id).or_else(|| find(&row_target(id))))
             // Otherwise the first real folder, so there is mail to look at.
-            .or_else(|| {
-                folders
-                    .iter()
-                    .position(|f| !is_account_row(f) && !is_favorite_row(f) && !is_unread_row(f))
-            })
+            .or_else(|| folders.iter().position(is_own_row))
             .unwrap_or(0);
         self.folders = folders;
         self.folder_account = owners;

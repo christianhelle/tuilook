@@ -63,6 +63,12 @@ pub fn is_account_row(folder: &Folder) -> bool {
     row_target(&folder.id).0.starts_with(ACCOUNT_ROW)
 }
 
+/// Whether `folder` is an account's folder in that account's tree, not a
+/// row heading it or showing a folder again.
+pub fn is_own_row(folder: &Folder) -> bool {
+    !is_account_row(folder) && !is_favorite_row(folder) && !is_unread_row(folder)
+}
+
 /// What a row of the folder pane stands for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Row<'a> {
