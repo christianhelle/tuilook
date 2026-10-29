@@ -248,6 +248,20 @@ mod tests {
         effect
     }
 
+    fn type_into(prompt: &mut NamePrompt, text: &str) -> Request {
+        let mut request = Request::None;
+        for c in text.chars() {
+            let code = match c {
+                '\n' => KeyCode::Enter,
+                '\u{8}' => KeyCode::Backspace,
+                '\u{1b}' => KeyCode::Esc,
+                c => KeyCode::Char(c),
+            };
+            request = prompt.key(KeyEvent::from(code));
+        }
+        request
+    }
+
     #[test]
     fn a_asks_a_name_and_enter_makes_the_folder_inside_the_selected_one() {
         let mut app = on_receipts();
@@ -293,7 +307,7 @@ mod tests {
         let mut app = on_receipts();
 
         app.update(Action::AddFolder);
-        type_text(&mut app, "qj\u{8}");
+        type_text(&mut app, "q");
         assert_eq!(app.prompt.as_ref().unwrap().text, "q");
         assert!(!app.should_quit, "q is typed, not a quit");
         let effect = type_text(&mut app, "\u{1b}");
@@ -304,13 +318,19 @@ mod tests {
 
     #[test]
     fn a_blank_name_keeps_asking() {
-        let mut app = on_receipts();
+        let mut prompt = NamePrompt::new_folder(0, None, None);
 
-        app.update(Action::AddFolder);
-        let effect = type_text(&mut app, "  \n");
+        assert_eq!(type_into(&mut prompt, "  \n"), Request::None);
+    }
 
-        assert_eq!(effect, None);
-        assert!(app.prompt.is_some());
+    #[test]
+    fn backspace_takes_back_a_letter_and_esc_gives_up() {
+        let mut prompt = NamePrompt::new_folder(0, None, None);
+
+        type_into(&mut prompt, "qj\u{8}");
+        assert_eq!(prompt.text, "q");
+
+        assert_eq!(type_into(&mut prompt, "\u{1b}"), Request::Close);
     }
 
     #[test]
@@ -333,13 +353,9 @@ mod tests {
 
     #[test]
     fn keeping_the_same_name_renames_nothing() {
-        let mut app = on_receipts();
+        let mut prompt = NamePrompt::rename(0, &folder("Receipts", Some("Inbox")));
 
-        app.update(Action::RenameFolder);
-        let effect = type_text(&mut app, "\n");
-
-        assert_eq!(effect, None);
-        assert_eq!(app.prompt, None);
+        assert_eq!(type_into(&mut prompt, "\n"), Request::Close);
     }
 
     #[test]
