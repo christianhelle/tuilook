@@ -14,6 +14,7 @@ pub mod input;
 pub mod keymap;
 pub mod mover;
 pub mod older;
+pub mod rows;
 pub mod search;
 pub mod session;
 pub mod signature;

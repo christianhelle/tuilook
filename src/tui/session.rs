@@ -6,8 +6,9 @@ use crate::model::{FolderId, MessageId};
 use serde::{Deserialize, Serialize};
 
 use crate::tui::{
-    app::{AppState, Effect, Pane, account_row, unread_row},
+    app::{AppState, Effect, Pane},
     groups::DateGroup,
+    rows::{account_row, unread_row},
 };
 
 /// What is kept between runs. Anything missing or unknown is left as it is.

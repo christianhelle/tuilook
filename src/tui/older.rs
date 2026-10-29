@@ -6,8 +6,9 @@ use crate::model::FolderId;
 use jiff::Timestamp;
 
 use crate::tui::{
-    app::{AppState, Effect, Status, is_account_row, row_target},
+    app::{AppState, Effect, Status},
     groups::MessageRow,
+    rows::{is_account_row, row_target},
 };
 
 /// Shown while older mail is fetched.
@@ -81,7 +82,7 @@ mod tests {
     use crate::model::{Action, Folder, Message, MessageId};
 
     use super::*;
-    use crate::tui::app::{Pane, unread_row};
+    use crate::tui::{app::Pane, rows::unread_row};
 
     fn folder(id: &str, unread: u32, total: u32) -> Folder {
         Folder {

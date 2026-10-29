@@ -4,9 +4,10 @@ use crate::model::{Folder, FolderId};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use crate::tui::{
-    app::{AppState, Effect, is_account_row, row_target},
+    app::{AppState, Effect},
     dialog::Dialog,
     input::TextInput,
+    rows::{is_account_row, row_target},
 };
 
 /// What the name being typed is for.

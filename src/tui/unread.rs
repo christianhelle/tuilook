@@ -5,7 +5,10 @@ use std::collections::HashSet;
 
 use crate::model::{Folder, FolderId, MessageId, WellKnown};
 
-use crate::tui::app::{AppState, account_row, is_unread_row, row_target, unread_row};
+use crate::tui::{
+    app::AppState,
+    rows::{account_row, is_unread_row, row_target, unread_row},
+};
 
 impl AppState {
     /// The unread section's rows, with the account each is in. A folder is

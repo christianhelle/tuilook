@@ -5,8 +5,9 @@ use std::collections::HashSet;
 use crate::model::FolderId;
 
 use crate::tui::{
-    app::{AppState, Confirm, Effect, is_account_row, row_target},
+    app::{AppState, Confirm, Effect},
     dialog::Dialog,
+    rows::{is_account_row, row_target},
 };
 
 impl AppState {

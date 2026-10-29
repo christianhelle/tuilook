@@ -2,8 +2,9 @@
 
 use crate::model::Folder;
 
-use crate::tui::app::{
-    AppState, Effect, favorite_row, is_account_row, is_favorite_row, row_target,
+use crate::tui::{
+    app::{AppState, Effect},
+    rows::{favorite_row, is_account_row, is_favorite_row, row_target},
 };
 
 impl AppState {

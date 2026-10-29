@@ -10,10 +10,7 @@ use ratatui::{
 };
 
 use crate::tui::{
-    app::{
-        AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport, is_account_row,
-        is_favorite_row, is_unread_row,
-    },
+    app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
     compose::{Compose, Field},
     dialog::Dialog,
     editor::{Editor, Pos},
@@ -22,6 +19,7 @@ use crate::tui::{
     input::TextInput,
     mover::MovePicker,
     older::LOADING_OLDER,
+    rows::{is_account_row, is_favorite_row, is_unread_row},
     signature::SignatureEditor,
     vim::VimMode,
 };
