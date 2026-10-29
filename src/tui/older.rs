@@ -8,7 +8,7 @@ use jiff::Timestamp;
 use crate::tui::{
     app::{AppState, Effect, Status},
     groups::MessageRow,
-    rows::{is_account_row, row_target},
+    rows::Row,
 };
 
 /// Shown while older mail is fetched.
@@ -21,10 +21,9 @@ impl AppState {
         if self.loading_older.is_some() || self.results_query().is_some() {
             return None;
         }
-        let row = self.folders.get(self.selected_folder)?;
-        if is_account_row(row) {
+        let Row::Folder(row) = self.selected_folder_row()? else {
             return None;
-        }
+        };
         // The end is a message: a folded last group hides the mail fetched.
         let rows = self.message_rows();
         let at_end = match rows.last() {
@@ -33,7 +32,7 @@ impl AppState {
             Some(MessageRow::Header { .. }) => false,
         };
         let unread_only = self.shows_unread();
-        let folder = row_target(&row.id);
+        let folder = row.id.clone();
         let key = (folder.clone(), unread_only);
         if !at_end || self.no_older.contains(&key) {
             return None;
