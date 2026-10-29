@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Typing a folder's name or the folder to move mail to shows the same bar
   cursor as typing a search.
+- `otlk --demo` has long folders to scroll through: forty newsletters in the
+  personal inbox and a hundred spam mails in Junk Email.
 
 ## [0.1.1] - 2026-10-29
 
