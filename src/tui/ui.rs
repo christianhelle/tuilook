@@ -19,7 +19,7 @@ use crate::tui::{
     input::TextInput,
     mover::MovePicker,
     older::LOADING_OLDER,
-    rows::{is_account_row, is_favorite_row, is_unread_row},
+    rows::{Row, is_unread_row},
     signature::SignatureEditor,
     vim::VimMode,
 };
@@ -920,7 +920,7 @@ fn draw_folder_rows(
         let mut spans = vec![
             Span::raw("  ".repeat(depths[index])),
             Span::styled(marker, Style::new().fg(Color::DarkGray)),
-            if is_account_row(folder) {
+            if app.folder_row(index) == Some(Row::Account) {
                 Span::styled(
                     shown(&folder.name),
                     Style::new().add_modifier(Modifier::BOLD),
@@ -1008,9 +1008,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
 /// several.
 fn found_in(app: &AppState, message: &Message) -> String {
     let folder = app
-        .folders
-        .iter()
-        .find(|f| f.id == message.folder_id && !is_favorite_row(f) && !is_unread_row(f))
+        .real_folder(&message.folder_id)
         .map_or("?", |f| f.name.as_str());
     let account = app
         .accounts
