@@ -7,7 +7,7 @@ use crate::tui::{
     app::{AppState, Effect},
     dialog::Dialog,
     input::TextInput,
-    rows::{is_account_row, row_target},
+    rows::Row,
 };
 
 /// What the name being typed is for.
@@ -126,31 +126,26 @@ impl AppState {
     /// selected one or, with `top_level` or on an account's row, at the top
     /// level of the selected folder's account.
     pub(crate) fn ask_folder_name(&mut self, top_level: bool) {
-        let Some(row) = self.folders.get(self.selected_folder) else {
+        let Some(row) = self.selected_folder_row() else {
             return;
         };
+        let (parent, under) = match row {
+            Row::Folder(folder) if !top_level => {
+                (Some(folder.id.clone()), Some(folder.name.clone()))
+            }
+            _ => (None, None),
+        };
         let account = self.current_account();
-        let parent = (!top_level && !is_account_row(row)).then(|| row_target(&row.id));
-        let under = parent
-            .as_ref()
-            .and_then(|id| self.real_folder(id))
-            .map(|f| f.name.clone());
         self.dialog = Some(Dialog::Name(NamePrompt::new_folder(account, parent, under)));
     }
 
     /// F2 in the folder pane: asks a new name for the selected folder,
     /// starting from the one it has. Outlook's own folders keep theirs.
     pub(crate) fn ask_new_name(&mut self) {
-        let Some(row) = self.folders.get(self.selected_folder) else {
+        let Some(Row::Folder(folder)) = self.selected_folder_row() else {
             return;
         };
-        if is_account_row(row) {
-            return;
-        }
         let account = self.current_account();
-        let Some(folder) = self.real_folder(&row_target(&row.id)) else {
-            return;
-        };
         if folder.well_known.is_some() {
             let old = &folder.name;
             self.show_error(format!(
