@@ -163,15 +163,8 @@ impl AppState {
         self.dialog = Some(Dialog::Name(NamePrompt::rename(account, folder)));
     }
 
-    /// A key while typing a folder name.
-    pub(crate) fn prompt_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let Some(Dialog::Name(prompt)) = &mut self.dialog else {
-            return None;
-        };
-        let request = prompt.key(key);
-        if request != Request::None {
-            self.dialog = None;
-        }
+    /// Makes or renames the folder the name prompt asked for, if it did.
+    pub(crate) fn name_requested(&mut self, request: Request) -> Option<Effect> {
         match request {
             Request::None | Request::Close => None,
             Request::Create {

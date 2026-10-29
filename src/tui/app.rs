@@ -13,8 +13,10 @@ use ratatui::{
 use crate::tui::{
     compose::{Compose, Request},
     dialog::Dialog,
+    folder_edit,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
+    mover,
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
@@ -403,26 +405,8 @@ impl AppState {
             self.should_quit = true;
             return None;
         }
-        if matches!(self.dialog, Some(Dialog::Help | Dialog::Blocked(_))) {
-            self.dialog = None;
-            return None;
-        }
-        if matches!(self.dialog, Some(Dialog::Confirm(_))) {
-            let Some(Dialog::Confirm(confirm)) = self.dialog.take() else {
-                unreachable!("a confirmation is open");
-            };
-            // y or Enter agrees; any other key cancels and does nothing else.
-            let agreed = matches!(key.code, KeyCode::Char('y') | KeyCode::Enter);
-            if agreed {
-                return self.confirmed(confirm);
-            }
-            self.cancelled(confirm);
-            return None;
-        }
-        match &self.dialog {
-            Some(Dialog::Name(_)) => return self.prompt_key(key),
-            Some(Dialog::Move(_)) => return self.mover_key(key),
-            Some(Dialog::Help | Dialog::Blocked(_) | Dialog::Confirm(_)) | None => {}
+        if let Some(dialog) = self.dialog.take() {
+            return self.dialog_key(dialog, key);
         }
         if let Some(compose) = &mut self.compose {
             match compose.key(key, self.viewport.compose, &mut self.register) {
@@ -497,16 +481,48 @@ impl AppState {
             .and_then(|action| self.update(action))
     }
 
+    /// A key for the open `dialog`, taken out of the state: it goes back
+    /// unless the key closed it.
+    fn dialog_key(&mut self, dialog: Dialog, key: KeyEvent) -> Option<Effect> {
+        match dialog {
+            Dialog::Help | Dialog::Blocked(_) => None,
+            Dialog::Confirm(confirm) => {
+                // y or Enter agrees; any other key cancels and does nothing else.
+                if matches!(key.code, KeyCode::Char('y') | KeyCode::Enter) {
+                    return self.confirmed(confirm);
+                }
+                self.cancelled(confirm);
+                None
+            }
+            Dialog::Name(mut prompt) => {
+                let request = prompt.key(key);
+                if request == folder_edit::Request::None {
+                    self.dialog = Some(Dialog::Name(prompt));
+                }
+                self.name_requested(request)
+            }
+            Dialog::Move(mut mover) => {
+                let request = mover.key(key);
+                if request == mover::Request::None {
+                    self.dialog = Some(Dialog::Move(mover));
+                }
+                self.move_requested(request)
+            }
+        }
+    }
+
     /// Handles the mouse at `hit`. A click focuses the pane and selects the
     /// row; the wheel moves the pane under the pointer without focusing it.
     pub fn on_mouse(&mut self, mouse: Mouse, hit: Option<Hit>) -> Option<Effect> {
-        if matches!(self.dialog, Some(Dialog::Help | Dialog::Blocked(_))) {
-            if mouse == Mouse::Click {
+        if let Some(dialog) = &self.dialog {
+            // A click closes the help or a blocked send; the other dialogs
+            // want an answer from the keyboard.
+            if mouse == Mouse::Click && matches!(dialog, Dialog::Help | Dialog::Blocked(_)) {
                 self.dialog = None;
             }
             return None;
         }
-        if self.dialog.is_some() || self.compose.is_some() || self.signature.is_some() {
+        if self.compose.is_some() || self.signature.is_some() {
             return None;
         }
         let Hit { pane, item } = hit?;

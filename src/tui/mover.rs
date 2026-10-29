@@ -158,19 +158,11 @@ impl AppState {
         self.dialog = Some(Dialog::Move(MovePicker::new(account, ids, folders, all_in)));
     }
 
-    /// A key while picking where to move mail.
-    pub(crate) fn mover_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let Some(Dialog::Move(mover)) = &mut self.dialog else {
-            return None;
-        };
-        match mover.key(key) {
-            Request::None => None,
-            Request::Close => {
-                self.dialog = None;
-                None
-            }
+    /// Moves the mail where the move picker asked, if it did.
+    pub(crate) fn move_requested(&mut self, request: Request) -> Option<Effect> {
+        match request {
+            Request::None | Request::Close => None,
             Request::Move { account, ids, to } => {
-                self.dialog = None;
                 let s = if ids.len() == 1 { "" } else { "s" };
                 self.show_busy(format!("Moving {} message{s} to {}…", ids.len(), to.name));
                 Some(Effect::Move {
