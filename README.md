@@ -271,6 +271,10 @@ Pinned mail sits in a Pinned group above all the dates, however old it is.
 Pins are Outlook.com's own, so mail pinned in Outlook.com shows up pinned here,
 and the other way round.
 
+`F` or `Insert` flags the marked (or selected) messages for follow-up, and
+pressing it again clears their flags. Flagged mail shows a red ⚑ after the
+sender. Flags are Outlook.com's own too, so they show up on both sides.
+
 The folder pane has three parts: Favorites at the top, Unread in the middle and
 your accounts' folders below. A favorite works like the folder it stands for.
 When the same folder name is a favorite from more than one account, such as
@@ -350,6 +354,7 @@ goes back to the query to change it.
 | `Esc` | Clear the marks |
 | `m` | Move the marked (or selected) messages to another folder |
 | `p` | Pin the marked (or selected) messages on top, or unpin them |
+| `F` `Insert` | Flag the marked (or selected) messages, or clear their flags |
 | `d` | Move the marked (or selected) messages to Deleted Items |
 | `D` | Delete the marked (or selected) messages for good |
 

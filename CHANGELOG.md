@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pinned mail: `p` pins the marked (or selected) messages, or unpins them.
   Pinned mail sits in its own group above Today, however old it is, and pins
   sync with Outlook.com both ways.
+- Flagged mail: `F` or `Insert` flags the marked (or selected) messages for
+  follow-up, or clears their flags. Flagged mail shows a red ⚑ after the
+  sender, and flags sync with Outlook.com both ways.
 
 ### Changed
 
