@@ -14,6 +14,7 @@ pub mod input;
 pub mod keymap;
 pub mod mailboxes;
 pub mod mover;
+pub mod numbers;
 pub mod older;
 pub mod rows;
 pub mod search;
