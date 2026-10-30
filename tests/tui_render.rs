@@ -68,6 +68,18 @@ fn shows_folders_messages_and_reading_pane() {
 }
 
 #[test]
+fn pinned_mail_sits_above_the_date_groups() {
+    let mut app = sample_app();
+    let mut pinned = message("m3", "Linus", "Release checklist", "Tag it on Friday");
+    pinned.pinned = true;
+    let mut messages = app.messages.clone();
+    messages.insert(0, pinned);
+    app.set_messages(messages);
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn focused_pane_has_a_thick_border() {
     let mut app = sample_app();
     app.focus = Pane::Messages;

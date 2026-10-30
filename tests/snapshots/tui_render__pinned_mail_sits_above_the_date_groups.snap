@@ -1,0 +1,16 @@
+---
+source: tests/tui_render.rs
+expression: render(&app)
+---
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││  ▾ Pinned (1)                    ││From: Linus <linus@example.com>   │"
+"└────────────────┘│> Linus                           ││Subject: Release checklist        │"
+"┌ Unread ────────┐│    Release checklist             ││                                  │"
+"│No unread mail  ││  ▾ Older (2)                     ││Tag it on Friday                  │"
+"└────────────────┘│  Ada                             ││                                  │"
+"┏ Folders ━━━━━━━┓│    Analytical engine             ││                                  │"
+"┃>   Inbox (2)   ┃│  Grace                           ││                                  │"
+"┃    Sent Items  ┃│    Compiler draft                ││                                  │"
+"┃    Projects    ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "
