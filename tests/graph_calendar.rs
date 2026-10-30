@@ -5,7 +5,7 @@ use std::sync::Arc;
 use jiff::{Timestamp, tz::TimeZone};
 use serde_json::{Value, json};
 use tuilook::graph::GraphBackend;
-use tuilook::model::{Appointment, AppointmentDraft, AppointmentId, MailBackend};
+use tuilook::model::{Appointment, AppointmentDraft, AppointmentId, BackendError, MailBackend};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{body_json, headers, method, path, query_param},
@@ -208,4 +208,26 @@ async fn deleting_an_appointment_deletes_the_event() {
         .delete_appointment(&AppointmentId("e1".to_owned()))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn a_sign_in_without_calendar_access_says_to_sign_in_again() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/me/calendarView"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({
+            "error": { "code": "ErrorAccessDenied", "message": "Access is denied." }
+        })))
+        .mount(&server)
+        .await;
+
+    let error = backend(&server)
+        .appointments(at("2026-11-01T00:00:00Z"), at("2026-12-01T00:00:00Z"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        BackendError::Other("sign in again (otlk login) to allow calendar access".to_owned())
+    );
 }

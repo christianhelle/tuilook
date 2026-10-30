@@ -445,14 +445,18 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             self.zone_name(),
             PAGE_SIZE.1
         );
-        let events: Vec<dto::Event> = self.get_all(&path, &[("Prefer", &prefer)]).await?;
+        let events: Vec<dto::Event> = self
+            .get_all(&path, &[("Prefer", &prefer)])
+            .await
+            .map_err(calendar_error)?;
         Ok(events.into_iter().map(|e| self.to_appointment(e)).collect())
     }
 
     async fn create_appointment(&self, draft: &AppointmentDraft) -> Result<(), BackendError> {
         self.client
             .post::<dto::Id>("/me/events", &self.event(draft))
-            .await?;
+            .await
+            .map_err(calendar_error)?;
         Ok(())
     }
 
@@ -462,13 +466,16 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         draft: &AppointmentDraft,
     ) -> Result<(), BackendError> {
         let path = format!("/me/events/{}", appointment.0);
-        self.client.patch(&path, &self.event(draft)).await?;
+        self.client
+            .patch(&path, &self.event(draft))
+            .await
+            .map_err(calendar_error)?;
         Ok(())
     }
 
     async fn delete_appointment(&self, appointment: &AppointmentId) -> Result<(), BackendError> {
         let path = format!("/me/events/{}", appointment.0);
-        self.client.delete(&path).await?;
+        self.client.delete(&path).await.map_err(calendar_error)?;
         Ok(())
     }
 }
@@ -656,6 +663,19 @@ fn sending_error(e: GraphError) -> BackendError {
         }
     }
     e.into()
+}
+
+/// Tells a calendar call refused because the sign-in predates calendar
+/// access, which signing in again grants, apart from any other failure.
+fn calendar_error(e: GraphError) -> BackendError {
+    match &e {
+        GraphError::Status { status, .. }
+            if *status == StatusCode::FORBIDDEN || *status == StatusCode::UNAUTHORIZED =>
+        {
+            BackendError::Other("sign in again (otlk login) to allow calendar access".to_owned())
+        }
+        _ => e.into(),
+    }
 }
 
 impl From<GraphError> for BackendError {
