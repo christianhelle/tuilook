@@ -22,6 +22,9 @@ const MESSAGE_SELECT: &str = "id,conversationId,subject,from,receivedDateTime,is
 /// times to this date, far ahead of any real one.
 const PINNED_AT: &str = "4500-09-01T00:00:00Z";
 
+/// Renew times past this are pins. Graph compares dates only cast as such.
+const PINNED_AFTER: &str = "4000-01-01T00:00:00Z";
+
 /// The renew times, PidTagRenewTime2 and PidTagRenewTime.
 const RENEW_TIMES: [&str; 2] = ["SystemTime 0x0F01", "SystemTime 0x0F02"];
 
@@ -283,7 +286,7 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
 
     async fn pinned_messages(&self, folder: &FolderId) -> Result<Vec<Message>, BackendError> {
         let path = format!(
-            "/me/mailFolders/{}/messages?$select={MESSAGE_SELECT}&$filter=singleValueExtendedProperties/any(ep: ep/id eq '{}' and ep/value eq '{PINNED_AT}')",
+            "/me/mailFolders/{}/messages?$select={MESSAGE_SELECT}&$filter=singleValueExtendedProperties/any(ep: ep/id eq '{}' and cast(ep/value, Edm.DateTimeOffset) gt {PINNED_AFTER})",
             folder.0, RENEW_TIMES[1]
         );
         let messages: Vec<dto::Message> = self.get_all(&path).await?;

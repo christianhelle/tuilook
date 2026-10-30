@@ -29,7 +29,8 @@ async fn a_folders_pinned_mail_is_the_mail_renewed_in_the_year_4500() {
         .and(path("/me/mailFolders/inbox/messages"))
         .and(query_param(
             "$filter",
-            "singleValueExtendedProperties/any(ep: ep/id eq 'SystemTime 0x0F02' and ep/value eq '4500-09-01T00:00:00Z')",
+            // Graph refuses to compare a date property as a string.
+            "singleValueExtendedProperties/any(ep: ep/id eq 'SystemTime 0x0F02' and cast(ep/value, Edm.DateTimeOffset) gt 4000-01-01T00:00:00Z)",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "value": [{
