@@ -271,6 +271,36 @@ impl MailBackend for FakeBackend {
         appointments.push(appointment(id, draft));
         Ok(())
     }
+
+    async fn update_appointment(
+        &self,
+        id: &AppointmentId,
+        draft: &AppointmentDraft,
+    ) -> Result<(), BackendError> {
+        if let Some(error) = &self.calendar_error {
+            return Err(error.clone());
+        }
+        let mut appointments = self.appointments.lock().expect("no test panics holding it");
+        let existing = appointments
+            .iter_mut()
+            .find(|a| &a.id == id)
+            .ok_or_else(|| BackendError::Other(format!("no appointment {}", id.0)))?;
+        *existing = Appointment {
+            organizer: existing.organizer.clone(),
+            is_organizer: existing.is_organizer,
+            ..appointment(id.clone(), draft)
+        };
+        Ok(())
+    }
+
+    async fn delete_appointment(&self, id: &AppointmentId) -> Result<(), BackendError> {
+        if let Some(error) = &self.calendar_error {
+            return Err(error.clone());
+        }
+        let mut appointments = self.appointments.lock().expect("no test panics holding it");
+        appointments.retain(|a| &a.id != id);
+        Ok(())
+    }
 }
 
 /// What the server makes of `draft`, saved by its organizer.

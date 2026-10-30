@@ -176,3 +176,36 @@ async fn a_new_appointment_is_written_in_local_time() {
 
     backend(&server).create_appointment(&draft()).await.unwrap();
 }
+
+#[tokio::test]
+async fn a_changed_appointment_is_patched_with_every_field() {
+    let server = MockServer::start().await;
+    Mock::given(method("PATCH"))
+        .and(path("/me/events/e1"))
+        .and(body_json(draft_json()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": "e1" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .update_appointment(&AppointmentId("e1".to_owned()), &draft())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn deleting_an_appointment_deletes_the_event() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/me/events/e1"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .delete_appointment(&AppointmentId("e1".to_owned()))
+        .await
+        .unwrap();
+}

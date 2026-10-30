@@ -3,7 +3,8 @@ use std::future::Future;
 use jiff::Timestamp;
 
 use crate::model::{
-    Appointment, AppointmentDraft, Draft, Folder, FolderId, Message, MessageChange, MessageId,
+    Appointment, AppointmentDraft, AppointmentId, Draft, Folder, FolderId, Message, MessageChange,
+    MessageId,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -154,5 +155,19 @@ pub trait MailBackend {
     fn create_appointment(
         &self,
         draft: &AppointmentDraft,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
+    /// Changes an appointment to be as `draft` has it, telling attendees.
+    fn update_appointment(
+        &self,
+        appointment: &AppointmentId,
+        draft: &AppointmentDraft,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
+    /// Takes an appointment out of the calendar, cancelling it for any
+    /// attendees.
+    fn delete_appointment(
+        &self,
+        appointment: &AppointmentId,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 }

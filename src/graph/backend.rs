@@ -455,6 +455,22 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             .await?;
         Ok(())
     }
+
+    async fn update_appointment(
+        &self,
+        appointment: &AppointmentId,
+        draft: &AppointmentDraft,
+    ) -> Result<(), BackendError> {
+        let path = format!("/me/events/{}", appointment.0);
+        self.client.patch(&path, &self.event(draft)).await?;
+        Ok(())
+    }
+
+    async fn delete_appointment(&self, appointment: &AppointmentId) -> Result<(), BackendError> {
+        let path = format!("/me/events/{}", appointment.0);
+        self.client.delete(&path).await?;
+        Ok(())
+    }
 }
 
 impl<T: TokenSource> GraphBackend<T> {
