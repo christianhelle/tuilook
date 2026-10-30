@@ -117,19 +117,29 @@ impl Compose {
     /// Puts `signature` below an empty first line of the body, ready to
     /// type above it. Nothing is added for an empty signature.
     pub fn with_signature(mut self, signature: &str) -> Self {
-        if signature.is_empty() {
-            return self;
+        if !signature.is_empty() {
+            self.start_with(signature);
         }
+        self
+    }
+
+    /// Makes the body `signature` below an empty first line, or nothing for
+    /// an empty signature, as if the message had just been opened.
+    fn start_with(&mut self, signature: &str) {
         let mode = self.body.vim.mode;
-        self.body.set_text(&format!(
-            "
+        let text = if signature.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "
 
 {signature}"
-        ));
+            )
+        };
+        self.body.set_text(&text);
         self.body.move_to(0, 0);
         self.body.vim.mode = mode;
         self.opened = self.draft();
-        self
     }
 
     /// Sends from `account` of `senders`, each an address and its signature,
@@ -244,8 +254,14 @@ impl Compose {
     }
 
     /// Sends from the account `step` further round the senders.
+    /// An untouched message takes that account's signature instead.
     fn switch_sender(&mut self, step: usize) {
+        let untouched = self.draft() == self.opened;
         self.account = (self.account + step) % self.senders.len();
+        if untouched {
+            let (_, signature) = &self.senders[self.account];
+            self.start_with(&signature.clone());
+        }
     }
 
     fn close(&self) -> Request {
@@ -425,6 +441,27 @@ mod tests {
         typing(&mut compose, "←");
         assert_eq!(compose.from(), Some("me@home.example"));
         assert_eq!(compose.account, 2);
+    }
+
+    #[test]
+    fn an_untouched_message_takes_the_new_senders_signature() {
+        let senders = vec![
+            ("me@outlook.com".to_owned(), String::new()),
+            ("me@work.example".to_owned(), "Grace".to_owned()),
+        ];
+        let mut compose = Compose::new(ComposeKind::New, None).with_senders(senders, 0);
+        press(&mut compose, KeyCode::BackTab);
+
+        typing(&mut compose, "→");
+        assert_eq!(
+            compose.body.text(),
+            "
+
+Grace"
+        );
+        typing(&mut compose, "→");
+        assert_eq!(compose.body.text(), "");
+        assert_eq!(typing(&mut compose, "⎋"), Request::Close);
     }
 
     #[test]
