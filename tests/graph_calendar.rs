@@ -109,3 +109,29 @@ async fn lists_the_appointments_in_a_window_across_pages_in_local_time() {
     assert_eq!(appointments[1].id, AppointmentId("e2".to_owned()));
     assert_eq!(appointments[1].start, at("2026-11-03T13:00:00Z"));
 }
+
+#[tokio::test]
+async fn an_all_day_appointment_runs_from_local_midnight_to_midnight() {
+    let server = MockServer::start().await;
+    let mut holiday = graph_event(
+        "e1",
+        "Holiday",
+        "2026-11-05T00:00:00",
+        "2026-11-06T00:00:00",
+    );
+    holiday["isAllDay"] = json!(true);
+    Mock::given(method("GET"))
+        .and(path("/me/calendarView"))
+        .respond_with(page(vec![holiday], None))
+        .mount(&server)
+        .await;
+
+    let appointments = backend(&server)
+        .appointments(at("2026-11-01T00:00:00Z"), at("2026-12-01T00:00:00Z"))
+        .await
+        .unwrap();
+
+    assert!(appointments[0].all_day);
+    assert_eq!(appointments[0].start, at("2026-11-04T23:00:00Z"));
+    assert_eq!(appointments[0].end, at("2026-11-05T23:00:00Z"));
+}
