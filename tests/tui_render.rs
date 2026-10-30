@@ -88,6 +88,19 @@ fn flagged_mail_shows_a_flag_after_the_sender() {
 }
 
 #[test]
+fn pinned_mail_shows_a_pin_right_of_its_flag() {
+    let mut app = sample_app();
+    let mut pinned = message("m3", "Linus", "Release checklist", "Tag it on Friday");
+    pinned.pinned = true;
+    pinned.flagged = true;
+    let mut messages = app.messages.clone();
+    messages.insert(0, pinned);
+    app.set_messages(messages);
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn focused_pane_has_a_thick_border() {
     let mut app = sample_app();
     app.focus = Pane::Messages;

@@ -4,7 +4,7 @@ expression: render(&app)
 ---
 "┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
 "│* adds the selec││  ▾ Pinned (1)                    ││From: Linus <linus@example.com>   │"
-"└────────────────┘│> Linus                           ││Subject: Release checklist        │"
+"└────────────────┘│> Linus 📌                        ││Subject: Release checklist        │" Hidden by multi-width symbols: [(28, " ")]
 "┌ Unread ────────┐│    Release checklist             ││                                  │"
 "│No unread mail  ││  ▾ Older (2)                     ││Tag it on Friday                  │"
 "└────────────────┘│  Ada                             ││                                  │"

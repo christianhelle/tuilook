@@ -991,6 +991,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         } else {
             Span::raw("")
         };
+        let pin = Span::raw(if m.pinned { " 📌" } else { "" });
         let mut second = vec![Span::raw("  ")];
         if query.is_some() {
             let place = Style::new().fg(Color::DarkGray);
@@ -998,7 +999,12 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         }
         second.push(Span::styled(shown(&m.subject), style));
         ListItem::new(vec![
-            Line::from(vec![mark, Span::styled(shown(&m.from_name), style), flag]),
+            Line::from(vec![
+                mark,
+                Span::styled(shown(&m.from_name), style),
+                flag,
+                pin,
+            ]),
             Line::from(second),
         ])
     });
