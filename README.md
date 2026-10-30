@@ -26,7 +26,7 @@ or to pin a release:
 
 ```bash
 curl -fsSL https://christianhelle.com/tuilook/install | INSTALL_DIR="$HOME/bin" bash
-curl -fsSL https://christianhelle.com/tuilook/install | VERSION="0.1.2" bash
+curl -fsSL https://christianhelle.com/tuilook/install | VERSION="0.1.3" bash
 ```
 
 ### Windows PowerShell
@@ -42,7 +42,7 @@ user `PATH`. To install somewhere else, or to pin a release:
 ```powershell
 $install = irm https://christianhelle.com/tuilook/install.ps1
 & ([scriptblock]::Create($install)) -InstallDir "$env:USERPROFILE\bin"
-& ([scriptblock]::Create($install)) -Version "0.1.2"
+& ([scriptblock]::Create($install)) -Version "0.1.3"
 ```
 
 ### Cargo

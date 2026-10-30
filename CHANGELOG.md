@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-31
+
 ### Added
 
 - Calendar: `C` shows the calendar of the account you are looking at, day by
@@ -193,7 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   variation selectors) that newsletters pad their previews with, and tabs
   show as spaces.
 
-[Unreleased]: https://github.com/christianhelle/tuilook/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/christianhelle/tuilook/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/christianhelle/tuilook/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/christianhelle/tuilook/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/christianhelle/tuilook/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/christianhelle/tuilook/releases/tag/v0.1.0
