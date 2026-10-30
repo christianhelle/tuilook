@@ -2107,6 +2107,32 @@ Ada"
     }
 
     #[test]
+    fn a_new_message_is_sent_from_the_account_picked_in_from() {
+        let mut app = two_accounts();
+        app.signatures[1] = "Ada".to_owned();
+        app.selected_folder = 1;
+        app.update(Action::Compose);
+
+        for c in "grace@example.com".chars() {
+            key(&mut app, KeyCode::Char(c));
+        }
+        key(&mut app, KeyCode::BackTab);
+        key(&mut app, KeyCode::Right);
+        let effect = ctrl_s(&mut app).unwrap();
+
+        assert_eq!(
+            app.compose.as_ref().unwrap().from(),
+            Some("me@work.example")
+        );
+        let Effect::Send(draft) = &effect else {
+            panic!("sent, not {effect:?}");
+        };
+        assert_eq!(draft.to, ["grace@example.com"]);
+        assert_eq!(draft.body, "\n\nAda");
+        assert_eq!(app.account_for(&effect), 1);
+    }
+
+    #[test]
     fn closing_a_changed_signature_asks_first() {
         let mut app = two_accounts();
         app.update(Action::EditSignature);
