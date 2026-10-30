@@ -720,9 +720,10 @@ fn draw_confirm_discard(frame: &mut Frame, title: &str, question: &str) {
 }
 
 /// What each key does while writing a message, shown with `?` in normal mode.
-pub const COMPOSE_HELP: [(&str, &str); 11] = [
+pub const COMPOSE_HELP: [(&str, &str); 12] = [
     ("Tab / Shift-Tab", "Next field / previous field"),
-    ("Enter  ↑ ↓", "Move between To, Cc and Subject"),
+    ("Enter  ↑ ↓", "Move between From, To, Cc and Subject"),
+    ("← →  in From", "Change the account it is sent from"),
     ("a, b; c", "Separate several addresses"),
     ("i a I A o O", "Type in the body, insert mode"),
     ("Esc", "Back to normal mode"),

@@ -3,10 +3,10 @@ source: tests/tui_render.rs
 expression: render_tall(&app)
 ---
 "┏ Reply ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃To:      ada@example.com                                                                ┃"
-"┃Cc:   ┌Keys──────────────────────────────────────────────────────────────────────┐      ┃"
-"┃Subjec│Tab / Shift-Tab          Next field / previous field                      │      ┃"
-"┃──────│Enter  ↑ ↓               Move between To, Cc and Subject                  │──────┃"
+"┃To:   ┌Keys──────────────────────────────────────────────────────────────────────┐      ┃"
+"┃Cc:   │Tab / Shift-Tab          Next field / previous field                      │      ┃"
+"┃Subjec│Enter  ↑ ↓               Move between From, To, Cc and Subject            │      ┃"
+"┃──────│← →  in From             Change the account it is sent from               │──────┃"
 "┃The or│a, b; c                  Separate several addresses                       │      ┃"
 "┃1     │i a I A o O              Type in the body, insert mode                    │      ┃"
 "┃      │Esc                      Back to normal mode                              │      ┃"
