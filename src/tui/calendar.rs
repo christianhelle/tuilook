@@ -5,11 +5,14 @@ use crate::model::Appointment;
 
 use crate::tui::{
     agenda::{self, Agenda},
-    app::{AppState, Confirm, Effect},
+    app::{AppState, Confirm, Effect, Status},
     appointment_form::{self, AppointmentForm},
     dialog::Dialog,
 };
 use ratatui::crossterm::event::KeyEvent;
+
+/// Shown from F5 in the agenda until the calendar has synced.
+const SYNCING: &str = "Syncing the calendar…";
 
 impl AppState {
     /// Opens the agenda of the account being looked at, from the cache,
@@ -39,7 +42,7 @@ impl AppState {
             agenda::Request::Close => self.agenda = None,
             agenda::Request::Help => self.dialog = Some(Dialog::Help),
             agenda::Request::Refresh => {
-                self.show_busy("Syncing the calendar…");
+                self.show_busy(SYNCING);
                 return Some(Effect::SyncCalendar(account));
             }
             agenda::Request::New => {
@@ -118,6 +121,10 @@ impl AppState {
     /// `account`'s calendar in the cache changed: its open agenda shows it
     /// again.
     pub fn calendar_synced(&mut self, account: usize) -> Option<Effect> {
+        // An F5 waiting for this gets an answer, unless an error took its place.
+        if self.status == Some(Status::Busy(SYNCING.to_owned())) {
+            self.show_info("Up to date");
+        }
         self.agenda
             .as_ref()
             .filter(|a| a.account == account)
@@ -134,11 +141,7 @@ mod tests {
     use ratatui::crossterm::event::{KeyCode, KeyModifiers};
 
     use crate::model::{Action, AppointmentId};
-    use crate::tui::{
-        app::{Confirm, Status},
-        appointment_form::Field,
-        keymap::Keymap,
-    };
+    use crate::tui::{app::Confirm, appointment_form::Field, keymap::Keymap};
 
     use super::*;
 
@@ -282,6 +285,23 @@ mod tests {
                 id: AppointmentId("tomorrow".to_owned()),
             })
         );
+    }
+
+    #[test]
+    fn f5_says_the_calendar_is_syncing_until_it_is_up_to_date() {
+        let mut app = in_agenda();
+
+        assert_eq!(
+            press(&mut app, KeyCode::F(5)),
+            Some(Effect::SyncCalendar(0))
+        );
+        assert_eq!(
+            app.status,
+            Some(Status::Busy("Syncing the calendar…".to_owned()))
+        );
+        app.calendar_synced(0);
+
+        assert_eq!(app.status, Some(Status::Info("Up to date".to_owned())));
     }
 
     #[test]
