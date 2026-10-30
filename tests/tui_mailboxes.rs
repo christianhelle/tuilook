@@ -390,3 +390,43 @@ fn an_error_lets_the_appointment_being_saved_be_saved_again() {
         ))
     );
 }
+
+#[test]
+fn tab_in_the_agenda_shows_the_next_accounts_cached_calendar_and_syncs_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut mailboxes = Vec::new();
+    let mut commands = Vec::new();
+    let mut calendars = Vec::new();
+    for account in 0..2 {
+        let path = dir.path().join(format!("{account}.db"));
+        let own = appointment(
+            &format!("a{account}"),
+            jiff::Timestamp::now().round(jiff::Unit::Second).unwrap(),
+        );
+        cache_calendar(&path, std::slice::from_ref(&own));
+        calendars.push(own);
+        let (tx, rx) = mpsc::channel(32);
+        mailboxes.push(Mailbox {
+            store: Store::open(&path).unwrap(),
+            commands: tx,
+        });
+        commands.push(rx);
+    }
+    let mut mailboxes = Mailboxes::new(mailboxes, None, Box::new(io::sink()));
+    let mut app = AppState {
+        accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+        ..Default::default()
+    };
+    let effect = app.on_key(shift_c(), &mut Keymap::default());
+    mailboxes.apply(&mut app, effect).unwrap();
+    sent(&mut commands[0]);
+
+    let effect = app.on_key(KeyEvent::from(KeyCode::Tab), &mut Keymap::default());
+    mailboxes.apply(&mut app, effect).unwrap();
+
+    let agenda = app.agenda.as_ref().unwrap();
+    assert_eq!(agenda.address, "me@work.example");
+    assert_eq!(agenda.appointments(), std::slice::from_ref(&calendars[1]));
+    assert!(sent(&mut commands[0]).is_empty());
+    assert_eq!(sent(&mut commands[1]), [Command::SyncCalendar]);
+}
