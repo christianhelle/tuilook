@@ -4,7 +4,8 @@
 [![CI](https://github.com/christianhelle/tuilook/actions/workflows/ci.yml/badge.svg)](https://github.com/christianhelle/tuilook/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A terminal mail client for Outlook.com and Microsoft 365, with vim-style keys.
+A terminal mail and calendar client for Outlook.com and Microsoft 365, with
+vim-style keys.
 It keeps an offline cache, so your mail shows up at once while folders sync in
 the background.
 
@@ -169,7 +170,7 @@ flows. See
 Without this, signing in fails with `AADSTS7000218`
 ([what that means](https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/app-integration/confidential-client-application-authentication-error-aadsts7000218)).
 
-#### 3. Add the mail permissions
+#### 3. Add the mail and calendar permissions
 
 In your app registration, select **API permissions** > **Add a permission** >
 **Microsoft Graph** > **Delegated permissions**, then add:
@@ -178,6 +179,7 @@ In your app registration, select **API permissions** > **Add a permission** >
 - `Mail.ReadWrite`, to read, sync and delete mail
 - `Mail.Send`, to send mail
 - `MailboxSettings.Read`
+- `Calendars.ReadWrite`, to show and change your calendar
 - `offline_access`, to stay signed in
 
 Microsoft's guide
@@ -446,10 +448,42 @@ help avoid that, tuilook asks before sending a fourth message within ten
 minutes. If Outlook.com does block sending, tuilook explains how to unblock the
 account and keeps your message open so you can send it later.
 
+## Calendar
+
+Press `C` to show the calendar of the account you are looking at. The agenda
+takes over the screen. It lists each day's appointments, from a week ago to
+three months ahead, and opens on today. It shows the cached calendar at once
+and syncs it in the background, so it works offline too.
+
+| Keys | What they do |
+| --- | --- |
+| `j` `k` `↓` `↑` | Move between appointments |
+| `g` `G` `t` | Jump to the first, the last, or today's first |
+| `Enter` | Show the appointment in full beside the agenda, or hide it |
+| `c` | Write a new appointment, on the selected day |
+| `e` | Change the selected appointment |
+| `d` | Delete it, after asking; anyone invited is told it is cancelled |
+| `F5` | Sync the calendar now |
+| `Esc` `q` | Back to the mail |
+
+A new appointment runs from 9:00 to 10:00 unless you change it. Write the date
+as `2026-11-30` and times as `14:30`, in your computer's time zone. Press
+`Space` on `All day` to make it last the whole day. Add addresses to `Invite`,
+separated by `,` or `;`, to send them an invitation when it is saved. The notes
+are edited vim style, like a message body, and `Ctrl-S` saves.
+
+Changing an appointment shows only a preview of its notes, which Outlook may
+shorten. The notes are saved only if you edit them, so the full notes stay as
+they are otherwise. Changing one occurrence of a repeating appointment changes
+only that occurrence. tuilook cannot make an appointment repeat.
+
+If you signed in before tuilook had a calendar, sign in again with
+`otlk login` to allow calendar access.
+
 ## Syncing
 
-tuilook checks for new mail every minute, and again shortly after you send
-something. Press `F5` or `Ctrl-R` to sync at once.
+tuilook checks for new mail, and changes to the calendar, every minute, and
+again shortly after you send something. Press `F5` or `Ctrl-R` to sync at once.
 
 To change how often it checks, pass the number of seconds, or `0` to check
 only at start and when you press `F5`:
