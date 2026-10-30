@@ -238,3 +238,41 @@ async fn folders_are_kept_when_listing_them_fails() {
 
     assert_eq!(store.folders().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn syncing_a_folder_brings_its_pins_even_from_past_the_sync_window() {
+    let inbox = FolderId("f1".to_owned());
+    let old = message("m0", "2025-01-01T09:00:00Z");
+    let m1 = message("m1", "2026-01-01T09:00:00Z");
+    let m2 = message("m2", "2026-01-02T09:00:00Z");
+    let backend = FakeBackend {
+        folders: vec![folder("f1", "Inbox", Some(WellKnown::Inbox))],
+        messages: [(inbox.clone(), vec![m1.clone(), m2.clone()])].into(),
+        older: [(inbox.clone(), vec![old.clone()])].into(),
+        ..Default::default()
+    };
+    let pins = ["m0", "m1"].map(|id| MessageId(id.to_owned()));
+    backend.pinned.lock().unwrap().extend(pins);
+    let mut store = Store::open_in_memory().unwrap();
+    sync_folders(&backend, &mut store).await.unwrap();
+
+    sync_messages(&backend, &mut store, &inbox).await.unwrap();
+
+    let pinned = |m: &Message| Message {
+        pinned: true,
+        ..m.clone()
+    };
+    assert_eq!(
+        store.messages_in(&inbox).unwrap(),
+        [pinned(&m1), pinned(&old), m2.clone()]
+    );
+
+    backend
+        .pinned
+        .lock()
+        .unwrap()
+        .remove(&MessageId("m1".to_owned()));
+    sync_messages(&backend, &mut store, &inbox).await.unwrap();
+
+    assert_eq!(store.messages_in(&inbox).unwrap(), [pinned(&old), m2, m1]);
+}

@@ -41,6 +41,8 @@ pub struct FakeBackend {
     pub undeletable: HashSet<MessageId>,
     /// Messages marked read so far. Later syncs report them as read.
     pub read: Arc<Mutex<HashSet<MessageId>>>,
+    /// Messages pinned on the server, in `messages` or `older`.
+    pub pinned: Arc<Mutex<HashSet<MessageId>>>,
     /// Messages sent so far.
     pub sent: Arc<Mutex<Vec<Draft>>>,
     /// Why listing folders fails, if it does.
@@ -187,6 +189,30 @@ impl MailBackend for FakeBackend {
     async fn mark_read(&self, message: &MessageId) -> Result<(), BackendError> {
         let mut read = self.read.lock().expect("no test panics holding it");
         read.insert(message.clone());
+        Ok(())
+    }
+
+    async fn pinned_messages(&self, folder: &FolderId) -> Result<Vec<Message>, BackendError> {
+        let pinned = self.pinned.lock().expect("no test panics holding it");
+        Ok([&self.messages, &self.older]
+            .into_iter()
+            .filter_map(|messages| messages.get(folder))
+            .flatten()
+            .filter(|m| pinned.contains(&m.id))
+            .map(|m| Message {
+                pinned: true,
+                ..m.clone()
+            })
+            .collect())
+    }
+
+    async fn set_pinned(&self, message: &MessageId, pinned: bool) -> Result<(), BackendError> {
+        let mut pins = self.pinned.lock().expect("no test panics holding it");
+        if pinned {
+            pins.insert(message.clone());
+        } else {
+            pins.remove(message);
+        }
         Ok(())
     }
 

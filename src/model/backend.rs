@@ -116,6 +116,19 @@ pub trait MailBackend {
         message: &MessageId,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 
+    /// A folder's pinned messages, however old.
+    fn pinned_messages(
+        &self,
+        folder: &FolderId,
+    ) -> impl Future<Output = Result<Vec<Message>, BackendError>> + Send;
+
+    /// Pins a message to the top of its folder, or unpins it.
+    fn set_pinned(
+        &self,
+        message: &MessageId,
+        pinned: bool,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
     /// Sends a message, keeping a copy in Sent Items.
     fn send(&self, draft: &Draft) -> impl Future<Output = Result<(), BackendError>> + Send;
 }

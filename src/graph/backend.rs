@@ -274,6 +274,16 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(())
     }
 
+    async fn pinned_messages(&self, _folder: &FolderId) -> Result<Vec<Message>, BackendError> {
+        Ok(Vec::new())
+    }
+
+    async fn set_pinned(&self, _message: &MessageId, _pinned: bool) -> Result<(), BackendError> {
+        Err(BackendError::Other(
+            "pinning is not supported yet".to_owned(),
+        ))
+    }
+
     async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
         self.send_draft(draft).await.map_err(sending_error)
     }
