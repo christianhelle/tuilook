@@ -3,8 +3,8 @@
 use std::{collections::HashSet, sync::LazyLock};
 
 use crate::model::{
-    Body, BodyType, Folder, FolderId, Importance, Message, MessageChange, MessageId, WellKnown,
-    sort_folders,
+    Appointment, AppointmentId, Body, BodyType, Folder, FolderId, Importance, Message,
+    MessageChange, MessageId, WellKnown, sort_folders,
 };
 use jiff::Timestamp;
 use rusqlite::{Connection, OptionalExtension, Row, types::Type};
@@ -16,6 +16,7 @@ static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(include_str!("migrations/002_bodies.sql")),
         M::up(include_str!("migrations/003_resync_blanked_messages.sql")),
         M::up(include_str!("migrations/004_pinned.sql")),
+        M::up(include_str!("migrations/005_appointments.sql")),
     ])
 });
 
@@ -395,6 +396,82 @@ impl Store {
         Ok(())
     }
 
+    /// Caches the server's appointments from `from` to `to`, dropping any
+    /// cached there that it no longer has.
+    pub fn replace_appointments(
+        &mut self,
+        from: Timestamp,
+        to: Timestamp,
+        appointments: &[Appointment],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            tx.execute(
+                "DELETE FROM appointments WHERE start_at < ?2 AND end_at > ?1",
+                (from.as_millisecond(), to.as_millisecond()),
+            )?;
+            let mut stmt = tx.prepare(
+                "INSERT INTO appointments (
+                     id, subject, start_at, end_at, all_day, location, organizer,
+                     attendees, preview, is_organizer)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT (id) DO UPDATE SET
+                     subject = excluded.subject,
+                     start_at = excluded.start_at,
+                     end_at = excluded.end_at,
+                     all_day = excluded.all_day,
+                     location = excluded.location,
+                     organizer = excluded.organizer,
+                     attendees = excluded.attendees,
+                     preview = excluded.preview,
+                     is_organizer = excluded.is_organizer",
+            )?;
+            for a in appointments {
+                stmt.execute((
+                    &a.id.0,
+                    &a.subject,
+                    a.start.as_millisecond(),
+                    a.end.as_millisecond(),
+                    a.all_day,
+                    &a.location,
+                    &a.organizer,
+                    a.attendees.join(
+                        "
+",
+                    ),
+                    &a.preview,
+                    a.is_organizer,
+                ))?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The cached appointments that overlap `from` to `to`, soonest first,
+    /// and of those starting together, whole days first.
+    pub fn appointments_between(&self, from: Timestamp, to: Timestamp) -> Result<Vec<Appointment>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, subject, start_at, end_at, all_day, location, organizer, attendees,
+                    preview, is_organizer
+             FROM appointments WHERE start_at < ?2 AND end_at > ?1
+             ORDER BY start_at, all_day DESC, end_at",
+        )?;
+        let appointments = stmt
+            .query_map(
+                (from.as_millisecond(), to.as_millisecond()),
+                appointment_from_row,
+            )?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(appointments)
+    }
+
+    pub fn remove_appointment(&mut self, id: &AppointmentId) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM appointments WHERE id = ?1", [&id.0])?;
+        Ok(())
+    }
+
     /// Folders in folder tree order.
     pub fn folders(&self) -> Result<Vec<Folder>> {
         let mut stmt = self
@@ -419,6 +496,30 @@ fn folder_from_row(row: &Row) -> rusqlite::Result<Folder> {
             .and_then(WellKnown::from_graph_name),
         unread: row.get(4)?,
         total: row.get(5)?,
+    })
+}
+
+fn appointment_from_row(row: &Row) -> rusqlite::Result<Appointment> {
+    let instant = |column: usize| {
+        Timestamp::from_millisecond(row.get(column)?).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(column, Type::Integer, Box::new(e))
+        })
+    };
+    Ok(Appointment {
+        id: AppointmentId(row.get(0)?),
+        subject: row.get(1)?,
+        start: instant(2)?,
+        end: instant(3)?,
+        all_day: row.get(4)?,
+        location: row.get(5)?,
+        organizer: row.get(6)?,
+        attendees: row
+            .get::<_, String>(7)?
+            .lines()
+            .map(str::to_owned)
+            .collect(),
+        preview: row.get(8)?,
+        is_organizer: row.get(9)?,
     })
 }
 

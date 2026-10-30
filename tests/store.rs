@@ -1,5 +1,6 @@
 use tuilook::model::{
-    Body, BodyType, Folder, FolderId, Importance, Message, MessageChange, MessageId, WellKnown,
+    Appointment, AppointmentId, Body, BodyType, Folder, FolderId, Importance, Message,
+    MessageChange, MessageId, WellKnown,
 };
 use tuilook::store::Store;
 
@@ -177,6 +178,8 @@ fn opening_a_cache_blanked_by_partial_changes_drops_them_and_resyncs() {
     // Nor did 0.1.0 have pins.
     conn.execute("ALTER TABLE messages DROP COLUMN pinned", [])
         .unwrap();
+    // Or a calendar.
+    conn.execute("DROP TABLE appointments", []).unwrap();
     drop(conn);
 
     let store = Store::open(&path).unwrap();
@@ -509,4 +512,126 @@ fn flagging_a_message_tells_its_folder_and_unflagging_takes_it_back() {
 
     let missing = MessageId("gone".to_owned());
     assert_eq!(store.set_flagged(&missing, true).unwrap(), None);
+}
+
+fn appointment(id: &str, start: &str, end: &str) -> Appointment {
+    Appointment {
+        id: AppointmentId(id.to_owned()),
+        subject: format!("Subject {id}"),
+        start: start.parse().unwrap(),
+        end: end.parse().unwrap(),
+        all_day: false,
+        location: "Room 4".to_owned(),
+        organizer: "Ada Lovelace".to_owned(),
+        attendees: vec![
+            "grace@example.com".to_owned(),
+            "alan@example.com".to_owned(),
+        ],
+        preview: "Agenda inside".to_owned(),
+        is_organizer: false,
+    }
+}
+
+fn at(time: &str) -> jiff::Timestamp {
+    time.parse().unwrap()
+}
+
+#[test]
+fn cached_appointments_come_back_soonest_first() {
+    let mut store = Store::open_in_memory().unwrap();
+    let later = appointment("a2", "2026-11-03T09:00:00Z", "2026-11-03T10:00:00Z");
+    let mut sooner = appointment("a1", "2026-11-02T09:00:00Z", "2026-11-02T10:00:00Z");
+    sooner.all_day = true;
+    sooner.is_organizer = true;
+
+    store
+        .replace_appointments(
+            at("2026-11-01T00:00:00Z"),
+            at("2026-12-01T00:00:00Z"),
+            &[later.clone(), sooner.clone()],
+        )
+        .unwrap();
+
+    assert_eq!(
+        store
+            .appointments_between(at("2026-11-01T00:00:00Z"), at("2026-12-01T00:00:00Z"))
+            .unwrap(),
+        [sooner, later]
+    );
+}
+
+#[test]
+fn only_appointments_overlapping_the_window_come_back() {
+    let mut store = Store::open_in_memory().unwrap();
+    let before = appointment("a1", "2026-11-01T08:00:00Z", "2026-11-01T09:00:00Z");
+    let overlapping = appointment("a2", "2026-11-01T23:30:00Z", "2026-11-02T00:30:00Z");
+    store
+        .replace_appointments(
+            at("2026-10-01T00:00:00Z"),
+            at("2026-12-01T00:00:00Z"),
+            &[before, overlapping.clone()],
+        )
+        .unwrap();
+
+    assert_eq!(
+        store
+            .appointments_between(at("2026-11-02T00:00:00Z"), at("2026-11-03T00:00:00Z"))
+            .unwrap(),
+        [overlapping]
+    );
+}
+
+#[test]
+fn replacing_a_window_drops_what_the_server_no_longer_has_there() {
+    let mut store = Store::open_in_memory().unwrap();
+    let outside = appointment("a1", "2026-09-01T09:00:00Z", "2026-09-01T10:00:00Z");
+    let gone = appointment("a2", "2026-11-02T09:00:00Z", "2026-11-02T10:00:00Z");
+    let mut moved = appointment("a3", "2026-11-03T09:00:00Z", "2026-11-03T10:00:00Z");
+    store
+        .replace_appointments(
+            at("2026-08-01T00:00:00Z"),
+            at("2026-12-01T00:00:00Z"),
+            &[outside.clone(), gone, moved.clone()],
+        )
+        .unwrap();
+    moved.start = at("2026-11-04T09:00:00Z");
+    moved.end = at("2026-11-04T10:00:00Z");
+
+    store
+        .replace_appointments(
+            at("2026-11-01T00:00:00Z"),
+            at("2026-12-01T00:00:00Z"),
+            &[moved.clone()],
+        )
+        .unwrap();
+
+    assert_eq!(
+        store
+            .appointments_between(at("2026-08-01T00:00:00Z"), at("2026-12-01T00:00:00Z"))
+            .unwrap(),
+        [outside, moved]
+    );
+}
+
+#[test]
+fn a_removed_appointment_is_gone_from_the_cache() {
+    let mut store = Store::open_in_memory().unwrap();
+    let kept = appointment("a1", "2026-11-02T09:00:00Z", "2026-11-02T10:00:00Z");
+    let removed = appointment("a2", "2026-11-03T09:00:00Z", "2026-11-03T10:00:00Z");
+    store
+        .replace_appointments(
+            at("2026-11-01T00:00:00Z"),
+            at("2026-12-01T00:00:00Z"),
+            &[kept.clone(), removed.clone()],
+        )
+        .unwrap();
+
+    store.remove_appointment(&removed.id).unwrap();
+
+    assert_eq!(
+        store
+            .appointments_between(at("2026-11-01T00:00:00Z"), at("2026-12-01T00:00:00Z"))
+            .unwrap(),
+        [kept]
+    );
 }
