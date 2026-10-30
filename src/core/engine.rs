@@ -47,6 +47,11 @@ pub enum Command {
     },
     /// Mark a message read, as it is being shown.
     MarkRead(MessageId),
+    /// Pin messages to the top of their folders, or unpin them.
+    SetPinned {
+        ids: Vec<MessageId>,
+        pinned: bool,
+    },
     Send(Draft),
 }
 
@@ -108,6 +113,9 @@ pub async fn run_engine(
                     Some(event) => events.send(event).await,
                     None => Ok(()),
                 }
+            }
+            Command::SetPinned { ids, pinned } => {
+                set_pinned(&backend, &mut store, &ids, pinned, &events).await
             }
             Command::Send(draft) => send(&backend, &mut store, &draft, &events).await,
         };
@@ -289,6 +297,38 @@ async fn mark_read(
         .await
         .map_err(|e| e.to_string())?;
     store.mark_read(message).map_err(|e| e.to_string())
+}
+
+/// Pins or unpins messages on the server, then in the store, and reports
+/// each folder whose messages changed.
+async fn set_pinned(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    ids: &[MessageId],
+    pinned: bool,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    let mut changed = Vec::new();
+    for id in ids {
+        let done = match backend.set_pinned(id, pinned).await {
+            Ok(()) => store.set_pinned(id, pinned).map_err(|e| e.to_string()),
+            Err(e) => Err(e.to_string()),
+        };
+        match done {
+            Ok(Some(folder)) if !changed.contains(&folder) => changed.push(folder),
+            Ok(_) => {}
+            Err(e) => {
+                let verb = if pinned { "pin" } else { "unpin" };
+                events
+                    .send(Event::Error(format!("could not {verb}: {e}")))
+                    .await?;
+            }
+        }
+    }
+    for folder in changed {
+        events.send(Event::FolderSynced(folder)).await?;
+    }
+    Ok(())
 }
 
 /// Sends a message, then syncs Sent Items so it shows there.

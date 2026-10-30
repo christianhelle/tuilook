@@ -567,3 +567,31 @@ async fn a_message_that_will_not_move_is_reported_and_the_rest_still_go() {
         Some(Event::Error("moved 1, 1 failed: m2 is locked".to_owned()))
     );
 }
+
+#[tokio::test]
+async fn pinning_tells_the_backend_and_reports_the_folder_changed() {
+    let backend = FakeBackend {
+        folders: vec![folder("a")],
+        messages: [(FolderId("a".to_owned()), vec![in_folder("m1", "a")])].into(),
+        ..Default::default()
+    };
+    let pinned = backend.pinned.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    let pin = |pinned| Command::SetPinned {
+        ids: ids(&["m1"]),
+        pinned,
+    };
+    commands.send(pin(true)).await.unwrap();
+
+    let changed = Some(Event::FolderSynced(FolderId("a".to_owned())));
+    assert_eq!(events.recv().await, changed);
+    assert!(pinned.lock().unwrap().contains(&MessageId("m1".to_owned())));
+
+    commands.send(pin(false)).await.unwrap();
+
+    assert_eq!(events.recv().await, changed);
+    assert!(pinned.lock().unwrap().is_empty());
+}
