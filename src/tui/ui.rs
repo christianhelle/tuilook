@@ -983,6 +983,11 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         } else {
             Span::raw("")
         };
+        let flag = if m.flagged {
+            Span::styled(" ⚑", Style::new().fg(Color::Red))
+        } else {
+            Span::raw("")
+        };
         let mut second = vec![Span::raw("  ")];
         if query.is_some() {
             let place = Style::new().fg(Color::DarkGray);
@@ -990,7 +995,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         }
         second.push(Span::styled(shown(&m.subject), style));
         ListItem::new(vec![
-            Line::from(vec![mark, Span::styled(shown(&m.from_name), style)]),
+            Line::from(vec![mark, Span::styled(shown(&m.from_name), style), flag]),
             Line::from(second),
         ])
     });

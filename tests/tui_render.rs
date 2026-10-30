@@ -80,6 +80,14 @@ fn pinned_mail_sits_above_the_date_groups() {
 }
 
 #[test]
+fn flagged_mail_shows_a_flag_after_the_sender() {
+    let mut app = sample_app();
+    app.messages[1].flagged = true;
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn focused_pane_has_a_thick_border() {
     let mut app = sample_app();
     app.focus = Pane::Messages;
