@@ -1,6 +1,5 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 402
 expression: render_tall(&app)
 ---
 "┏ Reply ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -9,7 +8,7 @@ expression: render_tall(&app)
 "┃Subject: RE: Analytical engine                                                          ┃"
 "┃────────────────────────────────────────────────────────────────────────────────────────┃"
 "┃The original m┌Send another?─────────────────────────────────────────────┐              ┃"
-"┃Thanks        │You have sent 3 messages in the last 10 minutes.          │              ┃"
+"┃1   Thanks    │You have sent 3 messages in the last 10 minutes.          │              ┃"
 "┃              │Outlook.com may block accounts that send in bursts.       │              ┃"
 "┃              │                                                          │              ┃"
 "┃              │y / Enter send anyway   Esc or any other key wait         │              ┃"

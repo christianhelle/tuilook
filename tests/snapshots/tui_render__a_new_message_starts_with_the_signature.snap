@@ -1,6 +1,5 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 460
 expression: render_tall(&app)
 ---
 "┏ New message ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -9,10 +8,10 @@ expression: render_tall(&app)
 "┃Cc:                                                                                     ┃"
 "┃Subject:                                                                                ┃"
 "┃────────────────────────────────────────────────────────────────────────────────────────┃"
-"┃                                                                                        ┃"
-"┃                                                                                        ┃"
-"┃Ada Lovelace                                                                            ┃"
-"┃Analytical Engines                                                                      ┃"
+"┃1                                                                                       ┃"
+"┃  1                                                                                     ┃"
+"┃  2 Ada Lovelace                                                                        ┃"
+"┃  3 Analytical Engines                                                                  ┃"
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"

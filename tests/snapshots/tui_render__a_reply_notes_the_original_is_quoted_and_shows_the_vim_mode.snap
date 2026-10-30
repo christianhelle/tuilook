@@ -1,6 +1,5 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 262
 expression: render_tall(&app)
 ---
 "┏ Reply ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -9,7 +8,7 @@ expression: render_tall(&app)
 "┃Subject: RE: Analytical engine                                                          ┃"
 "┃────────────────────────────────────────────────────────────────────────────────────────┃"
 "┃The original message is quoted below what you write                                     ┃"
-"┃Agreed                                                                                  ┃"
+"┃1   Agreed                                                                              ┃"
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"

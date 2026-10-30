@@ -1,6 +1,5 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 386
 expression: render_tall(&app)
 ---
 "┏ Reply ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -9,7 +8,7 @@ expression: render_tall(&app)
 "┃Subject: RE:│usually because recent mail looked like spam to it.           │            ┃"
 "┃────────────│Nothing was sent; your message is still open.                 │────────────┃"
 "┃The original│                                                              │            ┃"
-"┃Thanks      │Unblock it at https://account.live.com,                       │            ┃"
+"┃1   Thanks  │Unblock it at https://account.live.com,                       │            ┃"
 "┃            │then wait a little and press Ctrl-S to try again.             │            ┃"
 "┃            │                                                              │            ┃"
 "┃            │Outlook said: ErrorMessageSubmissionBlocked: Message          │            ┃"

@@ -311,6 +311,17 @@ fn render_tall(app: &AppState) -> String {
 }
 
 #[test]
+fn the_message_being_written_numbers_its_lines_from_the_cursor() {
+    let mut app = sample_app();
+    press(&mut app, "c⇥⇥⇥iFirst⏎Second⏎Third");
+
+    let screen = render_tall(&app);
+    assert!(screen.contains("  2 First"), "{screen}");
+    assert!(screen.contains("  1 Second"), "{screen}");
+    assert!(screen.contains("3   Third"), "{screen}");
+}
+
+#[test]
 fn a_new_message_takes_over_the_screen() {
     let mut app = sample_app();
     press(&mut app, "cada@example.com⇥⇥Lunch⇥iShall we?⏎Friday works");

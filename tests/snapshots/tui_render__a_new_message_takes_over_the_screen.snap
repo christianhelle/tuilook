@@ -1,6 +1,5 @@
 ---
 source: tests/tui_render.rs
-assertion_line: 254
 expression: render_tall(&app)
 ---
 "┏ New message ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -8,8 +7,8 @@ expression: render_tall(&app)
 "┃Cc:                                                                                     ┃"
 "┃Subject: Lunch                                                                          ┃"
 "┃────────────────────────────────────────────────────────────────────────────────────────┃"
-"┃Shall we?                                                                               ┃"
-"┃Friday works                                                                            ┃"
+"┃  1 Shall we?                                                                           ┃"
+"┃2   Friday works                                                                        ┃"
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"

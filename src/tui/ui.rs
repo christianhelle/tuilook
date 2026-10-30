@@ -18,6 +18,7 @@ use crate::tui::{
     groups::MessageRow,
     input::TextInput,
     mover::MovePicker,
+    numbers,
     older::LOADING_OLDER,
     rows::Row,
     signature::SignatureEditor,
@@ -601,18 +602,22 @@ fn draw_signature(frame: &mut Frame, app: &AppState, editor: &SignatureEditor, a
 /// Text being written, scrolled so the cursor is in view. The cursor shows
 /// when `focused`.
 fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
+    let numbers = numbers::gutter_width(editor.lines().len());
+    let [gutter, area] =
+        Layout::horizontal([Constraint::Length(numbers), Constraint::Fill(1)]).areas(area);
     let height = usize::from(area.height);
     let width = usize::from(area.width).max(1);
     let (row, column) = editor.cursor();
     let top = editor.scroll(height);
     let left = column.saturating_sub(width - 1);
     let selection = editor.vim.selection((row, column));
-    let lines: Vec<Line> = editor
-        .lines()
-        .iter()
-        .enumerate()
-        .skip(top)
-        .take(height)
+    let shown = editor.lines().iter().enumerate().skip(top).take(height);
+    let labels: Vec<Line> = shown
+        .clone()
+        .map(|(index, _)| number_line(index, row, numbers))
+        .collect();
+    frame.render_widget(Paragraph::new(labels), gutter);
+    let lines: Vec<Line> = shown
         .map(|(index, line)| picked_line(line, index, left, selection))
         .collect();
     frame.render_widget(Paragraph::new(lines), area);
@@ -621,6 +626,17 @@ fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
         let y = u16::try_from(row - top).unwrap_or(u16::MAX);
         frame.set_cursor_position((area.x + x, area.y + y));
     }
+}
+
+/// The number beside line `index`, `width` columns wide, the cursor's line
+/// standing out from the others.
+fn number_line(index: usize, cursor: usize, width: u16) -> Line<'static> {
+    let style = if index == cursor {
+        Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+    } else {
+        Style::new().fg(Color::DarkGray)
+    };
+    Line::styled(numbers::label(index, cursor, width), style)
 }
 
 /// Line `index` from its character `left` on, with the characters in a
