@@ -39,7 +39,7 @@ pub fn accounts() -> Vec<(String, FakeBackend)> {
 
 fn personal() -> FakeBackend {
     use WellKnown::*;
-    let backend = mailbox(
+    let mut backend = mailbox(
         "p",
         &[
             ("inbox", None, "Inbox", Some(Inbox)),
@@ -260,7 +260,17 @@ fn personal() -> FakeBackend {
         .chain(spam()),
     );
     pin(&backend, &["Your October statement", "Lecture tickets"]);
+    flag(&mut backend, &["Your translation", "Books due next week"]);
     backend
+}
+
+/// Flags the mail of `backend` with these subjects.
+fn flag(backend: &mut FakeBackend, subjects: &[&str]) {
+    for m in backend.messages.values_mut().flatten() {
+        if subjects.contains(&m.subject.as_str()) {
+            m.flagged = true;
+        }
+    }
 }
 
 /// Pins the mail of `backend` with these subjects.
@@ -1074,6 +1084,18 @@ mod tests {
             .map(|m| m.subject.as_str())
             .collect();
         assert_eq!(subjects, ["Your October statement", "Lecture tickets"]);
+    }
+
+    #[test]
+    fn the_personal_inbox_has_mail_flagged_for_follow_up() {
+        let (_, personal) = &accounts()[0];
+        let inbox = &personal.messages[&FolderId("p-inbox".to_owned())];
+        let subjects: Vec<_> = inbox
+            .iter()
+            .filter(|m| m.flagged)
+            .map(|m| m.subject.as_str())
+            .collect();
+        assert_eq!(subjects, ["Your translation", "Books due next week"]);
     }
 
     #[test]
