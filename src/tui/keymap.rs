@@ -69,6 +69,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('A') => Action::AddTopFolder,
         KeyCode::F(2) => Action::RenameFolder,
         KeyCode::Char('m') => Action::Move,
+        KeyCode::Char('p') => Action::TogglePin,
         _ => return None,
     };
     Some(action)
@@ -229,6 +230,11 @@ mod tests {
         );
         assert_eq!(press(KeyCode::F(2)), Some(Action::RenameFolder));
         assert_eq!(press(KeyCode::Char('m')), Some(Action::Move));
+    }
+
+    #[test]
+    fn p_pins() {
+        assert_eq!(press(KeyCode::Char('p')), Some(Action::TogglePin));
     }
 
     #[test]

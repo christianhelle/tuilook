@@ -219,6 +219,14 @@ impl Mailboxes {
                     self.clipboard.flush()?;
                     None
                 }
+                Effect::SetPinned { ids, pinned } => {
+                    // Search results may be in several accounts.
+                    for (account, ids) in app.by_account(ids) {
+                        let pin = Command::SetPinned { ids, pinned };
+                        mailboxes[account].commands.blocking_send(pin)?;
+                    }
+                    None
+                }
                 Effect::Delete { ids, permanent } => {
                     // Search results may be in several accounts.
                     for (account, ids) in app.by_account(ids) {

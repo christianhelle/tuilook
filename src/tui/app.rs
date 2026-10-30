@@ -3,7 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::model::{Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId};
+use crate::model::{
+    Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId, sort_messages,
+};
 use jiff::{Timestamp, Zoned};
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -40,6 +42,11 @@ pub enum Effect {
     },
     /// Mark a message read, as the reading pane shows it.
     MarkRead(MessageId),
+    /// Pin messages to the top of their folders, or unpin them.
+    SetPinned {
+        ids: Vec<MessageId>,
+        pinned: bool,
+    },
     Delete {
         ids: Vec<MessageId>,
         permanent: bool,
@@ -558,6 +565,8 @@ impl AppState {
             Action::ClearMarks if self.marked.is_empty() => return self.leave_search(),
             Action::ClearMarks => self.marked.clear(),
             Action::ToggleMark | Action::MarkAll => {}
+            Action::TogglePin if self.focus != Pane::Folders => return self.toggle_pin(),
+            Action::TogglePin => {}
             Action::Delete | Action::DeletePermanently if self.focus != Pane::Folders => {
                 let ids = self.to_act_on();
                 if !ids.is_empty() {
@@ -706,9 +715,11 @@ impl AppState {
                 .position(|f| &f.id == id)
                 .map_or(0, |index| self.account_of(index)),
             Effect::LoadBody(id) | Effect::MarkRead(id) => self.message_account(id),
-            Effect::Delete { .. } | Effect::Sync | Effect::Search(_) | Effect::Copy(_) => {
-                self.current_account()
-            }
+            Effect::Delete { .. }
+            | Effect::SetPinned { .. }
+            | Effect::Sync
+            | Effect::Search(_)
+            | Effect::Copy(_) => self.current_account(),
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
             Effect::SaveSignature { account, .. }
             | Effect::CreateFolder { account, .. }
@@ -843,6 +854,27 @@ impl AppState {
         } else {
             self.selection_changed()
         }
+    }
+
+    /// Pins the marked or selected messages, or unpins them when they all
+    /// are, moving them in the list while the cursor stays on its message.
+    fn toggle_pin(&mut self) -> Option<Effect> {
+        let ids = self.to_act_on();
+        if ids.is_empty() {
+            return None;
+        }
+        let acting = |m: &Message| ids.contains(&m.id);
+        let pinned = !self.messages.iter().filter(|m| acting(m)).all(|m| m.pinned);
+        let selected = self.selected().map(|m| m.id.clone());
+        for m in self.messages.iter_mut().filter(|m| ids.contains(&m.id)) {
+            m.pinned = pinned;
+        }
+        sort_messages(&mut self.messages);
+        if let Some(index) = selected.and_then(|id| self.messages.iter().position(|m| m.id == id)) {
+            self.selected_message = index;
+        }
+        self.settle_selection();
+        Some(Effect::SetPinned { ids, pinned })
     }
 
     /// The marked messages in list order, or else the selected one.
@@ -1740,6 +1772,61 @@ Dear Charles,"
 
     fn message_ids(ids: &[&str]) -> Vec<MessageId> {
         ids.iter().map(|id| MessageId((*id).to_owned())).collect()
+    }
+
+    #[test]
+    fn p_pins_the_selected_message_to_the_top_and_keeps_it_selected() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.update(Action::SelectNext);
+
+        let effect = key(&mut app, KeyCode::Char('p'));
+
+        assert_eq!(
+            effect,
+            Some(Effect::SetPinned {
+                ids: message_ids(&["m1"]),
+                pinned: true
+            })
+        );
+        assert_eq!(app.messages[0].id.0, "m1");
+        assert!(app.messages[0].pinned);
+        assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
+        assert!(matches!(
+            app.message_rows()[0],
+            MessageRow::Header {
+                group: DateGroup::Pinned,
+                ..
+            }
+        ));
+
+        let effect = key(&mut app, KeyCode::Char('p'));
+
+        assert_eq!(
+            effect,
+            Some(Effect::SetPinned {
+                ids: message_ids(&["m1"]),
+                pinned: false
+            })
+        );
+        assert!(app.messages.iter().all(|m| !m.pinned));
+        assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
+    }
+
+    #[test]
+    fn p_pins_every_marked_message_unless_all_are_pinned() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+        app.messages[0].pinned = true;
+        app.marked = message_ids(&["m0", "m1"]).into_iter().collect();
+
+        let effect = app.update(Action::TogglePin);
+
+        assert_eq!(
+            effect,
+            Some(Effect::SetPinned {
+                ids: message_ids(&["m0", "m1"]),
+                pinned: true
+            })
+        );
     }
 
     #[test]
