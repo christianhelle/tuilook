@@ -94,7 +94,10 @@ otlk
 Run `otlk login` again and sign in with another account. tuilook opens
 every account at once: each one heads its own folders in the folder pane, and
 all of them sync in the background. A message you write is sent from the
-account whose folder you are in, and the compose screen says which.
+account whose folder you are in, and the compose screen says which. To send a
+new message from another account, `Shift-Tab` from `To:` up to `From:` and
+press `←` `→` (or `Space`) to pick it; an untouched signature changes with it.
+A reply or forward is always sent from the account the original is in.
 
 To see which accounts are signed in:
 
