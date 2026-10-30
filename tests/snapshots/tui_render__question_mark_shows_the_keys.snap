@@ -3,8 +3,8 @@ source: tests/tui_render.rs
 expression: terminal.backend().to_string()
 ---
 "┌ Favor┌Keys──────────────────────────────────────────────────────────────────────┐──────┐"
-"│* adds│Tab / Shift-Tab          Next pane / previous pane                        │      │"
-"└──────│Enter                    Open the folder or message, fold a date group    │      │"
+"│* adds│Tab / Shift-Tab          Next pane / previous pane                        │om>   │"
+"└──────│Enter                    Open the folder or message, fold a date group    │ne    │"
 "┌ Unrea│→ ←  l h                 Unfold/fold folder or group; → ← next/prev mail  │      │"
 "│No unr│*                        Add the folder to Favorites or take it out       │      │"
 "└──────│↑ ↓  j k                 Move, or scroll the message                      │      │"

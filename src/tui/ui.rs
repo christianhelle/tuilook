@@ -1047,15 +1047,38 @@ fn found_in(app: &AppState, message: &Message) -> String {
 
 fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
     let block = pane_block(app, Pane::Reader, "Reading");
+    let [gutter, body] = reader_areas(block.inner(area), app);
+    frame.render_widget(block, area);
     let Some(text) = reader_paragraph(app) else {
-        frame.render_widget(block, area);
         return;
     };
-    frame.render_widget(
-        text.block(block)
-            .scroll((app.reader_scroll.try_into().unwrap_or(u16::MAX), 0)),
-        area,
-    );
+    let scroll = (app.reader_scroll.try_into().unwrap_or(u16::MAX), 0);
+    frame.render_widget(reader_numbers(app, body.width).scroll(scroll), gutter);
+    frame.render_widget(text.scroll(scroll), body);
+}
+
+/// Where the line numbers and the text go inside the reading pane's border.
+fn reader_areas(inner: Rect, app: &AppState) -> [Rect; 2] {
+    let lines = app.reader_text().map_or(0, |text| text.len());
+    let numbers = numbers::gutter_width(lines);
+    Layout::horizontal([Constraint::Length(numbers), Constraint::Fill(1)]).areas(inner)
+}
+
+/// The reading pane's line numbers, beside text wrapped to `width`. A
+/// wrapped line is numbered on its first row only.
+fn reader_numbers(app: &AppState, width: u16) -> Paragraph<'static> {
+    let rows = app.reader_rows_at(width);
+    let numbers = numbers::gutter_width(rows.len());
+    let (cursor, _) = app.viewer.cursor();
+    let lines: Vec<Line> = rows
+        .iter()
+        .enumerate()
+        .flat_map(|(index, &rows)| {
+            let label = number_line(index, cursor, numbers);
+            std::iter::once(label).chain(std::iter::repeat_n(Line::raw(""), rows.saturating_sub(1)))
+        })
+        .collect();
+    Paragraph::new(lines)
 }
 
 /// The selected message's headers and body, wrapped to the pane.
@@ -1173,7 +1196,9 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
     };
     let (_, folders) = inner(panes.folders);
     let (_, messages) = inner(panes.messages);
-    let (reader_width, reader) = inner(panes.reader);
+    let (_, reader) = inner(panes.reader);
+    let [_, reader_text] = reader_areas(Block::bordered().inner(panes.reader), app);
+    let reader_width = reader_text.width;
     Viewport {
         folders,
         messages: messages / MESSAGE_ROWS,

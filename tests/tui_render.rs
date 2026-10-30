@@ -194,7 +194,7 @@ fn a_scrolled_reading_pane_starts_further_down() {
 #[test]
 fn viewport_measures_what_each_pane_can_show() {
     let mut app = sample_app();
-    let long_line = "word ".repeat(20); // 100 columns: three rows at 34 wide
+    let long_line = "word ".repeat(20); // 100 columns: four rows at 30 wide
     app.body_loaded(MessageId("m1".to_owned()), format!("Hi\n{long_line}"));
 
     let viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 90, 12), &app);
@@ -205,9 +205,10 @@ fn viewport_measures_what_each_pane_can_show() {
             folders: 3,
             messages: 4,
             reader: 9,
-            // From, Subject, blank, "Hi", then the long line wrapped in three
-            reader_lines: 7,
-            reader_width: 34,
+            // From, Subject, blank, "Hi", then the long line wrapped in four
+            reader_lines: 8,
+            // The line numbers take four of the 34 columns inside the border
+            reader_width: 30,
             compose: 0,
         }
     );
@@ -757,6 +758,35 @@ fn the_focused_reader_shows_its_cursor() {
     terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
     assert!(reversed(&terminal, "Subject:"));
     assert!(!reversed(&terminal, "ubject:"));
+}
+
+#[test]
+fn the_reader_numbers_its_lines_from_the_cursor() {
+    let mut app = sample_app();
+    app.focus = Pane::Reader;
+    press(&mut app, "jj");
+
+    let screen = render(&app);
+    assert!(screen.contains("  2 From: Ada"), "{screen}");
+    assert!(screen.contains("  1 Subject:"), "{screen}");
+    assert!(screen.contains("  1 Notes on the engine"), "{screen}");
+}
+
+#[test]
+fn a_wrapped_line_in_the_reader_is_numbered_once() {
+    let mut app = sample_app();
+    let long = "The engine weaves algebraic patterns as the loom weaves flowers and leaves";
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        format!(
+            "{long}
+Yours, Ada"
+        ),
+    );
+    app.focus = Pane::Reader;
+    press(&mut app, "G");
+
+    insta::assert_snapshot!(render(&app));
 }
 
 #[test]

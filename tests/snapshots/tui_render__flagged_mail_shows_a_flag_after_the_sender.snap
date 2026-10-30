@@ -3,10 +3,10 @@ source: tests/tui_render.rs
 expression: render(&app)
 ---
 "┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"│* adds the selec││  ▾ Older (2)                     ││From: Ada <ada@example.com>       │"
-"└────────────────┘│> Ada                             ││Subject: Analytical engine        │"
-"┌ Unread ────────┐│    Analytical engine             ││                                  │"
-"│No unread mail  ││  Grace ⚑                         ││Notes on the engine               │"
+"│* adds the selec││  ▾ Older (2)                     ││1   From: Ada <ada@example.com>   │"
+"└────────────────┘│> Ada                             ││  1 Subject: Analytical engine    │"
+"┌ Unread ────────┐│    Analytical engine             ││  2                               │"
+"│No unread mail  ││  Grace ⚑                         ││  3 Notes on the engine           │"
 "└────────────────┘│    Compiler draft                ││                                  │"
 "┏ Folders ━━━━━━━┓│                                  ││                                  │"
 "┃>   Inbox (2)   ┃│                                  ││                                  │"

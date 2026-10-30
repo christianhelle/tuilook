@@ -3,10 +3,10 @@ source: tests/tui_render.rs
 expression: render(&two_accounts())
 ---
 "┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"│* adds the selec││  ▾ Older (1)                     ││From: Ada <ada@example.com>       │"
-"└────────────────┘│> Ada                             ││Subject: Analytical engine        │"
-"┌ Unread ────────┐│    Analytical engine             ││                                  │"
-"│▾ me@outlook.com││                                  ││Notes                             │"
+"│* adds the selec││  ▾ Older (1)                     ││1   From: Ada <ada@example.com>   │"
+"└────────────────┘│> Ada                             ││  1 Subject: Analytical engine    │"
+"┌ Unread ────────┐│    Analytical engine             ││  2                               │"
+"│▾ me@outlook.com││                                  ││  3 Notes                         │"
 "└────────────────┘│                                  ││                                  │"
 "┏ Accounts ━━━━━━┓│                                  ││                                  │"
 "┃  ▾ me@outlook.c┃│                                  ││                                  │"

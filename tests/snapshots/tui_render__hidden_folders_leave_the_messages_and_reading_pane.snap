@@ -3,10 +3,10 @@ source: tests/tui_render.rs
 expression: render(&app)
 ---
 "┏ Messages ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓┌ Reading ──────────────────────────────────┐"
-"┃  ▾ Older (2)                              ┃│From: Ada <ada@example.com>                │"
-"┃> Ada                                      ┃│Subject: Analytical engine                 │"
-"┃    Analytical engine                      ┃│                                           │"
-"┃  Grace                                    ┃│Notes on the engine                        │"
+"┃  ▾ Older (2)                              ┃│1   From: Ada <ada@example.com>            │"
+"┃> Ada                                      ┃│  1 Subject: Analytical engine             │"
+"┃    Analytical engine                      ┃│  2                                        │"
+"┃  Grace                                    ┃│  3 Notes on the engine                    │"
 "┃    Compiler draft                         ┃│                                           │"
 "┃                                           ┃│                                           │"
 "┃                                           ┃│                                           │"

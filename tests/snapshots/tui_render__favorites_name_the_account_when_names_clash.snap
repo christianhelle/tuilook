@@ -3,10 +3,10 @@ source: tests/tui_render.rs
 expression: terminal.backend().to_string()
 ---
 "┏ Favorites ━━━━━┓┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
-"┃    Inbox - me@o┃│  ▾ Older (1)                     ││From: Ada <ada@example.com>       │"
-"┃>   Inbox - me@w┃│> Ada                             ││Subject: Analytical engine        │"
-"┃    Sent Items  ┃│    Analytical engine             ││                                  │"
-"┗━━━━━━━━━━━━━━━━┛│                                  ││Notes                             │"
+"┃    Inbox - me@o┃│  ▾ Older (1)                     ││1   From: Ada <ada@example.com>   │"
+"┃>   Inbox - me@w┃│> Ada                             ││  1 Subject: Analytical engine    │"
+"┃    Sent Items  ┃│    Analytical engine             ││  2                               │"
+"┗━━━━━━━━━━━━━━━━┛│                                  ││  3 Notes                         │"
 "┌ Unread ────────┐│                                  ││                                  │"
 "│▾ me@outlook.com││                                  ││                                  │"
 "│    Inbox (2)   ││                                  ││                                  │"

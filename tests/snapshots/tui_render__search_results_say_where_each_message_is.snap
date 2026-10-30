@@ -3,10 +3,10 @@ source: tests/tui_render.rs
 expression: render_tall(&app)
 ---
 "┌ Favorites ─────┐┏ Search: ada (3) ━━━━━━━━━━━━━━━━━┓┌ Reading ─────────────────────────┐"
-"│* adds the selec│┃  ▾ Older (3)                     ┃│From: Ada <ada@example.com>       │"
-"└────────────────┘┃> Ada                             ┃│Subject: Analytical engine        │"
-"┌ Unread ────────┐┃    Inbox, me@outlook.com · Analyt┃│                                  │"
-"│▾ me@outlook.com│┃  Ada                             ┃│Notes                             │"
+"│* adds the selec│┃  ▾ Older (3)                     ┃│1   From: Ada <ada@example.com>   │"
+"└────────────────┘┃> Ada                             ┃│  1 Subject: Analytical engine    │"
+"┌ Unread ────────┐┃    Inbox, me@outlook.com · Analyt┃│  2                               │"
+"│▾ me@outlook.com│┃  Ada                             ┃│  3 Notes                         │"
 "│    Inbox (2)   │┃    Sent Items, me@outlook.com · R┃│                                  │"
 "│▾ me@work.exampl│┃  Ada                             ┃│                                  │"
 "└────────────────┘┃    Inbox, me@work.example · Engin┃│                                  │"
