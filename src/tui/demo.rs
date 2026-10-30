@@ -2,9 +2,14 @@
 
 use std::collections::HashMap;
 
+use std::sync::{Arc, Mutex};
+
 use crate::core::fake::FakeBackend;
-use crate::model::{Body, BodyType, Folder, FolderId, Importance, Message, MessageId, WellKnown};
-use jiff::{SignedDuration, Timestamp};
+use crate::model::{
+    Appointment, AppointmentId, Body, BodyType, Folder, FolderId, Importance, Message, MessageId,
+    WellKnown,
+};
+use jiff::{SignedDuration, Timestamp, ToSpan, Zoned, civil::Time};
 
 /// The demo's newest mail arrived just before this.
 const NOW: &str = "2026-10-24T09:00:00Z";
@@ -28,13 +33,153 @@ type MessageSpec = (
     bool,
 );
 
+/// An appointment: how many days from today, its start as `HH:MM` or
+/// `None` for all day, how many minutes it lasts, its subject, where it is
+/// and who is invited.
+type AppointmentSpec = (
+    i64,
+    Option<&'static str>,
+    i64,
+    &'static str,
+    &'static str,
+    &'static [&'static str],
+);
+
 /// Each demo account's address and the mailbox it has.
 pub fn accounts() -> Vec<(String, FakeBackend)> {
     vec![
-        ("ada@outlook.com".to_owned(), personal()),
-        ("ada@analytical.example".to_owned(), work()),
-        ("ada@university.example".to_owned(), university()),
+        (
+            "ada@outlook.com".to_owned(),
+            with_calendar(personal(), "p", PERSONAL_CALENDAR),
+        ),
+        (
+            "ada@analytical.example".to_owned(),
+            with_calendar(work(), "w", WORK_CALENDAR),
+        ),
+        (
+            "ada@university.example".to_owned(),
+            with_calendar(university(), "u", UNIVERSITY_CALENDAR),
+        ),
     ]
+}
+
+const PERSONAL_CALENDAR: &[AppointmentSpec] = &[
+    (-2, Some("19:00"), 120, "Dinner with Mary", "The Ivy", &[]),
+    (0, Some("18:30"), 60, "Piano lesson", "St John's Wood", &[]),
+    (1, None, 0, "Lisbon trip", "", &[]),
+    (2, Some("10:00"), 30, "Dentist", "Harley Street", &[]),
+    (
+        5,
+        Some("15:00"),
+        180,
+        "Lecture: the engine and music",
+        "Royal Society",
+        &[],
+    ),
+];
+
+const WORK_CALENDAR: &[AppointmentSpec] = &[
+    (
+        -1,
+        Some("09:30"),
+        15,
+        "Standup",
+        "Workshop",
+        &["charles.babbage@example.com"],
+    ),
+    (
+        0,
+        Some("09:30"),
+        15,
+        "Standup",
+        "Workshop",
+        &["charles.babbage@example.com"],
+    ),
+    (
+        0,
+        Some("14:00"),
+        90,
+        "Design review: the store",
+        "Teams",
+        &["charles.babbage@example.com", "mary.somerville@example.com"],
+    ),
+    (
+        1,
+        Some("09:30"),
+        15,
+        "Standup",
+        "Workshop",
+        &["charles.babbage@example.com"],
+    ),
+    (
+        3,
+        Some("11:00"),
+        60,
+        "Quarterly planning",
+        "Board room",
+        &[],
+    ),
+];
+
+const UNIVERSITY_CALENDAR: &[AppointmentSpec] = &[
+    (1, Some("16:00"), 60, "Office hours", "Room 3.14", &[]),
+    (
+        4,
+        Some("10:00"),
+        120,
+        "Seminar: Notes on the engine",
+        "Lecture theatre",
+        &["augustus.de.morgan@example.com"],
+    ),
+    (6, None, 0, "Submissions close", "", &[]),
+];
+
+/// `backend` with `calendar` around today, its ids prefixed by `key` so
+/// that no two accounts share one. The calendar follows the real clock, not
+/// [`NOW`], since the agenda shows the weeks around today.
+fn with_calendar(backend: FakeBackend, key: &str, calendar: &[AppointmentSpec]) -> FakeBackend {
+    let today = Zoned::now().date();
+    let zone = jiff::tz::TimeZone::system();
+    let appointments = calendar
+        .iter()
+        .enumerate()
+        .filter_map(
+            |(index, &(days, start, minutes, subject, location, invited))| {
+                let day = today.checked_add(days.days()).ok()?;
+                let (start, end, all_day) = match start {
+                    Some(start) => {
+                        let start = day
+                            .to_datetime(start.parse::<Time>().ok()?)
+                            .to_zoned(zone.clone())
+                            .ok()?
+                            .timestamp();
+                        (start, start + SignedDuration::from_mins(minutes), false)
+                    }
+                    None => {
+                        let start = day.to_zoned(zone.clone()).ok()?;
+                        let end = start.tomorrow().ok()?;
+                        (start.timestamp(), end.timestamp(), true)
+                    }
+                };
+                Some(Appointment {
+                    id: AppointmentId(format!("{key}-a{index}")),
+                    subject: subject.to_owned(),
+                    start,
+                    end,
+                    all_day,
+                    location: location.to_owned(),
+                    organizer: String::new(),
+                    attendees: invited.iter().map(|a| (*a).to_owned()).collect(),
+                    preview: String::new(),
+                    is_organizer: true,
+                })
+            },
+        )
+        .collect();
+    FakeBackend {
+        appointments: Arc::new(Mutex::new(appointments)),
+        ..backend
+    }
 }
 
 fn personal() -> FakeBackend {
@@ -1054,6 +1199,34 @@ mod tests {
                     messages.insert(message.id.clone()),
                     "{:?} twice",
                     message.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_account_has_appointments_in_the_coming_week() {
+        let now = Timestamp::now();
+        let week = now + SignedDuration::from_hours(7 * 24);
+        for (address, backend) in accounts() {
+            let appointments = backend.appointments.lock().unwrap();
+            let coming = appointments
+                .iter()
+                .filter(|a| a.end > now && a.start < week)
+                .count();
+            assert!(coming >= 2, "{address} has {coming} this week");
+        }
+    }
+
+    #[test]
+    fn no_two_accounts_share_an_appointment_id() {
+        let mut ids = HashSet::new();
+        for (_, backend) in accounts() {
+            for appointment in backend.appointments.lock().unwrap().iter() {
+                assert!(
+                    ids.insert(appointment.id.clone()),
+                    "{:?} twice",
+                    appointment.id
                 );
             }
         }
