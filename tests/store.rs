@@ -452,3 +452,45 @@ fn pinned_messages_come_first_and_stay_pinned_when_synced_again() {
     assert_eq!(store.messages_in(&inbox).unwrap(), [old.clone(), new]);
     assert_eq!(ids(&store.search("subject", 10).unwrap()), ["m1", "m2"]);
 }
+
+#[test]
+fn pinning_a_message_tells_its_folder_and_unpinning_takes_it_back() {
+    let mut store = store_with(&[message("m1", "inbox", "2026-01-01T09:00:00Z")]);
+    let id = MessageId("m1".to_owned());
+    let inbox = FolderId("inbox".to_owned());
+
+    assert_eq!(store.set_pinned(&id, true).unwrap(), Some(inbox.clone()));
+    assert!(store.messages_in(&inbox).unwrap()[0].pinned);
+
+    assert_eq!(store.set_pinned(&id, false).unwrap(), Some(inbox.clone()));
+    assert!(!store.messages_in(&inbox).unwrap()[0].pinned);
+
+    let missing = MessageId("gone".to_owned());
+    assert_eq!(store.set_pinned(&missing, true).unwrap(), None);
+}
+
+#[test]
+fn a_folders_pins_are_exactly_those_synced() {
+    let mut store = store_with(&[
+        pinned(message("m1", "inbox", "2026-01-01T09:00:00Z")),
+        message("m2", "inbox", "2026-02-01T09:00:00Z"),
+        pinned(message("m3", "archive", "2026-03-01T09:00:00Z")),
+    ]);
+    let inbox = FolderId("inbox".to_owned());
+
+    store
+        .set_pinned_in(&inbox, &[MessageId("m2".to_owned())])
+        .unwrap();
+
+    let pins = |folder: &str| -> Vec<String> {
+        let folder = FolderId(folder.to_owned());
+        let messages = store.messages_in(&folder).unwrap();
+        messages
+            .into_iter()
+            .filter(|m| m.pinned)
+            .map(|m| m.id.0)
+            .collect()
+    };
+    assert_eq!(pins("inbox"), ["m2"]);
+    assert_eq!(pins("archive"), ["m3"], "other folders keep their pins");
+}

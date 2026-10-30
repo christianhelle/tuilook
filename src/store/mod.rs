@@ -209,6 +209,37 @@ impl Store {
         Ok(folder.map(FolderId))
     }
 
+    /// Pins or unpins a message. Returns its folder when it is cached.
+    pub fn set_pinned(&mut self, id: &MessageId, pinned: bool) -> Result<Option<FolderId>> {
+        let folder = self
+            .conn
+            .query_row(
+                "UPDATE messages SET pinned = ?2 WHERE id = ?1 RETURNING folder_id",
+                (&id.0, pinned),
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(folder.map(FolderId))
+    }
+
+    /// Pins the messages of `folder` in `pinned` and unpins the rest of it.
+    pub fn set_pinned_in(&mut self, folder: &FolderId, pinned: &[MessageId]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE messages SET pinned = 0 WHERE folder_id = ?1",
+            [&folder.0],
+        )?;
+        {
+            let mut stmt =
+                tx.prepare("UPDATE messages SET pinned = 1 WHERE id = ?1 AND folder_id = ?2")?;
+            for id in pinned {
+                stmt.execute((&id.0, &folder.0))?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn delete_messages(&mut self, ids: &[MessageId]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
