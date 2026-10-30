@@ -17,7 +17,7 @@ expression: terminal.backend().to_string()
 "┃      │Space, Ctrl-A            Mark a message, mark them all (Esc clears)       │      │"
 "┃      │d                        Move marked, selected or folder to Deleted Items │      │"
 "┃      │D                        Delete marked, selected or folder for good       │      │"
-"┃      │m  p                     Move marked or selected mail, pin it on top      │      │"
+"┃      │m  p  F Insert           Move, pin or flag the marked or selected mail    │      │"
 "┃      │a  A  F2                 New subfolder, new top folder, rename folder     │      │"
 "┃      │c  r  R  f               Write a message, reply, reply to all, forward    │      │"
 "┃      │F5  Ctrl-R               Sync every folder now                            │      │"
