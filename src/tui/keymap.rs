@@ -70,6 +70,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::F(2) => Action::RenameFolder,
         KeyCode::Char('m') => Action::Move,
         KeyCode::Char('p') => Action::TogglePin,
+        KeyCode::Char('F') | KeyCode::Insert => Action::ToggleFlag,
         _ => return None,
     };
     Some(action)
@@ -235,6 +236,16 @@ mod tests {
     #[test]
     fn p_pins() {
         assert_eq!(press(KeyCode::Char('p')), Some(Action::TogglePin));
+    }
+
+    #[test]
+    fn shift_f_and_insert_flag() {
+        let shift_f = KeyEvent::new(KeyCode::Char('F'), KeyModifiers::SHIFT);
+        assert_eq!(
+            Keymap::default().action_for(shift_f),
+            Some(Action::ToggleFlag)
+        );
+        assert_eq!(press(KeyCode::Insert), Some(Action::ToggleFlag));
     }
 
     #[test]
