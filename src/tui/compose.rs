@@ -381,6 +381,26 @@ mod tests {
     }
 
     #[test]
+    fn a_reply_or_a_single_sender_skips_from() {
+        let mut reply = Compose::new(reply(), Some(&original())).with_senders(senders(), 0);
+        let mut single =
+            Compose::new(ComposeKind::New, None).with_senders(senders()[..1].to_vec(), 0);
+
+        assert_eq!(reply.from(), Some("me@outlook.com"), "still shown");
+        typing(&mut reply, "⇥");
+        assert_eq!(reply.field, Field::To, "the body's tab skips From");
+        assert_eq!(single.from(), None);
+        single.key(
+            KeyEvent::from(KeyCode::BackTab),
+            10,
+            &mut Register::default(),
+        );
+        assert_eq!(single.field, Field::Body);
+        typing(&mut single, "⇥");
+        assert_eq!(single.field, Field::To);
+    }
+
+    #[test]
     fn tab_and_enter_move_through_the_fields() {
         let mut compose = Compose::new(ComposeKind::New, None);
 
