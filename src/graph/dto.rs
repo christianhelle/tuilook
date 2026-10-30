@@ -101,3 +101,32 @@ pub struct ItemBody {
     #[serde(default)]
     pub content: String,
 }
+
+/// A calendar event, or one occurrence of a recurring series.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub id: String,
+    pub subject: Option<String>,
+    pub start: Option<DateTimeTimeZone>,
+    pub end: Option<DateTimeTimeZone>,
+    pub is_all_day: Option<bool>,
+    pub location: Option<Location>,
+    pub organizer: Option<Recipient>,
+    pub attendees: Option<Vec<Recipient>>,
+    pub body_preview: Option<String>,
+    pub is_organizer: Option<bool>,
+}
+
+/// A wall-clock time without an offset, in the time zone asked for.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DateTimeTimeZone {
+    pub date_time: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Location {
+    pub display_name: Option<String>,
+}

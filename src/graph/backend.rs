@@ -2,10 +2,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::auth::TokenSource;
 use crate::model::{
-    BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
-    MailBackend, Message, MessageChange, MessageId, OlderPage, WellKnown,
+    Appointment, AppointmentId, BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft,
+    Folder, FolderId, Importance, MailBackend, Message, MessageChange, MessageId, OlderPage,
+    WellKnown,
 };
-use jiff::{SignedDuration, Timestamp, Unit};
+use jiff::{SignedDuration, Timestamp, Unit, civil, tz::TimeZone};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use serde_json::json;
@@ -30,6 +31,9 @@ const RENEW_TIMES: [&str; 2] = ["SystemTime 0x0F01", "SystemTime 0x0F02"];
 
 const PAGE_SIZE: (&str, &str) = ("Prefer", "odata.maxpagesize=50");
 
+const EVENT_SELECT: &str =
+    "id,subject,start,end,isAllDay,location,organizer,attendees,bodyPreview,isOrganizer";
+
 /// Messages fetched at a time from past a folder's sync window.
 const OLDER_PAGE: usize = 50;
 
@@ -43,6 +47,9 @@ pub struct GraphBackend<T> {
     /// Well-known folder ids, looked up on the first sync. A folder keeps
     /// its id, so there is no need to ask again every sync.
     well_known: OnceCell<HashMap<String, WellKnown>>,
+    /// Where appointments are shown and written. Graph is asked for times
+    /// in it by name, so it always has one.
+    time_zone: TimeZone,
 }
 
 impl<T: TokenSource> GraphBackend<T> {
@@ -51,6 +58,56 @@ impl<T: TokenSource> GraphBackend<T> {
             client,
             sync_window: SignedDuration::from_hours(90 * 24),
             well_known: OnceCell::new(),
+            time_zone: named(TimeZone::system()),
+        }
+    }
+
+    /// Shows and writes appointments in `time_zone` rather than the
+    /// system's. A zone without an IANA name is taken as UTC.
+    pub fn with_time_zone(mut self, time_zone: TimeZone) -> Self {
+        self.time_zone = named(time_zone);
+        self
+    }
+
+    /// The time zone's IANA name, which Graph takes.
+    fn zone_name(&self) -> &str {
+        self.time_zone.iana_name().unwrap_or("UTC")
+    }
+
+    /// A wall-clock time from Graph, in our time zone, as an instant.
+    fn instant(&self, time: Option<dto::DateTimeTimeZone>) -> Timestamp {
+        time.and_then(|t| t.date_time.parse::<civil::DateTime>().ok())
+            .and_then(|t| t.to_zoned(self.time_zone.clone()).ok())
+            .map_or(Timestamp::UNIX_EPOCH, |t| t.timestamp())
+    }
+
+    fn to_appointment(&self, e: dto::Event) -> Appointment {
+        let organizer = e
+            .organizer
+            .map(|r| {
+                if r.email_address.name.is_empty() {
+                    r.email_address.address
+                } else {
+                    r.email_address.name
+                }
+            })
+            .unwrap_or_default();
+        Appointment {
+            id: AppointmentId(e.id),
+            subject: e.subject.unwrap_or_default(),
+            start: self.instant(e.start),
+            end: self.instant(e.end),
+            all_day: e.is_all_day.unwrap_or(false),
+            location: e.location.and_then(|l| l.display_name).unwrap_or_default(),
+            organizer,
+            attendees: e
+                .attendees
+                .unwrap_or_default()
+                .into_iter()
+                .map(|r| r.email_address.address)
+                .collect(),
+            preview: e.body_preview.unwrap_or_default(),
+            is_organizer: e.is_organizer.unwrap_or(false),
         }
     }
 
@@ -91,12 +148,17 @@ impl<T: TokenSource> GraphBackend<T> {
         Ok(ids)
     }
 
-    /// Follows `@odata.nextLink` until the collection is exhausted.
-    async fn get_all<R: DeserializeOwned>(&self, path: &str) -> Result<Vec<R>, GraphError> {
+    /// Follows `@odata.nextLink` until the collection is exhausted, sending
+    /// `headers` with every page.
+    async fn get_all<R: DeserializeOwned>(
+        &self,
+        path: &str,
+        headers: &[(&str, &str)],
+    ) -> Result<Vec<R>, GraphError> {
         let mut items = Vec::new();
         let mut next = Some(path.to_owned());
         while let Some(url) = next {
-            let page: Page<R> = self.client.get(&url, &[]).await?;
+            let page: Page<R> = self.client.get(&url, headers).await?;
             items.extend(page.value);
             next = page.next_link;
         }
@@ -107,7 +169,7 @@ impl<T: TokenSource> GraphBackend<T> {
 impl<T: TokenSource> MailBackend for GraphBackend<T> {
     async fn list_folders(&self) -> Result<Vec<Folder>, BackendError> {
         let mut graph_folders: Vec<dto::MailFolder> = self
-            .get_all(&format!("/me/mailFolders?$top=100&{FOLDER_SELECT}"))
+            .get_all(&format!("/me/mailFolders?$top=100&{FOLDER_SELECT}"), &[])
             .await?;
         // Breadth-first: append each folder's children as it is reached.
         let mut i = 0;
@@ -117,7 +179,7 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
                     "/me/mailFolders/{}/childFolders?$top=100&{FOLDER_SELECT}",
                     graph_folders[i].id
                 );
-                let children = self.get_all(&path).await?;
+                let children = self.get_all(&path, &[]).await?;
                 graph_folders.extend(children);
             }
             i += 1;
@@ -289,7 +351,7 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             "/me/mailFolders/{}/messages?$select={MESSAGE_SELECT}&$filter=singleValueExtendedProperties/any(ep: ep/id eq '{}' and cast(ep/value, Edm.DateTimeOffset) gt {PINNED_AFTER})",
             folder.0, RENEW_TIMES[1]
         );
-        let messages: Vec<dto::Message> = self.get_all(&path).await?;
+        let messages: Vec<dto::Message> = self.get_all(&path, &[]).await?;
         Ok(messages
             .into_iter()
             .map(|m| Message {
@@ -335,6 +397,29 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
 
     async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
         self.send_draft(draft).await.map_err(sending_error)
+    }
+
+    async fn appointments(
+        &self,
+        from: Timestamp,
+        to: Timestamp,
+    ) -> Result<Vec<Appointment>, BackendError> {
+        let round = |t: Timestamp| {
+            t.round(Unit::Second)
+                .map_err(|e| BackendError::Other(e.to_string()))
+        };
+        let path = format!(
+            "/me/calendarView?startDateTime={}&endDateTime={}&$select={EVENT_SELECT}&$orderby=start/dateTime",
+            round(from)?,
+            round(to)?
+        );
+        let prefer = format!(
+            r#"outlook.timezone="{}", {}"#,
+            self.zone_name(),
+            PAGE_SIZE.1
+        );
+        let events: Vec<dto::Event> = self.get_all(&path, &[("Prefer", &prefer)]).await?;
+        Ok(events.into_iter().map(|e| self.to_appointment(e)).collect())
     }
 }
 
@@ -382,6 +467,15 @@ impl<T: TokenSource> GraphBackend<T> {
             .post_no_content(&format!("{path}/send"), None)
             .await?;
         Ok(())
+    }
+}
+
+/// `time_zone` if Graph can be told its name, or else UTC.
+fn named(time_zone: TimeZone) -> TimeZone {
+    if time_zone.iana_name().is_some() {
+        time_zone
+    } else {
+        TimeZone::UTC
     }
 }
 

@@ -2,7 +2,7 @@ use std::future::Future;
 
 use jiff::Timestamp;
 
-use crate::model::{Draft, Folder, FolderId, Message, MessageChange, MessageId};
+use crate::model::{Appointment, Draft, Folder, FolderId, Message, MessageChange, MessageId};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BackendError {
@@ -49,7 +49,8 @@ pub struct Body {
     pub content: String,
 }
 
-/// A mail service. Graph is the only real implementation; tests use a fake.
+/// An Outlook account's mail and calendar. Graph is the only real
+/// implementation; tests use a fake.
 pub trait MailBackend {
     fn list_folders(&self) -> impl Future<Output = Result<Vec<Folder>, BackendError>> + Send;
 
@@ -138,4 +139,12 @@ pub trait MailBackend {
 
     /// Sends a message, keeping a copy in Sent Items.
     fn send(&self, draft: &Draft) -> impl Future<Output = Result<(), BackendError>> + Send;
+
+    /// The appointments that overlap `from` to `to`, a recurring series
+    /// once for each occurrence, soonest first.
+    fn appointments(
+        &self,
+        from: Timestamp,
+        to: Timestamp,
+    ) -> impl Future<Output = Result<Vec<Appointment>, BackendError>> + Send;
 }

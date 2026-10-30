@@ -8,8 +8,8 @@ use std::{
 use jiff::Timestamp;
 
 use crate::model::{
-    BackendError, Body, DeltaPage, Draft, Folder, FolderId, MailBackend, Message, MessageId,
-    OlderPage,
+    Appointment, BackendError, Body, DeltaPage, Draft, Folder, FolderId, MailBackend, Message,
+    MessageId, OlderPage,
 };
 
 /// Older messages the fake hands out at a time.
@@ -49,6 +49,10 @@ pub struct FakeBackend {
     pub sent: Arc<Mutex<Vec<Draft>>>,
     /// Why listing folders fails, if it does.
     pub folders_error: Option<BackendError>,
+    /// The calendar, as the server has it.
+    pub appointments: Arc<Mutex<Vec<Appointment>>>,
+    /// Why every calendar call fails, if it does.
+    pub calendar_error: Option<BackendError>,
 }
 
 impl MailBackend for FakeBackend {
@@ -238,5 +242,23 @@ impl MailBackend for FakeBackend {
         let mut sent = self.sent.lock().expect("no test panics holding it");
         sent.push(draft.clone());
         Ok(())
+    }
+
+    async fn appointments(
+        &self,
+        from: Timestamp,
+        to: Timestamp,
+    ) -> Result<Vec<Appointment>, BackendError> {
+        if let Some(error) = &self.calendar_error {
+            return Err(error.clone());
+        }
+        let appointments = self.appointments.lock().expect("no test panics holding it");
+        let mut overlapping: Vec<Appointment> = appointments
+            .iter()
+            .filter(|a| a.start < to && a.end > from)
+            .cloned()
+            .collect();
+        overlapping.sort_by_key(|a| a.start);
+        Ok(overlapping)
     }
 }
