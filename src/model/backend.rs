@@ -2,7 +2,9 @@ use std::future::Future;
 
 use jiff::Timestamp;
 
-use crate::model::{Appointment, Draft, Folder, FolderId, Message, MessageChange, MessageId};
+use crate::model::{
+    Appointment, AppointmentDraft, Draft, Folder, FolderId, Message, MessageChange, MessageId,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BackendError {
@@ -147,4 +149,10 @@ pub trait MailBackend {
         from: Timestamp,
         to: Timestamp,
     ) -> impl Future<Output = Result<Vec<Appointment>, BackendError>> + Send;
+
+    /// Puts a new appointment in the calendar, inviting its attendees.
+    fn create_appointment(
+        &self,
+        draft: &AppointmentDraft,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
 }

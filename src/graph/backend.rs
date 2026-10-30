@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::auth::TokenSource;
 use crate::model::{
-    Appointment, AppointmentId, BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft,
-    Folder, FolderId, Importance, MailBackend, Message, MessageChange, MessageId, OlderPage,
-    WellKnown,
+    Appointment, AppointmentDraft, AppointmentId, BackendError, Body, BodyType, ComposeKind,
+    DeltaPage, Draft, Folder, FolderId, Importance, MailBackend, Message, MessageChange, MessageId,
+    OlderPage, WellKnown,
 };
 use jiff::{SignedDuration, Timestamp, Unit, civil, tz::TimeZone};
 use reqwest::StatusCode;
@@ -79,6 +79,33 @@ impl<T: TokenSource> GraphBackend<T> {
         time.and_then(|t| t.date_time.parse::<civil::DateTime>().ok())
             .and_then(|t| t.to_zoned(self.time_zone.clone()).ok())
             .map_or(Timestamp::UNIX_EPOCH, |t| t.timestamp())
+    }
+
+    /// A time as Graph takes it: the wall clock in our time zone, by name.
+    fn wall_clock(&self, time: Timestamp) -> serde_json::Value {
+        let local = time.to_zoned(self.time_zone.clone());
+        json!({
+            "dateTime": local.strftime("%Y-%m-%dT%H:%M:%S").to_string(),
+            "timeZone": self.zone_name(),
+        })
+    }
+
+    /// The appointment as a Graph event.
+    fn event(&self, draft: &AppointmentDraft) -> serde_json::Value {
+        let attendees: Vec<_> = draft
+            .attendees
+            .iter()
+            .map(|address| json!({ "type": "required", "emailAddress": { "address": address } }))
+            .collect();
+        json!({
+            "subject": draft.subject,
+            "body": { "contentType": "Text", "content": draft.notes },
+            "start": self.wall_clock(draft.start),
+            "end": self.wall_clock(draft.end),
+            "isAllDay": draft.all_day,
+            "location": { "displayName": draft.location },
+            "attendees": attendees,
+        })
     }
 
     fn to_appointment(&self, e: dto::Event) -> Appointment {
@@ -420,6 +447,13 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         );
         let events: Vec<dto::Event> = self.get_all(&path, &[("Prefer", &prefer)]).await?;
         Ok(events.into_iter().map(|e| self.to_appointment(e)).collect())
+    }
+
+    async fn create_appointment(&self, draft: &AppointmentDraft) -> Result<(), BackendError> {
+        self.client
+            .post::<dto::Id>("/me/events", &self.event(draft))
+            .await?;
+        Ok(())
     }
 }
 

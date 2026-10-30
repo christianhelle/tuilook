@@ -8,8 +8,8 @@ use std::{
 use jiff::Timestamp;
 
 use crate::model::{
-    Appointment, BackendError, Body, DeltaPage, Draft, Folder, FolderId, MailBackend, Message,
-    MessageId, OlderPage,
+    Appointment, AppointmentDraft, AppointmentId, BackendError, Body, DeltaPage, Draft, Folder,
+    FolderId, MailBackend, Message, MessageId, OlderPage,
 };
 
 /// Older messages the fake hands out at a time.
@@ -260,5 +260,31 @@ impl MailBackend for FakeBackend {
             .collect();
         overlapping.sort_by_key(|a| a.start);
         Ok(overlapping)
+    }
+
+    async fn create_appointment(&self, draft: &AppointmentDraft) -> Result<(), BackendError> {
+        if let Some(error) = &self.calendar_error {
+            return Err(error.clone());
+        }
+        let mut appointments = self.appointments.lock().expect("no test panics holding it");
+        let id = AppointmentId(format!("new-{}", appointments.len() + 1));
+        appointments.push(appointment(id, draft));
+        Ok(())
+    }
+}
+
+/// What the server makes of `draft`, saved by its organizer.
+fn appointment(id: AppointmentId, draft: &AppointmentDraft) -> Appointment {
+    Appointment {
+        id,
+        subject: draft.subject.clone(),
+        start: draft.start,
+        end: draft.end,
+        all_day: draft.all_day,
+        location: draft.location.clone(),
+        organizer: String::new(),
+        attendees: draft.attendees.clone(),
+        preview: draft.notes.clone(),
+        is_organizer: true,
     }
 }

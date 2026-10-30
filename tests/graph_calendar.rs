@@ -5,10 +5,10 @@ use std::sync::Arc;
 use jiff::{Timestamp, tz::TimeZone};
 use serde_json::{Value, json};
 use tuilook::graph::GraphBackend;
-use tuilook::model::{Appointment, AppointmentId, MailBackend};
+use tuilook::model::{Appointment, AppointmentDraft, AppointmentId, MailBackend};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{headers, method, path, query_param},
+    matchers::{body_json, headers, method, path, query_param},
 };
 
 fn backend(server: &MockServer) -> GraphBackend<Arc<support::FakeTokens>> {
@@ -134,4 +134,45 @@ async fn an_all_day_appointment_runs_from_local_midnight_to_midnight() {
     assert!(appointments[0].all_day);
     assert_eq!(appointments[0].start, at("2026-11-04T23:00:00Z"));
     assert_eq!(appointments[0].end, at("2026-11-05T23:00:00Z"));
+}
+
+fn draft() -> AppointmentDraft {
+    AppointmentDraft {
+        subject: "Planning".to_owned(),
+        start: at("2026-11-02T08:30:00Z"),
+        end: at("2026-11-02T09:30:00Z"),
+        all_day: false,
+        location: "Room 4".to_owned(),
+        attendees: vec!["grace@example.com".to_owned()],
+        notes: "Bring the numbers".to_owned(),
+    }
+}
+
+/// How Graph is sent `draft()`, in Copenhagen time.
+fn draft_json() -> Value {
+    json!({
+        "subject": "Planning",
+        "body": { "contentType": "Text", "content": "Bring the numbers" },
+        "start": { "dateTime": "2026-11-02T09:30:00", "timeZone": "Europe/Copenhagen" },
+        "end": { "dateTime": "2026-11-02T10:30:00", "timeZone": "Europe/Copenhagen" },
+        "isAllDay": false,
+        "location": { "displayName": "Room 4" },
+        "attendees": [
+            { "type": "required", "emailAddress": { "address": "grace@example.com" } },
+        ],
+    })
+}
+
+#[tokio::test]
+async fn a_new_appointment_is_written_in_local_time() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/events"))
+        .and(body_json(draft_json()))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "id": "e9" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server).create_appointment(&draft()).await.unwrap();
 }
