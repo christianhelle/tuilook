@@ -17,4 +17,4 @@ expression: render_tall(&app)
 "┃                                                                                        ┃"
 "┃                                                                                        ┃"
 "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-" Ctrl-S send · Tab next field · Esc close · ? help                                        "
+" ← → change sender · Ctrl-S send · Tab next field · Esc close · ? help                    "

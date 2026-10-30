@@ -438,6 +438,9 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
             Span::styled(format!(" {error}"), Style::new().fg(Color::Red))
         }
         Some(Status::Info(info) | Status::Busy(info)) => Span::raw(format!(" {info}")),
+        None if app.compose.as_ref().is_some_and(|c| c.field == Field::From) => {
+            Span::raw(" ← → change sender · Ctrl-S send · Tab next field · Esc close · ? help")
+        }
         None if app.compose.is_some() => {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
