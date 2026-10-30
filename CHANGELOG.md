@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Calendar: `C` shows the calendar of the account you are looking at, day by
+  day from a week ago to three months ahead. It opens on today and works
+  offline from its cache. `Enter` shows an appointment in full. `c` writes a
+  new one, `e` changes one and `d` deletes one, inviting or telling anyone
+  invited. The calendar syncs with your mail. Sign in again with `otlk login`
+  to allow calendar access.
+
 ## [0.1.2] - 2026-10-30
 
 ### Added
