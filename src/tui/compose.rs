@@ -236,9 +236,16 @@ impl Compose {
             KeyCode::Esc => return self.close(),
             KeyCode::Enter | KeyCode::Down => self.next_field(),
             KeyCode::Up => self.prev_field(),
+            KeyCode::Right | KeyCode::Char(' ') => self.switch_sender(1),
+            KeyCode::Left => self.switch_sender(self.senders.len() - 1),
             _ => {}
         }
         Request::None
+    }
+
+    /// Sends from the account `step` further round the senders.
+    fn switch_sender(&mut self, step: usize) {
+        self.account = (self.account + step) % self.senders.len();
     }
 
     fn close(&self) -> Request {
@@ -303,7 +310,11 @@ mod tests {
         ComposeKind::Reply(MessageId("m1".to_owned()))
     }
 
-    /// Types `keys`, where ⎋ is Esc, ⇥ is Tab and ⏎ is Enter.
+    fn press(compose: &mut Compose, code: KeyCode) -> Request {
+        compose.key(KeyEvent::from(code), 10, &mut Register::default())
+    }
+
+    /// Types `keys`, where ⎋ is Esc, ⇥ is Tab, ⏎ is Enter and ← → are arrows.
     fn typing(compose: &mut Compose, keys: &str) -> Request {
         let mut last = Request::None;
         for c in keys.chars() {
@@ -311,6 +322,8 @@ mod tests {
                 '⎋' => KeyCode::Esc,
                 '⇥' => KeyCode::Tab,
                 '⏎' => KeyCode::Enter,
+                '←' => KeyCode::Left,
+                '→' => KeyCode::Right,
                 c => KeyCode::Char(c),
             };
             last = compose.key(KeyEvent::from(code), 10, &mut Register::default());
@@ -398,6 +411,20 @@ mod tests {
         assert_eq!(single.field, Field::Body);
         typing(&mut single, "⇥");
         assert_eq!(single.field, Field::To);
+    }
+
+    #[test]
+    fn arrows_and_space_in_from_change_the_sender_round_the_accounts() {
+        let mut senders = senders();
+        senders.push(("me@home.example".to_owned(), String::new()));
+        let mut compose = Compose::new(ComposeKind::New, None).with_senders(senders, 0);
+        press(&mut compose, KeyCode::BackTab);
+
+        typing(&mut compose, "→ →");
+        assert_eq!(compose.account, 0, "wrapped past the last");
+        typing(&mut compose, "←");
+        assert_eq!(compose.from(), Some("me@home.example"));
+        assert_eq!(compose.account, 2);
     }
 
     #[test]
