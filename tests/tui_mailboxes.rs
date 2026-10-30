@@ -8,7 +8,8 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tokio::sync::mpsc;
 use tuilook::core::{Command, calendar_window};
 use tuilook::model::{
-    Action, Appointment, AppointmentId, Event, Folder, FolderId, Importance, Message, MessageId,
+    Action, Appointment, AppointmentDraft, AppointmentId, Event, Folder, FolderId, Importance,
+    Message, MessageId,
 };
 use tuilook::store::Store;
 use tuilook::tui::{
@@ -306,4 +307,86 @@ fn a_synced_calendar_shows_in_the_open_agenda() {
         .unwrap();
 
     assert_eq!(app.agenda.as_ref().unwrap().appointments(), [soon]);
+}
+
+fn draft(subject: &str) -> AppointmentDraft {
+    let start = jiff::Timestamp::UNIX_EPOCH;
+    AppointmentDraft {
+        subject: subject.to_owned(),
+        start,
+        end: start,
+        all_day: false,
+        location: String::new(),
+        attendees: vec![],
+        notes: None,
+    }
+}
+
+#[test]
+fn saving_or_deleting_an_appointment_goes_to_the_agendas_account() {
+    let mut s = setup(&[&[], &[]]);
+    let new = Effect::SaveAppointment {
+        account: 1,
+        id: None,
+        draft: draft("New"),
+    };
+    let changed = Effect::SaveAppointment {
+        account: 1,
+        id: Some(AppointmentId("a1".to_owned())),
+        draft: draft("Changed"),
+    };
+    let deleted = Effect::DeleteAppointment {
+        account: 1,
+        id: AppointmentId("a2".to_owned()),
+    };
+
+    for effect in [new, changed, deleted] {
+        s.mailboxes.apply(&mut s.app, Some(effect)).unwrap();
+    }
+
+    assert!(sent(&mut s.commands[0]).is_empty());
+    assert_eq!(
+        sent(&mut s.commands[1]),
+        [
+            Command::CreateAppointment(draft("New")),
+            Command::UpdateAppointment {
+                id: AppointmentId("a1".to_owned()),
+                draft: draft("Changed"),
+            },
+            Command::DeleteAppointment(AppointmentId("a2".to_owned())),
+        ]
+    );
+}
+
+#[test]
+fn an_error_lets_the_appointment_being_saved_be_saved_again() {
+    let mut s = setup(&[&[]]);
+    let effect = s.app.on_key(shift_c(), &mut Keymap::default());
+    s.mailboxes.apply(&mut s.app, effect).unwrap();
+    s.app
+        .on_key(KeyEvent::from(KeyCode::Char('c')), &mut Keymap::default());
+    for c in "Planning".chars() {
+        s.app
+            .on_key(KeyEvent::from(KeyCode::Char(c)), &mut Keymap::default());
+    }
+    let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+    let effect = s.app.on_key(ctrl_s, &mut Keymap::default());
+    s.mailboxes.apply(&mut s.app, effect).unwrap();
+    assert!(s.app.appointment.as_ref().unwrap().saving);
+
+    s.mailboxes
+        .on_event(
+            &mut s.app,
+            0,
+            Event::Error("could not save the appointment: offline".to_owned()),
+        )
+        .unwrap();
+
+    assert!(!s.app.appointment.as_ref().unwrap().saving);
+    assert_eq!(
+        s.app.status,
+        Some(Status::Error(
+            "could not save the appointment: offline".to_owned()
+        ))
+    );
 }

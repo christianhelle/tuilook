@@ -122,9 +122,13 @@ impl Mailboxes {
                 None
             }
             Event::CalendarSynced => app.calendar_synced(account),
-            // Saving and deleting appointments comes next.
-            Event::AppointmentSaved | Event::AppointmentDeleted(_) => None,
+            Event::AppointmentSaved => {
+                app.appointment_saved();
+                None
+            }
+            Event::AppointmentDeleted(_) => app.appointment_deleted(account),
             Event::Error(error) => {
+                app.appointment_not_saved();
                 match app.accounts.get(account).filter(|_| app.accounts.len() > 1) {
                     Some(address) => app.show_error(format!("{address}: {error}")),
                     None => app.show_error(error),
@@ -229,6 +233,18 @@ impl Mailboxes {
                     if sync {
                         commands.blocking_send(Command::SyncCalendar)?;
                     }
+                    None
+                }
+                Effect::SaveAppointment { id, draft, .. } => {
+                    let save = match id {
+                        Some(id) => Command::UpdateAppointment { id, draft },
+                        None => Command::CreateAppointment(draft),
+                    };
+                    commands.blocking_send(save)?;
+                    None
+                }
+                Effect::DeleteAppointment { id, .. } => {
+                    commands.blocking_send(Command::DeleteAppointment(id))?;
                     None
                 }
                 Effect::SyncCalendar(_) => {

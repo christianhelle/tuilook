@@ -215,6 +215,14 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
             "Close the signature and lose your changes?",
         ),
         Confirm::SendAnyway { sent_lately, .. } => draw_confirm_burst(frame, *sent_lately),
+        Confirm::DeleteAppointment { subject, .. } => {
+            draw_confirm_delete(frame, &shown(subject), false);
+        }
+        Confirm::DiscardAppointment => draw_confirm_discard(
+            frame,
+            "Discard appointment",
+            "Close the appointment and lose your changes?",
+        ),
     }
 }
 

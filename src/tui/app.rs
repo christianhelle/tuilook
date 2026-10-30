@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::model::{
-    Action, ComposeKind, Draft, Folder, FolderId, Message, MessageId, sort_messages,
+    Action, AppointmentDraft, AppointmentId, ComposeKind, Draft, Folder, FolderId, Message,
+    MessageId, sort_messages,
 };
 use jiff::{Timestamp, Zoned};
 use ratatui::{
@@ -14,6 +15,7 @@ use ratatui::{
 
 use crate::tui::{
     agenda::Agenda,
+    appointment_form::AppointmentForm,
     compose::{Compose, Request},
     dialog::Dialog,
     folder_edit,
@@ -100,6 +102,17 @@ pub enum Effect {
     },
     /// Sync `account`'s calendar now.
     SyncCalendar(usize),
+    /// Save an appointment in `account`'s calendar: a new one, or a change
+    /// to the one with this id.
+    SaveAppointment {
+        account: usize,
+        id: Option<AppointmentId>,
+        draft: AppointmentDraft,
+    },
+    DeleteAppointment {
+        account: usize,
+        id: AppointmentId,
+    },
 }
 
 /// A question the user must answer before anything else happens.
@@ -121,6 +134,14 @@ pub enum Confirm {
     SendAnyway { draft: Draft, sent_lately: usize },
     /// Close the signature being written, losing the changes.
     DiscardSignature,
+    /// Delete an appointment of `account`'s, cancelling it for attendees.
+    DeleteAppointment {
+        account: usize,
+        id: AppointmentId,
+        subject: String,
+    },
+    /// Close the appointment being written, losing the changes.
+    DiscardAppointment,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -287,6 +308,9 @@ pub struct AppState {
     pub clock: Option<Zoned>,
     /// An account's calendar, which takes over the screen.
     pub agenda: Option<Agenda>,
+    /// An appointment being written or changed, which takes over the
+    /// agenda.
+    pub appointment: Option<AppointmentForm>,
 }
 
 impl AppState {
@@ -432,6 +456,9 @@ impl AppState {
                 signature::Request::Help => self.dialog = Some(Dialog::Help),
             }
             return None;
+        }
+        if self.appointment.is_some() {
+            return self.appointment_key(key);
         }
         if self.agenda.is_some() {
             return self.agenda_key(key);
@@ -749,6 +776,8 @@ impl AppState {
             | Effect::RenameFolder { account, .. }
             | Effect::Move { account, .. }
             | Effect::LoadAgenda { account, .. }
+            | Effect::SaveAppointment { account, .. }
+            | Effect::DeleteAppointment { account, .. }
             | Effect::SyncCalendar(account) => *account,
         }
     }
@@ -971,6 +1000,18 @@ impl AppState {
             }
             Confirm::DiscardSignature => {
                 self.signature = None;
+                None
+            }
+            Confirm::DeleteAppointment {
+                account,
+                id,
+                subject,
+            } => {
+                self.show_busy(format!("Deleting {subject}…"));
+                Some(Effect::DeleteAppointment { account, id })
+            }
+            Confirm::DiscardAppointment => {
+                self.appointment = None;
                 None
             }
             Confirm::SendAnyway { draft, .. } => {

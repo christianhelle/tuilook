@@ -5,7 +5,8 @@ use crate::model::Appointment;
 
 use crate::tui::{
     agenda::{self, Agenda},
-    app::{AppState, Effect},
+    app::{AppState, Confirm, Effect},
+    appointment_form::{self, AppointmentForm},
     dialog::Dialog,
 };
 use ratatui::crossterm::event::KeyEvent;
@@ -41,10 +42,69 @@ impl AppState {
                 self.show_busy("Syncing the calendar…");
                 return Some(Effect::SyncCalendar(account));
             }
-            // Writing and changing appointments comes next.
-            agenda::Request::New | agenda::Request::Edit(_) | agenda::Request::Delete(_) => {}
+            agenda::Request::New => {
+                let today = agenda.today();
+                let day = agenda
+                    .selected()
+                    .map(|a| agenda.day_of(a))
+                    .filter(|day| *day >= today)
+                    .unwrap_or(today);
+                let form = AppointmentForm::new(day, agenda.time_zone().clone());
+                self.appointment = Some(form);
+            }
+            agenda::Request::Edit(appointment) => {
+                let form = AppointmentForm::editing(&appointment, agenda.time_zone().clone());
+                self.appointment = Some(form);
+            }
+            agenda::Request::Delete(appointment) => {
+                self.dialog = Some(Dialog::Confirm(Confirm::DeleteAppointment {
+                    account,
+                    id: appointment.id,
+                    subject: appointment.subject,
+                }));
+            }
         }
         None
+    }
+
+    /// A key for the appointment being written or changed.
+    pub(crate) fn appointment_key(&mut self, key: KeyEvent) -> Option<Effect> {
+        let form = self.appointment.as_mut()?;
+        let account = self.agenda.as_ref().map_or(0, |a| a.account);
+        match form.key(key, self.viewport.compose, &mut self.register) {
+            appointment_form::Request::None => {}
+            appointment_form::Request::Save { id, draft } => {
+                self.show_busy("Saving…");
+                return Some(Effect::SaveAppointment { account, id, draft });
+            }
+            appointment_form::Request::Close => self.appointment = None,
+            appointment_form::Request::ConfirmDiscard => {
+                self.dialog = Some(Dialog::Confirm(Confirm::DiscardAppointment));
+            }
+            appointment_form::Request::Help => self.dialog = Some(Dialog::Help),
+            appointment_form::Request::Invalid(why) => self.show_error(why),
+        }
+        None
+    }
+
+    /// Closes the appointment core saved, back to the agenda.
+    pub fn appointment_saved(&mut self) {
+        self.appointment = None;
+        self.show_info("Saved");
+    }
+
+    /// Lets the appointment being saved be saved again: core could not.
+    pub fn appointment_not_saved(&mut self) {
+        if let Some(form) = &mut self.appointment {
+            form.saving = false;
+        }
+    }
+
+    /// An appointment of `account` was deleted: its agenda shows the
+    /// calendar without it.
+    pub fn appointment_deleted(&mut self, account: usize) -> Option<Effect> {
+        self.show_info("Deleted");
+        self.calendar_synced(account)
     }
 
     /// Shows `appointments`, `account`'s from the cache, if its agenda is
@@ -65,5 +125,176 @@ impl AppState {
                 account,
                 sync: false,
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use jiff::{SignedDuration, Timestamp, tz::TimeZone};
+    use ratatui::crossterm::event::{KeyCode, KeyModifiers};
+
+    use crate::model::{Action, AppointmentId};
+    use crate::tui::{
+        app::{Confirm, Status},
+        appointment_form::Field,
+        keymap::Keymap,
+    };
+
+    use super::*;
+
+    fn at(time: &str) -> Timestamp {
+        time.parse().unwrap()
+    }
+
+    fn appointment(id: &str, start: &str) -> Appointment {
+        Appointment {
+            id: AppointmentId(id.to_owned()),
+            subject: id.to_owned(),
+            start: at(start),
+            end: at(start) + SignedDuration::from_hours(1),
+            all_day: false,
+            location: String::new(),
+            organizer: String::new(),
+            attendees: vec![],
+            preview: String::new(),
+            is_organizer: true,
+        }
+    }
+
+    /// The agenda open on 2 November 2026 in UTC, on tomorrow's appointment.
+    fn in_agenda() -> AppState {
+        let mut app = AppState {
+            accounts: vec!["me@outlook.com".to_owned()],
+            clock: Some(at("2026-11-02T08:00:00Z").to_zoned(TimeZone::UTC)),
+            ..Default::default()
+        };
+        app.update(Action::Calendar);
+        app.appointments_loaded(0, vec![appointment("tomorrow", "2026-11-03T09:00:00Z")]);
+        app
+    }
+
+    fn press(app: &mut AppState, code: KeyCode) -> Option<Effect> {
+        app.on_key(KeyEvent::from(code), &mut Keymap::default())
+    }
+
+    fn typing(app: &mut AppState, text: &str) {
+        for c in text.chars() {
+            press(app, KeyCode::Char(c));
+        }
+    }
+
+    fn ctrl_s(app: &mut AppState) -> Option<Effect> {
+        let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        app.on_key(ctrl_s, &mut Keymap::default())
+    }
+
+    #[test]
+    fn c_writes_a_new_appointment_on_the_selected_day() {
+        let mut app = in_agenda();
+
+        press(&mut app, KeyCode::Char('c'));
+
+        let form = app.appointment.as_ref().unwrap();
+        assert_eq!(form.editing, None);
+        assert_eq!(form.date.text(), "2026-11-03");
+        assert_eq!(form.field, Field::Subject);
+    }
+
+    #[test]
+    fn saving_the_new_appointment_asks_core_to_save_it_in_the_agendas_account() {
+        let mut app = in_agenda();
+        press(&mut app, KeyCode::Char('c'));
+        typing(&mut app, "Planning");
+
+        let Some(Effect::SaveAppointment { account, id, draft }) = ctrl_s(&mut app) else {
+            panic!("saving asks core to save");
+        };
+
+        assert_eq!((account, id), (0, None));
+        assert_eq!(draft.subject, "Planning");
+        assert_eq!(draft.start, at("2026-11-03T09:00:00Z"));
+        assert_eq!(app.status, Some(Status::Busy("Saving…".to_owned())));
+    }
+
+    #[test]
+    fn e_changes_the_selected_appointment() {
+        let mut app = in_agenda();
+
+        press(&mut app, KeyCode::Char('e'));
+
+        let form = app.appointment.as_ref().unwrap();
+        assert_eq!(form.editing, Some(AppointmentId("tomorrow".to_owned())));
+        assert_eq!(form.subject.text(), "tomorrow");
+    }
+
+    #[test]
+    fn a_saved_appointment_closes_its_form_back_to_the_agenda() {
+        let mut app = in_agenda();
+        press(&mut app, KeyCode::Char('e'));
+        ctrl_s(&mut app);
+
+        app.appointment_saved();
+
+        assert!(app.appointment.is_none());
+        assert!(app.agenda.is_some());
+        assert_eq!(app.status, Some(Status::Info("Saved".to_owned())));
+    }
+
+    #[test]
+    fn an_appointment_that_failed_to_save_can_be_saved_again() {
+        let mut app = in_agenda();
+        press(&mut app, KeyCode::Char('e'));
+        ctrl_s(&mut app);
+
+        app.appointment_not_saved();
+
+        assert!(!app.appointment.as_ref().unwrap().saving);
+    }
+
+    #[test]
+    fn closing_a_changed_appointment_asks_first() {
+        let mut app = in_agenda();
+        press(&mut app, KeyCode::Char('c'));
+        typing(&mut app, "x");
+
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.confirm(), Some(&Confirm::DiscardAppointment));
+        press(&mut app, KeyCode::Char('y'));
+
+        assert!(app.appointment.is_none());
+        assert!(app.agenda.is_some());
+    }
+
+    #[test]
+    fn d_asks_before_deleting_the_selected_appointment() {
+        let mut app = in_agenda();
+
+        press(&mut app, KeyCode::Char('d'));
+        assert!(matches!(
+            app.confirm(),
+            Some(Confirm::DeleteAppointment { .. })
+        ));
+
+        assert_eq!(
+            press(&mut app, KeyCode::Char('y')),
+            Some(Effect::DeleteAppointment {
+                account: 0,
+                id: AppointmentId("tomorrow".to_owned()),
+            })
+        );
+    }
+
+    #[test]
+    fn a_deleted_appointment_shows_the_agenda_again() {
+        let mut app = in_agenda();
+
+        assert_eq!(
+            app.appointment_deleted(0),
+            Some(Effect::LoadAgenda {
+                account: 0,
+                sync: false,
+            })
+        );
+        assert_eq!(app.status, Some(Status::Info("Deleted".to_owned())));
     }
 }
