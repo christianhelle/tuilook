@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Changing the sender: with several accounts, `Shift-Tab` from `To:` reaches
+  `From:` on a new message, where `←` `→` (or `Space`) pick the account it is
+  sent from. A signature still at the end of the message changes with it.
 - Line numbers in the reading pane and in the body of a message or signature
   being written, as Vim's hybrid line numbers: the cursor's line shows its
   number and the others how far they are from it, to read counts such as `5j`
