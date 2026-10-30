@@ -286,6 +286,7 @@ impl MailBackend for FakeBackend {
             .find(|a| &a.id == id)
             .ok_or_else(|| BackendError::Other(format!("no appointment {}", id.0)))?;
         *existing = Appointment {
+            preview: draft.notes.clone().unwrap_or(existing.preview.clone()),
             organizer: existing.organizer.clone(),
             is_organizer: existing.is_organizer,
             ..appointment(id.clone(), draft)
@@ -314,7 +315,7 @@ fn appointment(id: AppointmentId, draft: &AppointmentDraft) -> Appointment {
         location: draft.location.clone(),
         organizer: String::new(),
         attendees: draft.attendees.clone(),
-        preview: draft.notes.clone(),
+        preview: draft.notes.clone().unwrap_or_default(),
         is_organizer: true,
     }
 }

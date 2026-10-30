@@ -97,15 +97,18 @@ impl<T: TokenSource> GraphBackend<T> {
             .iter()
             .map(|address| json!({ "type": "required", "emailAddress": { "address": address } }))
             .collect();
-        json!({
+        let mut event = json!({
             "subject": draft.subject,
-            "body": { "contentType": "Text", "content": draft.notes },
             "start": self.wall_clock(draft.start),
             "end": self.wall_clock(draft.end),
             "isAllDay": draft.all_day,
             "location": { "displayName": draft.location },
             "attendees": attendees,
-        })
+        });
+        if let Some(notes) = &draft.notes {
+            event["body"] = json!({ "contentType": "Text", "content": notes });
+        }
+        event
     }
 
     fn to_appointment(&self, e: dto::Event) -> Appointment {

@@ -719,7 +719,7 @@ fn appointment_draft(subject: &str, start: Timestamp) -> AppointmentDraft {
         all_day: false,
         location: String::new(),
         attendees: vec![],
-        notes: String::new(),
+        notes: None,
     }
 }
 

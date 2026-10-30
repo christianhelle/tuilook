@@ -33,8 +33,8 @@ pub struct AppointmentDraft {
     pub location: String,
     /// The addresses to invite.
     pub attendees: Vec<String>,
-    /// Plain text.
-    pub notes: String,
+    /// Plain text, or `None` to leave the notes as they are.
+    pub notes: Option<String>,
 }
 
 impl AppointmentDraft {
@@ -62,7 +62,7 @@ mod tests {
             all_day: false,
             location: String::new(),
             attendees: vec![],
-            notes: String::new(),
+            notes: None,
         }
     }
 

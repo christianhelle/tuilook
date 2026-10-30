@@ -144,7 +144,7 @@ fn draft() -> AppointmentDraft {
         all_day: false,
         location: "Room 4".to_owned(),
         attendees: vec!["grace@example.com".to_owned()],
-        notes: "Bring the numbers".to_owned(),
+        notes: Some("Bring the numbers".to_owned()),
     }
 }
 
@@ -230,4 +230,29 @@ async fn a_sign_in_without_calendar_access_says_to_sign_in_again() {
         error,
         BackendError::Other("sign in again (otlk login) to allow calendar access".to_owned())
     );
+}
+
+#[tokio::test]
+async fn a_change_leaves_the_notes_alone_unless_they_were_changed() {
+    let server = MockServer::start().await;
+    let mut unchanged = draft_json();
+    unchanged.as_object_mut().unwrap().remove("body");
+    Mock::given(method("PATCH"))
+        .and(path("/me/events/e1"))
+        .and(body_json(unchanged))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": "e1" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .update_appointment(
+            &AppointmentId("e1".to_owned()),
+            &AppointmentDraft {
+                notes: None,
+                ..draft()
+            },
+        )
+        .await
+        .unwrap();
 }
