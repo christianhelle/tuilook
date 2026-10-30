@@ -9,7 +9,7 @@ vim-style keys.
 It keeps an offline cache, so your mail shows up at once while folders sync in
 the background.
 
-![tuilook showing the folder, message and reading panes](images/windows/emails.jpg)
+![tuilook showing the folder, message and reading panes](images/emails.jpg)
 
 ## Install
 
@@ -233,7 +233,7 @@ Three panes: folders, the messages in the selected folder, and the message you
 are reading. `Tab` and `Shift-Tab` move between them, or click a pane with the
 mouse. Press `?` at any time to see every key.
 
-![The keys, shown over the panes after pressing ?](images/windows/help.jpg)
+![The keys, shown over the panes after pressing ?](images/help.jpg)
 
 tuilook remembers where you were when you quit (folder, message, focused pane,
 zoom, expanded folders and favorites) and picks up there next time.
@@ -369,9 +369,9 @@ narrow it, pick one with `↑` `↓`, and press `Enter` to move the mail there, 
 
 Both `d` and `D` ask before doing anything.
 
-![Moving a message to another folder](images/windows/move-mail.jpg)
+![Moving a message to another folder](images/move-mail.jpg)
 
-![Asking before moving 14 marked messages to Deleted Items](images/windows/delete-mails.jpg)
+![Asking before moving 14 marked messages to Deleted Items](images/delete-mails.jpg)
 
 ## Folders
 
@@ -465,7 +465,7 @@ and syncs it in the background, so it works offline too.
 | `Tab` / `Shift-Tab` | Show the next / previous account's calendar |
 | `Esc` `q` | Back to the mail |
 
-![The calendar's agenda with an appointment's details beside it](images/windows/calendar.jpg)
+![The calendar's agenda with an appointment's details beside it](images/calendar.jpg)
 
 A new appointment runs from 9:00 to 10:00 unless you change it. Write the date
 as `2026-11-30` and times as `14:30`, in your computer's time zone. Press
