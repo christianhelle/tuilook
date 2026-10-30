@@ -1,5 +1,6 @@
 //! The tuilook terminal UI.
 
+pub mod agenda;
 pub mod app;
 pub mod clipboard;
 pub mod compose;
