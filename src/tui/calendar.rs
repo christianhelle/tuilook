@@ -18,7 +18,12 @@ impl AppState {
     /// Opens the agenda of the account being looked at, from the cache,
     /// and asks for it to be synced.
     pub(crate) fn open_calendar(&mut self) -> Option<Effect> {
-        let account = self.current_account();
+        self.open_calendar_of(self.current_account())
+    }
+
+    /// Opens `account`'s agenda, from the cache, and asks for it to be
+    /// synced.
+    fn open_calendar_of(&mut self, account: usize) -> Option<Effect> {
         let address = self.accounts.get(account).cloned().unwrap_or_default();
         let now = self.now();
         self.agenda = Some(Agenda::new(
@@ -41,6 +46,11 @@ impl AppState {
             agenda::Request::None => {}
             agenda::Request::Close => self.agenda = None,
             agenda::Request::Help => self.dialog = Some(Dialog::Help),
+            agenda::Request::NextAccount => return self.switch_calendar(account, 1),
+            agenda::Request::PrevAccount => {
+                let back = self.accounts.len().saturating_sub(1);
+                return self.switch_calendar(account, back);
+            }
             agenda::Request::Refresh => {
                 self.show_busy(SYNCING);
                 return Some(Effect::SyncCalendar(account));
@@ -68,6 +78,16 @@ impl AppState {
             }
         }
         None
+    }
+
+    /// Shows the calendar of the account `step` further round from
+    /// `account`, unless there is no other.
+    fn switch_calendar(&mut self, account: usize, step: usize) -> Option<Effect> {
+        let accounts = self.accounts.len();
+        if accounts < 2 {
+            return None;
+        }
+        self.open_calendar_of((account + step) % accounts)
     }
 
     /// A key for the appointment being written or changed.
@@ -285,6 +305,58 @@ mod tests {
                 id: AppointmentId("tomorrow".to_owned()),
             })
         );
+    }
+
+    /// The agenda open on the first of three accounts.
+    fn in_three_agendas() -> AppState {
+        let mut app = in_agenda();
+        app.accounts = ["me@outlook.com", "me@work.example", "me@uni.example"]
+            .map(str::to_owned)
+            .to_vec();
+        app.agenda = None;
+        app.update(Action::Calendar);
+        app
+    }
+
+    #[test]
+    fn tab_shows_the_next_accounts_calendar_and_syncs_it() {
+        let mut app = in_three_agendas();
+
+        assert_eq!(
+            press(&mut app, KeyCode::Tab),
+            Some(Effect::LoadAgenda {
+                account: 1,
+                sync: true,
+            })
+        );
+
+        let agenda = app.agenda.as_ref().unwrap();
+        assert_eq!(
+            (agenda.account, agenda.address.as_str()),
+            (1, "me@work.example")
+        );
+    }
+
+    #[test]
+    fn shift_tab_from_the_first_account_goes_round_to_the_last() {
+        let mut app = in_three_agendas();
+
+        press(&mut app, KeyCode::BackTab);
+
+        assert_eq!(app.agenda.as_ref().unwrap().account, 2);
+        press(&mut app, KeyCode::Tab);
+        assert_eq!(app.agenda.as_ref().unwrap().account, 0);
+    }
+
+    #[test]
+    fn with_one_account_tab_stays_on_its_calendar() {
+        let mut app = in_agenda();
+
+        assert_eq!(press(&mut app, KeyCode::Tab), None);
+
+        let agenda = app.agenda.as_ref().unwrap();
+        assert_eq!(agenda.account, 0);
+        assert_eq!(agenda.appointments().len(), 1);
     }
 
     #[test]

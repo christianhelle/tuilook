@@ -18,6 +18,10 @@ pub enum Request {
     /// Sync the calendar now.
     Refresh,
     Help,
+    /// Show the next account's calendar instead.
+    NextAccount,
+    /// Show the previous account's calendar instead.
+    PrevAccount,
 }
 
 /// One line of the agenda.
@@ -134,6 +138,8 @@ impl Agenda {
             KeyCode::Char('d') => return selected().map_or(Request::None, Request::Delete),
             KeyCode::F(5) => return Request::Refresh,
             KeyCode::Char('?') => return Request::Help,
+            KeyCode::Tab => return Request::NextAccount,
+            KeyCode::BackTab => return Request::PrevAccount,
             _ => self.move_selection(key),
         }
         Request::None
@@ -293,6 +299,14 @@ mod tests {
         assert_eq!(press(&mut agenda, KeyCode::Esc), Request::None);
         assert!(!agenda.details);
         assert_eq!(press(&mut agenda, KeyCode::Esc), Request::Close);
+    }
+
+    #[test]
+    fn tab_and_shift_tab_ask_for_the_next_and_previous_accounts_calendar() {
+        let mut agenda = agenda();
+
+        assert_eq!(press(&mut agenda, KeyCode::Tab), Request::NextAccount);
+        assert_eq!(press(&mut agenda, KeyCode::BackTab), Request::PrevAccount);
     }
 
     #[test]
