@@ -33,6 +33,9 @@ pub enum Action {
     /// Pin the marked or selected messages to the top of the list, or unpin
     /// them when they all are.
     TogglePin,
+    /// Flag the marked or selected messages for follow-up, or clear their
+    /// flags when they all are flagged.
+    ToggleFlag,
     /// Move the marked or selected messages, or in the folder pane the
     /// selected folder, to Deleted Items, after asking.
     Delete,

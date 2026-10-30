@@ -47,6 +47,11 @@ pub enum Effect {
         ids: Vec<MessageId>,
         pinned: bool,
     },
+    /// Flag messages for follow-up, or clear their flags.
+    SetFlagged {
+        ids: Vec<MessageId>,
+        flagged: bool,
+    },
     Delete {
         ids: Vec<MessageId>,
         permanent: bool,
@@ -567,6 +572,8 @@ impl AppState {
             Action::ToggleMark | Action::MarkAll => {}
             Action::TogglePin if self.focus != Pane::Folders => return self.toggle_pin(),
             Action::TogglePin => {}
+            Action::ToggleFlag if self.focus != Pane::Folders => return self.toggle_flag(),
+            Action::ToggleFlag => {}
             Action::Delete | Action::DeletePermanently if self.focus != Pane::Folders => {
                 let ids = self.to_act_on();
                 if !ids.is_empty() {
@@ -717,6 +724,7 @@ impl AppState {
             Effect::LoadBody(id) | Effect::MarkRead(id) => self.message_account(id),
             Effect::Delete { .. }
             | Effect::SetPinned { .. }
+            | Effect::SetFlagged { .. }
             | Effect::Sync
             | Effect::Search(_)
             | Effect::Copy(_) => self.current_account(),
@@ -875,6 +883,25 @@ impl AppState {
         }
         self.settle_selection();
         Some(Effect::SetPinned { ids, pinned })
+    }
+
+    /// Flags the marked or selected messages, or unflags them when they all
+    /// are.
+    fn toggle_flag(&mut self) -> Option<Effect> {
+        let ids = self.to_act_on();
+        if ids.is_empty() {
+            return None;
+        }
+        let acting = |m: &Message| ids.contains(&m.id);
+        let flagged = !self
+            .messages
+            .iter()
+            .filter(|m| acting(m))
+            .all(|m| m.flagged);
+        for m in self.messages.iter_mut().filter(|m| ids.contains(&m.id)) {
+            m.flagged = flagged;
+        }
+        Some(Effect::SetFlagged { ids, flagged })
     }
 
     /// The marked messages in list order, or else the selected one.
@@ -1825,6 +1852,52 @@ Dear Charles,"
             Some(Effect::SetPinned {
                 ids: message_ids(&["m0", "m1"]),
                 pinned: true
+            })
+        );
+    }
+
+    #[test]
+    fn toggling_the_flag_flags_the_selected_message_then_unflags_it() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.update(Action::SelectNext);
+
+        let effect = app.update(Action::ToggleFlag);
+
+        assert_eq!(
+            effect,
+            Some(Effect::SetFlagged {
+                ids: message_ids(&["m1"]),
+                flagged: true
+            })
+        );
+        assert!(app.messages[1].flagged);
+        assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
+
+        let effect = app.update(Action::ToggleFlag);
+
+        assert_eq!(
+            effect,
+            Some(Effect::SetFlagged {
+                ids: message_ids(&["m1"]),
+                flagged: false
+            })
+        );
+        assert!(app.messages.iter().all(|m| !m.flagged));
+    }
+
+    #[test]
+    fn toggling_the_flag_flags_every_marked_message_unless_all_are_flagged() {
+        let mut app = in_message_list(&["m0", "m1", "m2"]);
+        app.messages[0].flagged = true;
+        app.marked = message_ids(&["m0", "m1"]).into_iter().collect();
+
+        let effect = app.update(Action::ToggleFlag);
+
+        assert_eq!(
+            effect,
+            Some(Effect::SetFlagged {
+                ids: message_ids(&["m0", "m1"]),
+                flagged: true
             })
         );
     }

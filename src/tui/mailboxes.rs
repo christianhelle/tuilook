@@ -227,6 +227,14 @@ impl Mailboxes {
                     }
                     None
                 }
+                Effect::SetFlagged { ids, flagged } => {
+                    // Search results may be in several accounts.
+                    for (account, ids) in app.by_account(ids) {
+                        let flag = Command::SetFlagged { ids, flagged };
+                        mailboxes[account].commands.blocking_send(flag)?;
+                    }
+                    None
+                }
                 Effect::Delete { ids, permanent } => {
                     // Search results may be in several accounts.
                     for (account, ids) in app.by_account(ids) {
