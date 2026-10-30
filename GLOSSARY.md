@@ -7,8 +7,9 @@ the help, a blocked send, a confirmation, the name prompt or the move picker.
 A dialog owns its state and answers each key with a **Request**; it never
 reaches into the app's state.
 
-**Request**: what a dialog, the message being written, the signature editor
-or the reader's viewer asks the app to do after a key, such as closing,
+**Request**: what a dialog, the message being written, the signature editor,
+the reader's viewer, the agenda or the appointment form asks the app to do
+after a key, such as closing,
 moving mail or saving. The app turns it into an effect and a status line.
 
 **Name prompt**: the dialog asking the name of a new folder, or a new name for
