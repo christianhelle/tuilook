@@ -18,6 +18,13 @@ use crate::graph::{
 
 const MESSAGE_SELECT: &str = "id,conversationId,subject,from,receivedDateTime,isRead,flag,importance,hasAttachments,bodyPreview";
 
+/// Outlook has no pinned field: it pins mail by moving both its renew
+/// times to this date, far ahead of any real one.
+const PINNED_AT: &str = "4500-09-01T00:00:00Z";
+
+/// The renew times, PidTagRenewTime2 and PidTagRenewTime.
+const RENEW_TIMES: [&str; 2] = ["SystemTime 0x0F01", "SystemTime 0x0F02"];
+
 const PAGE_SIZE: (&str, &str) = ("Prefer", "odata.maxpagesize=50");
 
 /// Messages fetched at a time from past a folder's sync window.
@@ -274,14 +281,44 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(())
     }
 
-    async fn pinned_messages(&self, _folder: &FolderId) -> Result<Vec<Message>, BackendError> {
-        Ok(Vec::new())
+    async fn pinned_messages(&self, folder: &FolderId) -> Result<Vec<Message>, BackendError> {
+        let path = format!(
+            "/me/mailFolders/{}/messages?$select={MESSAGE_SELECT}&$filter=singleValueExtendedProperties/any(ep: ep/id eq '{}' and ep/value eq '{PINNED_AT}')",
+            folder.0, RENEW_TIMES[1]
+        );
+        let messages: Vec<dto::Message> = self.get_all(&path).await?;
+        Ok(messages
+            .into_iter()
+            .map(|m| Message {
+                pinned: true,
+                ..to_message(m, folder)
+            })
+            .collect())
     }
 
-    async fn set_pinned(&self, _message: &MessageId, _pinned: bool) -> Result<(), BackendError> {
-        Err(BackendError::Other(
-            "pinning is not supported yet".to_owned(),
-        ))
+    /// Unpinning renews the message at when it came, so it sorts among the
+    /// rest of the mail again.
+    async fn set_pinned(&self, message: &MessageId, pinned: bool) -> Result<(), BackendError> {
+        let path = format!("/me/messages/{}", message.0);
+        let at = if pinned {
+            PINNED_AT.to_owned()
+        } else {
+            let received: dto::Message = self
+                .client
+                .get(&format!("{path}?$select=receivedDateTime"), &[])
+                .await?;
+            received
+                .received_date_time
+                .unwrap_or(Timestamp::UNIX_EPOCH)
+                .to_string()
+        };
+        let properties: Vec<_> = RENEW_TIMES
+            .iter()
+            .map(|id| json!({ "id": id, "value": at }))
+            .collect();
+        let changes = json!({ "singleValueExtendedProperties": properties });
+        self.client.patch(&path, &changes).await?;
+        Ok(())
     }
 
     async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
