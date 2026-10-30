@@ -324,6 +324,15 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(())
     }
 
+    async fn set_flagged(&self, message: &MessageId, flagged: bool) -> Result<(), BackendError> {
+        let path = format!("/me/messages/{}", message.0);
+        let status = if flagged { "flagged" } else { "notFlagged" };
+        self.client
+            .patch(&path, &json!({ "flag": { "flagStatus": status } }))
+            .await?;
+        Ok(())
+    }
+
     async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
         self.send_draft(draft).await.map_err(sending_error)
     }

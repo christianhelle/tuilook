@@ -43,6 +43,8 @@ pub struct FakeBackend {
     pub read: Arc<Mutex<HashSet<MessageId>>>,
     /// Messages pinned on the server, in `messages` or `older`.
     pub pinned: Arc<Mutex<HashSet<MessageId>>>,
+    /// Messages flagged on the server.
+    pub flagged: Arc<Mutex<HashSet<MessageId>>>,
     /// Messages sent so far.
     pub sent: Arc<Mutex<Vec<Draft>>>,
     /// Why listing folders fails, if it does.
@@ -212,6 +214,16 @@ impl MailBackend for FakeBackend {
             pins.insert(message.clone());
         } else {
             pins.remove(message);
+        }
+        Ok(())
+    }
+
+    async fn set_flagged(&self, message: &MessageId, flagged: bool) -> Result<(), BackendError> {
+        let mut flags = self.flagged.lock().expect("no test panics holding it");
+        if flagged {
+            flags.insert(message.clone());
+        } else {
+            flags.remove(message);
         }
         Ok(())
     }

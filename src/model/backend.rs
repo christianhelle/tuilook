@@ -129,6 +129,13 @@ pub trait MailBackend {
         pinned: bool,
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 
+    /// Flags a message for follow-up, or clears its flag.
+    fn set_flagged(
+        &self,
+        message: &MessageId,
+        flagged: bool,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
+
     /// Sends a message, keeping a copy in Sent Items.
     fn send(&self, draft: &Draft) -> impl Future<Output = Result<(), BackendError>> + Send;
 }
