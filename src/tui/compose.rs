@@ -217,7 +217,7 @@ impl Compose {
             Field::To => &mut self.to,
             Field::Cc => &mut self.cc,
             Field::Subject => &mut self.subject,
-            Field::From => return self.from_key(key),
+            Field::From => return self.sender_key(key),
             Field::Body => unreachable!("the body has its own keys"),
         };
         match key.code {
@@ -231,7 +231,7 @@ impl Compose {
         Request::None
     }
 
-    fn from_key(&mut self, key: KeyEvent) -> Request {
+    fn sender_key(&mut self, key: KeyEvent) -> Request {
         match key.code {
             KeyCode::Esc => return self.close(),
             KeyCode::Enter | KeyCode::Down => self.next_field(),
