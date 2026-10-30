@@ -138,13 +138,13 @@ fn loading_a_folder_shows_its_messages_from_the_cache() {
 }
 
 #[test]
-fn a_sync_goes_to_every_account() {
+fn a_sync_goes_to_every_account_and_its_calendar() {
     let mut s = setup(&[&[], &[]]);
 
     s.mailboxes.apply(&mut s.app, Some(Effect::Sync)).unwrap();
 
     for commands in &mut s.commands {
-        assert_eq!(sent(commands), [Command::SyncAll]);
+        assert_eq!(sent(commands), [Command::SyncAll, Command::SyncCalendar]);
     }
 }
 

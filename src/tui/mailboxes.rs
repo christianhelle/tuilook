@@ -199,6 +199,7 @@ impl Mailboxes {
                 Effect::Sync => {
                     for mailbox in mailboxes {
                         mailbox.commands.blocking_send(Command::SyncAll)?;
+                        mailbox.commands.blocking_send(Command::SyncCalendar)?;
                     }
                     None
                 }
