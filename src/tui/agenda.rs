@@ -99,6 +99,13 @@ impl Agenda {
         &self.time_zone
     }
 
+    /// The line of `rows` with the selected appointment.
+    pub fn selected_row(&self, rows: &[Row]) -> usize {
+        rows.iter()
+            .position(|row| *row == Row::Appointment(self.selected))
+            .unwrap_or(0)
+    }
+
     /// The lines of the agenda: each day's heading, then its appointments.
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();

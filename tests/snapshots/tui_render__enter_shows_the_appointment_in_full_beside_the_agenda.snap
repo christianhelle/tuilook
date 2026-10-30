@@ -1,0 +1,16 @@
+---
+source: tests/tui_render.rs
+expression: render(&app)
+---
+"┏ Calendar — me@outlook.com ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃Mon 2 Nov · today                           │ Design review                             ┃"
+"┃  All day      Holiday                      │ When:    Tue 3 Nov 2026, 14:00–15:30      ┃"
+"┃  09:00–09:15  Standup · Room 4             │ Where:   Teams                            ┃"
+"┃Tue 3 Nov                                   │ By:      Ada Lovelace                     ┃"
+"┃  14:00–15:30  Design review · Teams        │ Invited: grace@example.com                ┃"
+"┃                                            │          alan@example.com                 ┃"
+"┃                                            │                                           ┃"
+"┃                                            │ Bring the numbers for the engine          ┃"
+"┃                                            │                                           ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help      "

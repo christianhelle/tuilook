@@ -1,0 +1,16 @@
+---
+source: tests/tui_render.rs
+expression: render(&app)
+---
+"┏ Calendar — me@outlook.com ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃Nothing in the calendar from a week ago to three months ahead. Press c to write an      ┃"
+"┃appointment.                                                                            ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help      "

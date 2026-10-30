@@ -22,7 +22,7 @@ expression: terminal.backend().to_string()
 "┃      │c  r  R  f               Write a message, reply, reply to all, forward    │      │"
 "┃      │F5  Ctrl-R               Sync every folder now                            │      │"
 "┃      │/                        Search every folder (Esc goes back)              │      │"
-"┃      │S                        Write this account's signature                   │      │"
+"┃      │S  C                     Write this account's signature, show its calendar│      │"
 "┃      │?  q  Ctrl-C             Show this help, quit                             │      │"
 "┗━━━━━━│                         Press any key to close                           │──────┘"
 " ? help└──────────────────────────────────────────────────────────────────────────┘q quit "

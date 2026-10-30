@@ -1,0 +1,20 @@
+---
+source: tests/tui_render.rs
+expression: render_tall(&app)
+---
+"┏ Calendar — me@outlook.com ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃Mon 2 Nov · today                                                                       ┃"
+"┃  All ┌Keys──────────────────────────────────────────────────────────────────────┐      ┃"
+"┃  09:0│↑ ↓  j k                 Move between appointments                        │      ┃"
+"┃Tue 3 │g  G  t                  Jump to the first, the last, or today's first    │      ┃"
+"┃  14:0│Enter                    Show the appointment in full, or hide it         │      ┃"
+"┃      │c                        Write a new appointment                          │      ┃"
+"┃      │e                        Change the appointment                           │      ┃"
+"┃      │d                        Delete it, and cancel it for anyone invited      │      ┃"
+"┃      │F5                       Sync the calendar now                            │      ┃"
+"┃      │Esc  q                   Back to the mail                                 │      ┃"
+"┃      │Ctrl-C                   Quit                                             │      ┃"
+"┃      │                         Press any key to close                           │      ┃"
+"┃      └──────────────────────────────────────────────────────────────────────────┘      ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help      "

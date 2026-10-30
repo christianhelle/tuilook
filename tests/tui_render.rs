@@ -3,7 +3,10 @@ use ratatui::{
     backend::TestBackend,
     crossterm::event::{KeyCode, KeyEvent},
 };
-use tuilook::model::{Folder, FolderId, Importance, Message, MessageId, WellKnown, sort_folders};
+use tuilook::model::{
+    Action, Appointment, AppointmentId, Folder, FolderId, Importance, Message, MessageId,
+    WellKnown, sort_folders,
+};
 use tuilook::tui::{
     app::{AppState, Pane},
     demo,
@@ -361,6 +364,14 @@ fn the_writing_help_fits_too() {
 
     assert!(ui::help_line_width(&ui::COMPOSE_HELP) <= inside);
     assert!(ui::help_line_width(&ui::SIGNATURE_HELP) <= inside);
+}
+
+#[test]
+fn the_calendar_help_fits_too() {
+    let inside = usize::from(ui::HELP_WIDTH) - 2;
+
+    assert!(ui::help_line_width(&ui::AGENDA_HELP) <= inside);
+    assert!(ui::help_line_width(&ui::APPOINTMENT_HELP) <= inside);
 }
 
 #[test]
@@ -830,4 +841,114 @@ fn moving_mail_picks_a_folder() {
     app.update(tuilook::model::Action::Move);
 
     insta::assert_snapshot!(render(&app));
+}
+
+fn appointment(id: &str, subject: &str, start: &str, minutes: i64) -> Appointment {
+    let start: jiff::Timestamp = start.parse().unwrap();
+    Appointment {
+        id: AppointmentId(id.to_owned()),
+        subject: subject.to_owned(),
+        start,
+        end: start + jiff::SignedDuration::from_mins(minutes),
+        all_day: false,
+        location: String::new(),
+        organizer: "Ada Lovelace".to_owned(),
+        attendees: vec![],
+        preview: String::new(),
+        is_organizer: false,
+    }
+}
+
+/// The agenda open on Monday 2 November 2026 in UTC.
+fn in_agenda(appointments: Vec<Appointment>) -> AppState {
+    let mut app = AppState {
+        accounts: vec!["me@outlook.com".to_owned()],
+        clock: Some(
+            "2026-11-02T08:00:00Z"
+                .parse::<jiff::Timestamp>()
+                .unwrap()
+                .to_zoned(jiff::tz::TimeZone::UTC),
+        ),
+        ..Default::default()
+    };
+    app.update(Action::Calendar);
+    app.appointments_loaded(0, appointments);
+    app
+}
+
+fn week() -> Vec<Appointment> {
+    let mut holiday = appointment("a1", "Holiday", "2026-11-02T00:00:00Z", 24 * 60);
+    holiday.all_day = true;
+    let mut standup = appointment("a2", "Standup", "2026-11-02T09:00:00Z", 15);
+    standup.location = "Room 4".to_owned();
+    let mut review = appointment("a3", "Design review", "2026-11-03T14:00:00Z", 90);
+    review.attendees = vec![
+        "grace@example.com".to_owned(),
+        "alan@example.com".to_owned(),
+    ];
+    review.location = "Teams".to_owned();
+    review.preview = "Bring the numbers for the engine".to_owned();
+    vec![holiday, standup, review]
+}
+
+#[test]
+fn the_agenda_lists_appointments_under_their_days() {
+    let app = in_agenda(week());
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn an_empty_agenda_says_how_to_write_an_appointment() {
+    let app = in_agenda(vec![]);
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn enter_shows_the_appointment_in_full_beside_the_agenda() {
+    let mut app = in_agenda(week());
+    press(&mut app, "G⏎");
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn a_new_appointment_takes_over_the_agenda() {
+    let mut app = in_agenda(week());
+    press(&mut app, "cPlanning");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn an_all_day_appointment_has_no_times_to_fill_in() {
+    let mut app = in_agenda(week());
+    press(&mut app, "c⇥⇥⇥⇥ ");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn changing_an_appointment_says_the_notes_shown_are_a_preview() {
+    let mut app = in_agenda(week());
+    press(&mut app, "Ge");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn deleting_an_appointment_asks_first() {
+    let mut app = in_agenda(week());
+    press(&mut app, "d");
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn question_mark_in_the_agenda_shows_its_keys() {
+    let mut app = in_agenda(week());
+    press(&mut app, "?");
+
+    insta::assert_snapshot!(render_tall(&app));
 }

@@ -1,0 +1,20 @@
+---
+source: tests/tui_render.rs
+expression: render_tall(&app)
+---
+"┏ Change appointment ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃Subject: Design review                                                                  ┃"
+"┃Date:    2026-11-03                                                                     ┃"
+"┃Start:   14:00                                                                          ┃"
+"┃End:     15:30                                                                          ┃"
+"┃All day: [ ]                                                                            ┃"
+"┃Where:   Teams                                                                          ┃"
+"┃Invite:  grace@example.com, alan@example.com                                            ┃"
+"┃────────────────────────────────────────────────────────────────────────────────────────┃"
+"┃The notes shown are a preview; they change only if you edit them                        ┃"
+"┃1   Bring the numbers for the engine                                                    ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" Ctrl-S save · Tab next field · Esc close · ? help                                        "

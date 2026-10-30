@@ -1,6 +1,6 @@
 //! Renders [`AppState`] into a frame. Pure: no IO, no state changes.
 
-use crate::model::{ComposeKind, Message, folder_depths};
+use crate::model::{Appointment, ComposeKind, Message, folder_depths};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position, Rect},
@@ -10,7 +10,9 @@ use ratatui::{
 };
 
 use crate::tui::{
+    agenda::{Agenda, Row as AgendaRow},
     app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
+    appointment_form::{AppointmentForm, Field as AppointmentField},
     compose::{Compose, Field},
     dialog::Dialog,
     editor::{Editor, Pos},
@@ -94,7 +96,11 @@ fn panes(area: Rect, app: &AppState) -> Panes {
         status,
         ..Default::default()
     };
-    if app.compose.is_some() || app.signature.is_some() {
+    let takes_over = app.compose.is_some()
+        || app.signature.is_some()
+        || app.agenda.is_some()
+        || app.appointment.is_some();
+    if takes_over {
         panes.compose = main;
         return panes;
     }
@@ -165,6 +171,13 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     if let Some(editor) = &app.signature {
         draw_signature(frame, app, editor, compose);
     }
+    if app.compose.is_none() && app.signature.is_none() {
+        if let Some(form) = &app.appointment {
+            draw_appointment(frame, form, compose);
+        } else if let Some(agenda) = &app.agenda {
+            draw_agenda(frame, agenda, compose);
+        }
+    }
     let (line, cursor) = status_line(app, status.width);
     frame.render_widget(line, status);
     if let Some(column) = cursor {
@@ -177,6 +190,8 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
             let help: &[(&str, &str)] = match (&app.compose, &app.signature) {
                 (Some(_), _) => &COMPOSE_HELP,
                 (None, Some(_)) => &SIGNATURE_HELP,
+                (None, None) if app.appointment.is_some() => &APPOINTMENT_HELP,
+                (None, None) if app.agenda.is_some() => &AGENDA_HELP,
                 (None, None) => &HELP,
             };
             draw_help(frame, help);
@@ -414,9 +429,10 @@ fn draw_blocked(frame: &mut Frame, said: &str) {
 /// while a search is typed.
 fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     let mut spans = Vec::new();
-    let editing = match (&app.compose, &app.signature) {
-        (Some(compose), _) if compose.field == Field::Body => Some(&compose.body),
-        (None, Some(editor)) => Some(&editor.body),
+    let editing = match (&app.compose, &app.signature, &app.appointment) {
+        (Some(compose), _, _) if compose.field == Field::Body => Some(&compose.body),
+        (None, Some(editor), _) => Some(&editor.body),
+        (None, None, Some(form)) if form.field == AppointmentField::Notes => Some(&form.notes),
         _ => None,
     };
     let picking = app.viewer.mode() != VimMode::Normal;
@@ -453,6 +469,19 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
         None if app.signature.is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
+        None if app
+            .appointment
+            .as_ref()
+            .is_some_and(|f| f.field == AppointmentField::AllDay) =>
+        {
+            Span::raw(" Space all day or not · Ctrl-S save · Tab next field · Esc close · ? help")
+        }
+        None if app.appointment.is_some() => {
+            Span::raw(" Ctrl-S save · Tab next field · Esc close · ? help")
+        }
+        None if app.agenda.is_some() => Span::raw(
+            " c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help",
+        ),
         None if picking => Span::raw(" y copy · Esc cancel"),
         None if app.focus == Pane::Reader => {
             Span::raw(" v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit")
@@ -602,6 +631,285 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
     );
 }
 
+/// The agenda: each day's heading, then its appointments, with the
+/// selected appointment in full beside them while asked for.
+fn draw_agenda(frame: &mut Frame, agenda: &Agenda, area: Rect) {
+    let title = match agenda.address.as_str() {
+        "" => " Calendar ".to_owned(),
+        address => format!(" Calendar — {address} "),
+    };
+    frame.render_widget(
+        Block::bordered()
+            .border_type(BorderType::Thick)
+            .title(title),
+        area,
+    );
+    let inner = Block::bordered().inner(area);
+    let [list, details] = if agenda.details {
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(inner)
+    } else {
+        [inner, Rect::default()]
+    };
+    if agenda.appointments().is_empty() {
+        frame.render_widget(
+            Paragraph::new(
+                "Nothing in the calendar from a week ago to three months ahead. \
+                 Press c to write an appointment.",
+            )
+            .style(Style::new().fg(Color::DarkGray))
+            .wrap(Wrap { trim: true }),
+            list,
+        );
+        return;
+    }
+    let rows = agenda.rows();
+    let selected = agenda.selected_row(&rows);
+    let items: Vec<ListItem> = rows
+        .iter()
+        .map(|row| match *row {
+            AgendaRow::Day(day) => {
+                let mut heading = day.strftime("%a %-d %b").to_string();
+                if day == agenda.today() {
+                    heading.push_str(" · today");
+                }
+                ListItem::new(Line::styled(
+                    heading,
+                    Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                ))
+            }
+            AgendaRow::Appointment(index) => {
+                let appointment = &agenda.appointments()[index];
+                let mut spans = vec![
+                    Span::styled(
+                        format!("  {:<13}", when(agenda, appointment)),
+                        Style::new().fg(Color::DarkGray),
+                    ),
+                    Span::raw(shown(&appointment.subject)),
+                ];
+                if !appointment.location.is_empty() {
+                    spans.push(Span::styled(
+                        format!(" · {}", shown(&appointment.location)),
+                        Style::new().fg(Color::DarkGray),
+                    ));
+                }
+                ListItem::new(Line::from(spans))
+            }
+        })
+        .collect();
+    let highlight = Style::new().add_modifier(Modifier::REVERSED);
+    let mut state = ListState::default().with_selected(Some(selected));
+    frame.render_stateful_widget(
+        List::new(items).highlight_style(highlight),
+        list,
+        &mut state,
+    );
+    if let Some(appointment) = agenda.selected().filter(|_| agenda.details) {
+        draw_appointment_details(frame, agenda, appointment, details);
+    }
+}
+
+/// When an appointment is on its day: its times, or all day.
+fn when(agenda: &Agenda, appointment: &Appointment) -> String {
+    if appointment.all_day {
+        return "All day".to_owned();
+    }
+    let zone = agenda.time_zone().clone();
+    let start = appointment.start.to_zoned(zone.clone());
+    let end = appointment.end.to_zoned(zone);
+    let end = if end.date() == start.date() {
+        end.strftime("%H:%M").to_string()
+    } else {
+        end.strftime("%a %H:%M").to_string()
+    };
+    format!("{}–{end}", start.strftime("%H:%M"))
+}
+
+fn draw_appointment_details(
+    frame: &mut Frame,
+    agenda: &Agenda,
+    appointment: &Appointment,
+    area: Rect,
+) {
+    let label = |text: &str| {
+        Span::styled(
+            format!(
+                "{text:<LABEL_WIDTH$}",
+                LABEL_WIDTH = usize::from(LABEL_WIDTH)
+            ),
+            Style::new().fg(Color::DarkGray),
+        )
+    };
+    let day = agenda.day_of(appointment).strftime("%a %-d %b %Y");
+    let mut lines = vec![
+        Line::styled(
+            shown(&appointment.subject),
+            Style::new().add_modifier(Modifier::BOLD),
+        ),
+        Line::from(vec![
+            label("When:"),
+            Span::raw(format!("{day}, {}", when(agenda, appointment))),
+        ]),
+    ];
+    if !appointment.location.is_empty() {
+        lines.push(Line::from(vec![
+            label("Where:"),
+            Span::raw(shown(&appointment.location)),
+        ]));
+    }
+    let organizer = if appointment.is_organizer {
+        "You".to_owned()
+    } else {
+        shown(&appointment.organizer)
+    };
+    if !organizer.is_empty() {
+        lines.push(Line::from(vec![label("By:"), Span::raw(organizer)]));
+    }
+    for (i, attendee) in appointment.attendees.iter().enumerate() {
+        let shown_label = if i == 0 { "Invited:" } else { "" };
+        lines.push(Line::from(vec![
+            label(shown_label),
+            Span::raw(shown(attendee)),
+        ]));
+    }
+    if !appointment.preview.is_empty() {
+        lines.push(Line::raw(""));
+        lines.extend(
+            shown(&appointment.preview)
+                .lines()
+                .map(|l| Line::raw(l.to_owned())),
+        );
+    }
+    frame.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+            Block::new()
+                .borders(ratatui::widgets::Borders::LEFT)
+                .border_style(Style::new().fg(Color::DarkGray))
+                .padding(ratatui::widgets::Padding::left(1)),
+        ),
+        area,
+    );
+}
+
+/// Where each part of the appointment being written goes.
+struct AppointmentAreas {
+    /// Each field above the notes, in the order of [`APPOINTMENT_FIELDS`].
+    fields: [Rect; 7],
+    rule: Rect,
+    /// Says what the notes shown are, when changing an appointment.
+    note: Rect,
+    notes: Rect,
+}
+
+/// The fields above the notes, with their labels.
+const APPOINTMENT_FIELDS: [(AppointmentField, &str); 7] = [
+    (AppointmentField::Subject, "Subject:"),
+    (AppointmentField::Date, "Date:"),
+    (AppointmentField::Start, "Start:"),
+    (AppointmentField::End, "End:"),
+    (AppointmentField::AllDay, "All day:"),
+    (AppointmentField::Location, "Where:"),
+    (AppointmentField::Attendees, "Invite:"),
+];
+
+fn appointment_areas(area: Rect, form: &AppointmentForm) -> AppointmentAreas {
+    let inner = Block::bordered().inner(area);
+    let mut constraints: Vec<Constraint> = APPOINTMENT_FIELDS
+        .iter()
+        .map(|(field, _)| Constraint::Length(u16::from(form.shows(*field))))
+        .collect();
+    constraints.push(Constraint::Length(1));
+    constraints.push(Constraint::Length(u16::from(form.editing.is_some())));
+    constraints.push(Constraint::Fill(1));
+    let areas = Layout::vertical(constraints).split(inner);
+    AppointmentAreas {
+        fields: std::array::from_fn(|i| areas[i]),
+        rule: areas[7],
+        note: areas[8],
+        notes: areas[9],
+    }
+}
+
+fn draw_appointment(frame: &mut Frame, form: &AppointmentForm, area: Rect) {
+    let title = if form.editing.is_some() {
+        " Change appointment "
+    } else {
+        " New appointment "
+    };
+    frame.render_widget(
+        Block::bordered()
+            .border_type(BorderType::Thick)
+            .title(title),
+        area,
+    );
+    let areas = appointment_areas(area, form);
+    for ((field, label), row) in APPOINTMENT_FIELDS.iter().zip(areas.fields) {
+        if row.is_empty() {
+            continue;
+        }
+        let focused = form.field == *field;
+        let label_style = if focused {
+            Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::new().fg(Color::DarkGray)
+        };
+        let label = Span::styled(
+            format!("{label:<width$}", width = usize::from(LABEL_WIDTH)),
+            label_style,
+        );
+        let input = match field {
+            AppointmentField::Subject => &form.subject,
+            AppointmentField::Date => &form.date,
+            AppointmentField::Start => &form.start,
+            AppointmentField::End => &form.end,
+            AppointmentField::Location => &form.location,
+            AppointmentField::Attendees => &form.attendees,
+            AppointmentField::AllDay | AppointmentField::Notes => {
+                let mark = if form.all_day { "[x]" } else { "[ ]" };
+                frame.render_widget(Line::from(vec![label, Span::raw(mark)]), row);
+                if focused {
+                    frame.set_cursor_position((row.x + LABEL_WIDTH + 1, row.y));
+                }
+                continue;
+            }
+        };
+        // Long text scrolls so the cursor stays in view.
+        let width = usize::from(row.width.saturating_sub(LABEL_WIDTH)).max(1);
+        let (text, column) = if focused {
+            input.view(width)
+        } else {
+            (input.text().to_owned(), 0)
+        };
+        frame.render_widget(Line::from(vec![label, Span::raw(text)]), row);
+        if focused {
+            let column = u16::try_from(column).unwrap_or(u16::MAX);
+            frame.set_cursor_position((row.x + LABEL_WIDTH + column, row.y));
+        }
+    }
+    let rule = "─".repeat(usize::from(areas.rule.width));
+    frame.render_widget(
+        Line::styled(rule, Style::new().fg(Color::DarkGray)),
+        areas.rule,
+    );
+    if !areas.note.is_empty() {
+        let note = Style::new()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC);
+        frame.render_widget(
+            Line::styled(
+                "The notes shown are a preview; they change only if you edit them",
+                note,
+            ),
+            areas.note,
+        );
+    }
+    draw_body(
+        frame,
+        &form.notes,
+        form.field == AppointmentField::Notes,
+        areas.notes,
+    );
+}
+
 /// Where the note and the text of the signature being written go.
 fn signature_areas(area: Rect) -> [Rect; 2] {
     let inner = Block::bordered().inner(area);
@@ -746,6 +1054,39 @@ pub const COMPOSE_HELP: [(&str, &str); 12] = [
     ("", "Press any key to close"),
 ];
 
+/// What each key does in the agenda, shown with `?`.
+pub const AGENDA_HELP: [(&str, &str); 10] = [
+    ("↑ ↓  j k", "Move between appointments"),
+    ("g  G  t", "Jump to the first, the last, or today's first"),
+    ("Enter", "Show the appointment in full, or hide it"),
+    ("c", "Write a new appointment"),
+    ("e", "Change the appointment"),
+    ("d", "Delete it, and cancel it for anyone invited"),
+    ("F5", "Sync the calendar now"),
+    ("Esc  q", "Back to the mail"),
+    ("Ctrl-C", "Quit"),
+    ("", "Press any key to close"),
+];
+
+/// What each key does while writing an appointment, shown with `?` in the
+/// notes' normal mode.
+pub const APPOINTMENT_HELP: [(&str, &str); 11] = [
+    ("Tab / Shift-Tab", "Next field / previous field"),
+    ("Enter  ↑ ↓", "Move between the fields above the notes"),
+    ("2026-11-30  14:30", "How to write the date and the times"),
+    ("Space  in All day", "Make it last the whole day, or not"),
+    ("a, b; c", "Separate several addresses to invite"),
+    ("i a I A o O", "Type in the notes, insert mode"),
+    ("dd cw x p u Ctrl-R v V", "Edit the notes vim style"),
+    ("Ctrl-S", "Save, inviting those added"),
+    (
+        "Esc in normal mode",
+        "Close, asking first if anything changed",
+    ),
+    ("Ctrl-C", "Quit"),
+    ("", "Press any key to close"),
+];
+
 /// What each key does while writing a signature, shown with `?` in normal mode.
 pub const SIGNATURE_HELP: [(&str, &str); 9] = [
     ("i a I A o O", "Type, insert mode"),
@@ -801,7 +1142,7 @@ pub const HELP: [(&str, &str); 22] = [
     ),
     ("F5  Ctrl-R", "Sync every folder now"),
     ("/", "Search every folder (Esc goes back)"),
-    ("S", "Write this account's signature"),
+    ("S  C", "Write this account's signature, show its calendar"),
     ("?  q  Ctrl-C", "Show this help, quit"),
     ("", "Press any key to close"),
 ];
@@ -1241,7 +1582,9 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
         compose: match (&app.compose, &app.signature) {
             (Some(compose), _) => usize::from(compose_areas(panes.compose, compose).body.height),
             (None, Some(_)) => usize::from(signature_areas(panes.compose)[1].height),
-            (None, None) => 0,
+            (None, None) => app.appointment.as_ref().map_or(0, |form| {
+                usize::from(appointment_areas(panes.compose, form).notes.height)
+            }),
         },
     }
 }
