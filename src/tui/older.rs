@@ -105,6 +105,7 @@ mod tests {
             received_at: Timestamp::from_second(day * 86_400).unwrap(),
             is_read,
             flagged: false,
+            pinned: false,
             importance: Default::default(),
             has_attachments: false,
             preview: String::new(),

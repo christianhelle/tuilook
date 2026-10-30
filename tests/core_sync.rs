@@ -49,6 +49,7 @@ fn message(id: &str, received_at: &str) -> Message {
         received_at: received_at.parse().unwrap(),
         is_read: false,
         flagged: false,
+        pinned: false,
         importance: Importance::Normal,
         has_attachments: false,
         preview: String::new(),

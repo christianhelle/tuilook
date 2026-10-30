@@ -149,6 +149,7 @@ mod tests {
             received_at: format!("{day}T09:00:00Z").parse().unwrap(),
             is_read: false,
             flagged: false,
+            pinned: false,
             importance: Default::default(),
             has_attachments: false,
             preview: String::new(),

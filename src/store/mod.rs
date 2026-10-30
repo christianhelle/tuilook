@@ -383,6 +383,7 @@ fn message_from_row(row: &Row) -> rusqlite::Result<Message> {
         })?,
         is_read: row.get(7)?,
         flagged: row.get(8)?,
+        pinned: false,
         importance: importance_from_str(&row.get::<_, String>(9)?),
         has_attachments: row.get(10)?,
         preview: row.get(11)?,

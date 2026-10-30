@@ -145,6 +145,7 @@ mod tests {
             received_at: jiff::Timestamp::UNIX_EPOCH,
             is_read: true,
             flagged: false,
+            pinned: false,
             importance: Default::default(),
             has_attachments: false,
             preview: String::new(),

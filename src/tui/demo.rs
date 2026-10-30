@@ -936,6 +936,7 @@ fn mailbox(
             received_at: now - SignedDuration::from_hours(hours_ago) - SignedDuration::from_mins(7),
             is_read,
             flagged: false,
+            pinned: false,
             importance: Importance::Normal,
             has_attachments: false,
             preview: preview.to_owned(),

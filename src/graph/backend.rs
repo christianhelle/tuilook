@@ -388,6 +388,7 @@ fn to_message(m: dto::Message, folder: &FolderId) -> Message {
         // Without a read state, do not nag the user with a bold row.
         is_read: m.is_read.unwrap_or(true),
         flagged: m.flag.is_some_and(|f| f.flag_status == "flagged"),
+        pinned: false,
         importance: importance(m.importance.as_deref()),
         has_attachments: m.has_attachments.unwrap_or(false),
         preview: m.body_preview.unwrap_or_default(),

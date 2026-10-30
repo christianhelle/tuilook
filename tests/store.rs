@@ -60,6 +60,7 @@ fn message(id: &str, folder_id: &str, received_at: &str) -> Message {
         received_at: received_at.parse().unwrap(),
         is_read: true,
         flagged: true,
+        pinned: false,
         importance: Importance::High,
         has_attachments: true,
         preview: "Hello there".to_owned(),
@@ -135,6 +136,7 @@ fn a_change_updates_only_the_fields_it_carries() {
         [Message {
             is_read: false,
             flagged: true,
+            pinned: false,
             ..m
         }]
     );

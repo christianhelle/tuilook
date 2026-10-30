@@ -13,6 +13,7 @@ fn message(id: &str) -> Message {
         received_at: jiff::Timestamp::UNIX_EPOCH,
         is_read: false,
         flagged: false,
+        pinned: false,
         importance: Importance::Normal,
         has_attachments: false,
         preview: String::new(),

@@ -42,6 +42,7 @@ fn message(id: &str, subject: &str) -> Message {
         received_at: "2026-10-24T08:15:00Z".parse().unwrap(),
         is_read: true,
         flagged: true,
+        pinned: false,
         importance: Importance::High,
         has_attachments: true,
         preview: "Attached are my notes".to_owned(),

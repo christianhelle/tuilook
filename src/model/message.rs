@@ -25,6 +25,8 @@ pub struct Message {
     pub received_at: Timestamp,
     pub is_read: bool,
     pub flagged: bool,
+    /// Kept at the top of the message list, above the date groups.
+    pub pinned: bool,
     pub importance: Importance,
     pub has_attachments: bool,
     pub preview: String,
@@ -64,9 +66,10 @@ impl MessageChange {
     }
 }
 
-/// Orders messages the way the message list shows them: newest first.
+/// Orders messages the way the message list shows them: pinned first, then
+/// newest first.
 pub fn sort_messages(messages: &mut [Message]) {
-    messages.sort_by_key(|m| std::cmp::Reverse(m.received_at));
+    messages.sort_by_key(|m| (!m.pinned, std::cmp::Reverse(m.received_at)));
 }
 
 #[cfg(test)]
@@ -84,6 +87,7 @@ mod tests {
             received_at: received_at.parse().unwrap(),
             is_read: false,
             flagged: false,
+            pinned: false,
             importance: Importance::Normal,
             has_attachments: false,
             preview: String::new(),
@@ -102,5 +106,21 @@ mod tests {
 
         let ids: Vec<_> = messages.iter().map(|m| m.id.0.as_str()).collect();
         assert_eq!(ids, ["new", "mid", "old"]);
+    }
+
+    #[test]
+    fn pinned_messages_sort_before_newer_ones() {
+        let mut pinned = message("pinned", "2026-01-01T09:00:00Z");
+        pinned.pinned = true;
+        let mut messages = vec![
+            message("new", "2026-03-01T09:00:00Z"),
+            pinned,
+            message("mid", "2026-02-01T09:00:00Z"),
+        ];
+
+        sort_messages(&mut messages);
+
+        let ids: Vec<_> = messages.iter().map(|m| m.id.0.as_str()).collect();
+        assert_eq!(ids, ["pinned", "new", "mid"]);
     }
 }

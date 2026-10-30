@@ -33,6 +33,7 @@ fn message(id: &str, from: &str, subject: &str, preview: &str) -> Message {
         received_at: jiff::Timestamp::UNIX_EPOCH,
         is_read: false,
         flagged: false,
+        pinned: false,
         importance: Importance::Normal,
         has_attachments: false,
         preview: preview.to_owned(),
