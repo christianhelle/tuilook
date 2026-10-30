@@ -222,6 +222,19 @@ impl Store {
         Ok(folder.map(FolderId))
     }
 
+    /// Flags or unflags a message. Returns its folder when it is cached.
+    pub fn set_flagged(&mut self, id: &MessageId, flagged: bool) -> Result<Option<FolderId>> {
+        let folder = self
+            .conn
+            .query_row(
+                "UPDATE messages SET flagged = ?2 WHERE id = ?1 RETURNING folder_id",
+                (&id.0, flagged),
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(folder.map(FolderId))
+    }
+
     /// Pins the messages of `folder` in `pinned` and unpins the rest of it.
     pub fn set_pinned_in(&mut self, folder: &FolderId, pinned: &[MessageId]) -> Result<()> {
         let tx = self.conn.transaction()?;

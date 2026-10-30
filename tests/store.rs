@@ -494,3 +494,19 @@ fn a_folders_pins_are_exactly_those_synced() {
     assert_eq!(pins("inbox"), ["m2"]);
     assert_eq!(pins("archive"), ["m3"], "other folders keep their pins");
 }
+
+#[test]
+fn flagging_a_message_tells_its_folder_and_unflagging_takes_it_back() {
+    let mut store = store_with(&[message("m1", "inbox", "2026-01-01T09:00:00Z")]);
+    let id = MessageId("m1".to_owned());
+    let inbox = FolderId("inbox".to_owned());
+
+    assert_eq!(store.set_flagged(&id, true).unwrap(), Some(inbox.clone()));
+    assert!(store.messages_in(&inbox).unwrap()[0].flagged);
+
+    assert_eq!(store.set_flagged(&id, false).unwrap(), Some(inbox.clone()));
+    assert!(!store.messages_in(&inbox).unwrap()[0].flagged);
+
+    let missing = MessageId("gone".to_owned());
+    assert_eq!(store.set_flagged(&missing, true).unwrap(), None);
+}
