@@ -5,6 +5,21 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use crate::model::Appointment;
 
+/// What a key asks of the app, beyond moving about the agenda.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Request {
+    None,
+    Close,
+    /// Write a new appointment.
+    New,
+    Edit(Appointment),
+    /// Delete the appointment, after asking.
+    Delete(Appointment),
+    /// Sync the calendar now.
+    Refresh,
+    Help,
+}
+
 /// One line of the agenda.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Row {
@@ -99,8 +114,26 @@ impl Agenda {
         rows
     }
 
+    /// Acts on a key: moves the selection, or leaves it at either end, or
+    /// says what else the key asks for.
+    pub fn key(&mut self, key: KeyEvent) -> Request {
+        let selected = || self.selected().cloned();
+        match key.code {
+            KeyCode::Esc if self.details => self.details = false,
+            KeyCode::Esc | KeyCode::Char('q') => return Request::Close,
+            KeyCode::Enter => self.details = !self.details,
+            KeyCode::Char('c') => return Request::New,
+            KeyCode::Char('e') => return selected().map_or(Request::None, Request::Edit),
+            KeyCode::Char('d') => return selected().map_or(Request::None, Request::Delete),
+            KeyCode::F(5) => return Request::Refresh,
+            KeyCode::Char('?') => return Request::Help,
+            _ => self.move_selection(key),
+        }
+        Request::None
+    }
+
     /// Moves the selection, or leaves it at either end.
-    pub fn key(&mut self, key: KeyEvent) {
+    fn move_selection(&mut self, key: KeyEvent) {
         let last = self.appointments.len().saturating_sub(1);
         self.selected = match key.code {
             KeyCode::Char('j') | KeyCode::Down => (self.selected + 1).min(last),
@@ -159,8 +192,8 @@ mod tests {
         &agenda.selected().unwrap().id.0
     }
 
-    fn press(agenda: &mut Agenda, code: KeyCode) {
-        agenda.key(KeyEvent::from(code));
+    fn press(agenda: &mut Agenda, code: KeyCode) -> Request {
+        agenda.key(KeyEvent::from(code))
     }
 
     #[test]
@@ -242,5 +275,45 @@ mod tests {
 
         assert!(agenda.selected().is_none());
         assert!(agenda.rows().is_empty());
+    }
+
+    #[test]
+    fn enter_shows_the_appointment_in_full_and_esc_hides_it_again() {
+        let mut agenda = agenda();
+
+        press(&mut agenda, KeyCode::Enter);
+        assert!(agenda.details);
+        assert_eq!(press(&mut agenda, KeyCode::Esc), Request::None);
+        assert!(!agenda.details);
+        assert_eq!(press(&mut agenda, KeyCode::Esc), Request::Close);
+    }
+
+    #[test]
+    fn keys_ask_to_write_change_delete_or_refresh_appointments() {
+        let mut agenda = agenda();
+        let today = agenda.selected().unwrap().clone();
+
+        assert_eq!(press(&mut agenda, KeyCode::Char('c')), Request::New);
+        assert_eq!(
+            press(&mut agenda, KeyCode::Char('e')),
+            Request::Edit(today.clone())
+        );
+        assert_eq!(
+            press(&mut agenda, KeyCode::Char('d')),
+            Request::Delete(today)
+        );
+        assert_eq!(press(&mut agenda, KeyCode::F(5)), Request::Refresh);
+        assert_eq!(press(&mut agenda, KeyCode::Char('?')), Request::Help);
+        assert_eq!(press(&mut agenda, KeyCode::Char('q')), Request::Close);
+    }
+
+    #[test]
+    fn an_empty_agenda_has_nothing_to_change_or_delete() {
+        let mut agenda = agenda();
+        agenda.set_appointments(vec![]);
+
+        assert_eq!(press(&mut agenda, KeyCode::Char('e')), Request::None);
+        assert_eq!(press(&mut agenda, KeyCode::Char('d')), Request::None);
+        assert_eq!(press(&mut agenda, KeyCode::Char('c')), Request::New);
     }
 }
