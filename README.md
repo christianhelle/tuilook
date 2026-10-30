@@ -266,6 +266,11 @@ its group under its header, and `→`, `Enter` or a click on the header unfolds
 it again. Folded groups stay folded in every folder, and the next time tuilook
 starts.
 
+`p` pins the marked (or selected) messages, and pressing it again unpins them.
+Pinned mail sits in a Pinned group above all the dates, however old it is.
+Pins are Outlook.com's own, so mail pinned in Outlook.com shows up pinned here,
+and the other way round.
+
 The folder pane has three parts: Favorites at the top, Unread in the middle and
 your accounts' folders below. A favorite works like the folder it stands for.
 When the same folder name is a favorite from more than one account, such as
@@ -344,6 +349,7 @@ goes back to the query to change it.
 | `Ctrl-A` | Mark every message in the folder |
 | `Esc` | Clear the marks |
 | `m` | Move the marked (or selected) messages to another folder |
+| `p` | Pin the marked (or selected) messages on top, or unpin them |
 | `d` | Move the marked (or selected) messages to Deleted Items |
 | `D` | Delete the marked (or selected) messages for good |
 

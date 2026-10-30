@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Pinned mail: `p` pins the marked (or selected) messages, or unpins them.
+  Pinned mail sits in its own group above Today, however old it is, and pins
+  sync with Outlook.com both ways.
+
 ### Changed
 
 - Typing a folder's name, the folder to move mail to or a search moves a
