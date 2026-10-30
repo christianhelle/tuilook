@@ -2,6 +2,7 @@
 
 pub mod agenda;
 pub mod app;
+pub mod appointment_form;
 pub mod clipboard;
 pub mod compose;
 pub mod demo;
