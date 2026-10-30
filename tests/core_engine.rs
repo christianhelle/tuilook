@@ -1,8 +1,11 @@
+use std::sync::{Arc, Mutex};
+
+use jiff::{SignedDuration, Timestamp};
 use tokio::sync::mpsc;
-use tuilook::core::{Command, fake::FakeBackend, run_engine};
+use tuilook::core::{Command, calendar_window, fake::FakeBackend, run_engine};
 use tuilook::model::{
-    BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Event, Folder, FolderId,
-    Importance, Message, MessageId, WellKnown,
+    Appointment, AppointmentId, BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Event,
+    Folder, FolderId, Importance, Message, MessageId, WellKnown,
 };
 use tuilook::store::Store;
 
@@ -627,4 +630,83 @@ async fn flagging_tells_the_backend_and_reports_the_folder_changed() {
 
     assert_eq!(events.recv().await, changed);
     assert!(flagged.lock().unwrap().is_empty());
+}
+
+/// Starts core on a cache at `path`, which the test can open to look in.
+fn start_on(
+    backend: FakeBackend,
+    path: &std::path::Path,
+) -> (mpsc::Sender<Command>, mpsc::Receiver<Event>) {
+    let (commands, command_rx) = mpsc::channel(8);
+    let (event_tx, events) = mpsc::channel(8);
+    let store = Store::open(path).unwrap();
+    tokio::spawn(run_engine(backend, store, command_rx, event_tx));
+    (commands, events)
+}
+
+fn appointment(id: &str, start: Timestamp) -> Appointment {
+    Appointment {
+        id: AppointmentId(id.to_owned()),
+        subject: format!("Subject {id}"),
+        start,
+        end: start + SignedDuration::from_hours(1),
+        all_day: false,
+        location: String::new(),
+        organizer: String::new(),
+        attendees: vec![],
+        preview: String::new(),
+        is_organizer: true,
+    }
+}
+
+/// Now, to the second, as Graph gives times.
+fn now() -> Timestamp {
+    Timestamp::now().round(jiff::Unit::Second).unwrap()
+}
+
+fn cached_appointments(path: &std::path::Path) -> Vec<Appointment> {
+    let (from, to) = calendar_window(Timestamp::now());
+    Store::open(path)
+        .unwrap()
+        .appointments_between(from, to)
+        .unwrap()
+}
+
+#[tokio::test]
+async fn syncing_the_calendar_caches_the_appointments_around_today() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let tomorrow = appointment("a1", now() + SignedDuration::from_hours(24));
+    let next_year = appointment(
+        "a2",
+        Timestamp::now() + SignedDuration::from_hours(400 * 24),
+    );
+    let backend = FakeBackend {
+        appointments: Arc::new(Mutex::new(vec![tomorrow.clone(), next_year])),
+        ..Default::default()
+    };
+    let (commands, mut events) = start_on(backend, &path);
+
+    commands.send(Command::SyncCalendar).await.unwrap();
+
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+    assert_eq!(cached_appointments(&path), [tomorrow]);
+}
+
+#[tokio::test]
+async fn a_calendar_that_cannot_sync_says_why() {
+    let backend = FakeBackend {
+        calendar_error: Some(BackendError::Other("offline".to_owned())),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    commands.send(Command::SyncCalendar).await.unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error(
+            "could not sync the calendar: offline".to_owned()
+        ))
+    );
 }

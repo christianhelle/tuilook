@@ -121,6 +121,8 @@ impl Mailboxes {
                 app.send_blocked(said);
                 None
             }
+            // Nothing shows the calendar yet.
+            Event::CalendarSynced => None,
             Event::Error(error) => {
                 match app.accounts.get(account).filter(|_| app.accounts.len() > 1) {
                     Some(address) => app.show_error(format!("{address}: {error}")),

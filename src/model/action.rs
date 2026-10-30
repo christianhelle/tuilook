@@ -111,5 +111,7 @@ pub enum Event {
     SendFailed(String),
     /// The account is blocked from sending; holds what the service said.
     SendBlocked(String),
+    /// The calendar's appointments in the store changed.
+    CalendarSynced,
     Error(String),
 }

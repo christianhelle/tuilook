@@ -5,7 +5,7 @@ use crate::store::Store;
 use jiff::Timestamp;
 use tokio::sync::mpsc;
 
-use crate::core::{load_body, sync_folders, sync_messages};
+use crate::core::{calendar::sync_calendar, load_body, sync_folders, sync_messages};
 
 /// What the UI asks core to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +58,8 @@ pub enum Command {
         flagged: bool,
     },
     Send(Draft),
+    /// Refresh the appointments around today.
+    SyncCalendar,
 }
 
 /// Runs until the UI drops its command sender. Owns every write to `store`.
@@ -126,6 +128,13 @@ pub async fn run_engine(
                 set_flagged(&backend, &mut store, &ids, flagged, &events).await
             }
             Command::Send(draft) => send(&backend, &mut store, &draft, &events).await,
+            Command::SyncCalendar => {
+                let event = match sync_calendar(&backend, &mut store).await {
+                    Ok(()) => Event::CalendarSynced,
+                    Err(e) => Event::Error(format!("could not sync the calendar: {e}")),
+                };
+                events.send(event).await
+            }
         };
         if sent.is_err() {
             return; // The UI has gone away.
