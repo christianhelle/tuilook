@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   offline from its cache. `Enter` shows an appointment in full. `c` writes a
   new one, `e` changes one and `d` deletes one, inviting or telling anyone
   invited. With several accounts, `Tab` and `Shift-Tab` show the next or
-  previous account's calendar. The calendar syncs with your mail. Sign in again with `otlk login`
-  to allow calendar access.
+  previous account's calendar. The calendar syncs with your mail. Sign in
+  again with `otlk login` to allow calendar access.
 
 ## [0.1.2] - 2026-10-30
 
