@@ -4,10 +4,12 @@ use std::{
     rc::Rc,
 };
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tokio::sync::mpsc;
-use tuilook::core::Command;
-use tuilook::model::{Action, Event, Folder, FolderId, Importance, Message, MessageId};
+use tuilook::core::{Command, calendar_window};
+use tuilook::model::{
+    Action, Appointment, AppointmentId, Event, Folder, FolderId, Importance, Message, MessageId,
+};
 use tuilook::store::Store;
 use tuilook::tui::{
     app::{AppState, Effect, Status},
@@ -222,4 +224,86 @@ fn errors_say_which_account_they_are_from_when_there_are_several() {
         s.app.status,
         Some(Status::Error("me1@outlook.com: offline".to_owned()))
     );
+}
+
+fn appointment(id: &str, start: jiff::Timestamp) -> Appointment {
+    Appointment {
+        id: AppointmentId(id.to_owned()),
+        subject: id.to_owned(),
+        start,
+        end: start + jiff::SignedDuration::from_hours(1),
+        all_day: false,
+        location: String::new(),
+        organizer: String::new(),
+        attendees: vec![],
+        preview: String::new(),
+        is_organizer: true,
+    }
+}
+
+/// Puts `appointments` in the calendar cache at `path`, as core would.
+fn cache_calendar(path: &std::path::Path, appointments: &[Appointment]) {
+    let (from, to) = calendar_window(jiff::Timestamp::now());
+    Store::open(path)
+        .unwrap()
+        .replace_appointments(from, to, appointments)
+        .unwrap();
+}
+
+fn shift_c() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT)
+}
+
+#[test]
+fn shift_c_opens_the_calendar_from_the_cache_and_syncs_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let soon = appointment(
+        "soon",
+        jiff::Timestamp::now().round(jiff::Unit::Second).unwrap(),
+    );
+    cache_calendar(&path, std::slice::from_ref(&soon));
+    let (tx, mut rx) = mpsc::channel(32);
+    let mailbox = Mailbox {
+        store: Store::open(&path).unwrap(),
+        commands: tx,
+    };
+    let mut mailboxes = Mailboxes::new(vec![mailbox], None, Box::new(io::sink()));
+    let mut app = AppState {
+        accounts: vec!["me@outlook.com".to_owned()],
+        ..Default::default()
+    };
+
+    let effect = app.on_key(shift_c(), &mut Keymap::default());
+    mailboxes.apply(&mut app, effect).unwrap();
+
+    assert_eq!(app.agenda.as_ref().unwrap().appointments(), [soon]);
+    assert_eq!(sent(&mut rx), [Command::SyncCalendar]);
+}
+
+#[test]
+fn a_synced_calendar_shows_in_the_open_agenda() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let (tx, _rx) = mpsc::channel(32);
+    let mailbox = Mailbox {
+        store: Store::open(&path).unwrap(),
+        commands: tx,
+    };
+    let mut mailboxes = Mailboxes::new(vec![mailbox], None, Box::new(io::sink()));
+    let mut app = AppState::default();
+    let effect = app.on_key(shift_c(), &mut Keymap::default());
+    mailboxes.apply(&mut app, effect).unwrap();
+    assert!(app.agenda.as_ref().unwrap().appointments().is_empty());
+
+    let soon = appointment(
+        "soon",
+        jiff::Timestamp::now().round(jiff::Unit::Second).unwrap(),
+    );
+    cache_calendar(&path, std::slice::from_ref(&soon));
+    mailboxes
+        .on_event(&mut app, 0, Event::CalendarSynced)
+        .unwrap();
+
+    assert_eq!(app.agenda.as_ref().unwrap().appointments(), [soon]);
 }

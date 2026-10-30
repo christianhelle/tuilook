@@ -13,6 +13,7 @@ use ratatui::{
 };
 
 use crate::tui::{
+    agenda::Agenda,
     compose::{Compose, Request},
     dialog::Dialog,
     folder_edit,
@@ -91,6 +92,14 @@ pub enum Effect {
     },
     /// Put text on the clipboard.
     Copy(String),
+    /// Show `account`'s cached calendar in its open agenda, then ask for
+    /// it to be synced when `sync`.
+    LoadAgenda {
+        account: usize,
+        sync: bool,
+    },
+    /// Sync `account`'s calendar now.
+    SyncCalendar(usize),
 }
 
 /// A question the user must answer before anything else happens.
@@ -276,6 +285,8 @@ pub struct AppState {
     /// When it is, read once a frame so a key and the drawing after it put
     /// mail in the same date groups. Unset, it is read whenever asked.
     pub clock: Option<Zoned>,
+    /// An account's calendar, which takes over the screen.
+    pub agenda: Option<Agenda>,
 }
 
 impl AppState {
@@ -421,6 +432,9 @@ impl AppState {
                 signature::Request::Help => self.dialog = Some(Dialog::Help),
             }
             return None;
+        }
+        if self.agenda.is_some() {
+            return self.agenda_key(key);
         }
         if self.typing_search() {
             return self.search_key(key);
@@ -602,6 +616,7 @@ impl AppState {
             }
             Action::Help => self.dialog = Some(Dialog::Help),
             Action::Search => self.start_search(),
+            Action::Calendar => return self.open_calendar(),
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
             Action::EditSignature => {
                 let account = self.current_account();
@@ -732,7 +747,9 @@ impl AppState {
             Effect::SaveSignature { account, .. }
             | Effect::CreateFolder { account, .. }
             | Effect::RenameFolder { account, .. }
-            | Effect::Move { account, .. } => *account,
+            | Effect::Move { account, .. }
+            | Effect::LoadAgenda { account, .. }
+            | Effect::SyncCalendar(account) => *account,
         }
     }
 

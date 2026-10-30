@@ -12,7 +12,7 @@ use anyhow::Result;
 use tokio::sync::mpsc;
 
 use crate::accounts::Accounts;
-use crate::core::Command;
+use crate::core::{Command, calendar_window};
 use crate::model::{Event, FolderId, Message};
 use crate::store::Store;
 use crate::tui::{
@@ -121,8 +121,9 @@ impl Mailboxes {
                 app.send_blocked(said);
                 None
             }
-            // Nothing shows the calendar yet.
-            Event::CalendarSynced | Event::AppointmentSaved | Event::AppointmentDeleted(_) => None,
+            Event::CalendarSynced => app.calendar_synced(account),
+            // Saving and deleting appointments comes next.
+            Event::AppointmentSaved | Event::AppointmentDeleted(_) => None,
             Event::Error(error) => {
                 match app.accounts.get(account).filter(|_| app.accounts.len() > 1) {
                     Some(address) => app.show_error(format!("{address}: {error}")),
@@ -219,6 +220,18 @@ impl Mailboxes {
                     self.clipboard
                         .write_all(clipboard::osc52(&text).as_bytes())?;
                     self.clipboard.flush()?;
+                    None
+                }
+                Effect::LoadAgenda { account, sync } => {
+                    let (from, to) = calendar_window(jiff::Timestamp::now());
+                    app.appointments_loaded(account, store.appointments_between(from, to)?);
+                    if sync {
+                        commands.blocking_send(Command::SyncCalendar)?;
+                    }
+                    None
+                }
+                Effect::SyncCalendar(_) => {
+                    commands.blocking_send(Command::SyncCalendar)?;
                     None
                 }
                 Effect::SetPinned { ids, pinned } => {

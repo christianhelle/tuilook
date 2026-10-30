@@ -66,6 +66,8 @@ pub enum Action {
     Forward,
     /// Search every cached folder.
     Search,
+    /// Show the calendar of the account being looked at.
+    Calendar,
 }
 
 /// Something core tells the UI happened.

@@ -65,6 +65,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('f') => Action::Forward,
         KeyCode::Char('/') => Action::Search,
         KeyCode::Char('S') => Action::EditSignature,
+        KeyCode::Char('C') => Action::Calendar,
         KeyCode::Char('a') => Action::AddFolder,
         KeyCode::Char('A') => Action::AddTopFolder,
         KeyCode::F(2) => Action::RenameFolder,
@@ -210,6 +211,15 @@ mod tests {
     #[test]
     fn slash_searches() {
         assert_eq!(press(KeyCode::Char('/')), Some(Action::Search));
+    }
+
+    #[test]
+    fn shift_c_shows_the_calendar() {
+        let shift_c = KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT);
+        assert_eq!(
+            Keymap::default().action_for(shift_c),
+            Some(Action::Calendar)
+        );
     }
 
     #[test]
