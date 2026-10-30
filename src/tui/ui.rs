@@ -175,7 +175,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         if let Some(form) = &app.appointment {
             draw_appointment(frame, form, compose);
         } else if let Some(agenda) = &app.agenda {
-            draw_agenda(frame, agenda, compose);
+            draw_agenda(frame, agenda, app.accounts.len(), compose);
         }
     }
     let (line, cursor) = status_line(app, status.width);
@@ -632,10 +632,15 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
 }
 
 /// The agenda: each day's heading, then its appointments, with the
-/// selected appointment in full beside them while asked for.
-fn draw_agenda(frame: &mut Frame, agenda: &Agenda, area: Rect) {
+/// selected appointment in full beside them while asked for. With several
+/// `accounts`, the title says which it is and how to show another's.
+fn draw_agenda(frame: &mut Frame, agenda: &Agenda, accounts: usize, area: Rect) {
     let title = match agenda.address.as_str() {
         "" => " Calendar ".to_owned(),
+        address if accounts > 1 => format!(
+            " Calendar — {address} ({} of {accounts}) · Tab next account ",
+            agenda.account + 1
+        ),
         address => format!(" Calendar — {address} "),
     };
     frame.render_widget(
@@ -1055,7 +1060,7 @@ pub const COMPOSE_HELP: [(&str, &str); 12] = [
 ];
 
 /// What each key does in the agenda, shown with `?`.
-pub const AGENDA_HELP: [(&str, &str); 10] = [
+pub const AGENDA_HELP: [(&str, &str); 11] = [
     ("↑ ↓  j k", "Move between appointments"),
     ("g  G  t", "Jump to the first, the last, or today's first"),
     ("Enter", "Show the appointment in full, or hide it"),
@@ -1063,6 +1068,10 @@ pub const AGENDA_HELP: [(&str, &str); 10] = [
     ("e", "Change the appointment"),
     ("d", "Delete it, and cancel it for anyone invited"),
     ("F5", "Sync the calendar now"),
+    (
+        "Tab / Shift-Tab",
+        "Show the next account's calendar / previous",
+    ),
     ("Esc  q", "Back to the mail"),
     ("Ctrl-C", "Quit"),
     ("", "Press any key to close"),

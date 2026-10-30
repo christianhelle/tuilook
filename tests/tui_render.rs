@@ -952,3 +952,13 @@ fn question_mark_in_the_agenda_shows_its_keys() {
 
     insta::assert_snapshot!(render_tall(&app));
 }
+
+#[test]
+fn with_several_accounts_the_agenda_says_which_and_how_to_switch() {
+    let mut app = in_agenda(week());
+    app.accounts.push("me@work.example".to_owned());
+    app.update(Action::Calendar);
+    app.appointments_loaded(0, week());
+
+    insta::assert_snapshot!(render(&app));
+}
