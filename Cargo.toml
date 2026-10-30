@@ -10,7 +10,7 @@ homepage = "https://github.com/christianhelle/tuilook"
 repository = "https://github.com/christianhelle/tuilook"
 keywords = ["email", "outlook", "tui", "terminal", "mail"]
 categories = ["command-line-utilities", "email"]
-exclude = [".github/", ".gitattributes"]
+exclude = [".github/", ".gitattributes", "images/"]
 
 [[bin]]
 name = "otlk"
