@@ -469,7 +469,7 @@ struct ComposeAreas {
 fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
     let inner = Block::bordered().inner(area);
     let note = u16::from(compose.quotes_original());
-    let from = u16::from(compose.from.is_some());
+    let from = u16::from(compose.from().is_some());
     let [from, to, cc, subject, rule, note, body] = Layout::vertical([
         Constraint::Length(from),
         Constraint::Length(1),
@@ -508,11 +508,11 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
         area,
     );
     let areas = compose_areas(area, compose);
-    if let Some(from) = &compose.from {
+    if let Some(from) = compose.from() {
         let label = format!("{:<width$}", "From:", width = usize::from(LABEL_WIDTH));
         let line = Line::from(vec![
             Span::styled(label, Style::new().fg(Color::DarkGray)),
-            Span::raw(from.clone()),
+            Span::raw(from.to_owned()),
         ]);
         frame.render_widget(line, areas.from);
     }

@@ -470,7 +470,7 @@ mod tests {
 
         let compose = app.compose.as_ref().unwrap();
         assert_eq!(compose.account, 1);
-        assert_eq!(compose.from.as_deref(), Some("me@work.example"));
+        assert_eq!(compose.from(), Some("me@work.example"));
     }
 
     #[test]

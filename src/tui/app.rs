@@ -782,13 +782,16 @@ impl AppState {
             (ComposeKind::New, _) | (_, None) => self.current_account(),
             (_, Some(original)) => self.message_account(&original.id),
         };
-        let signature = self.signatures.get(account).map_or("", String::as_str);
-        let mut compose = compose.with_signature(signature);
-        compose.account = account;
-        if self.accounts.len() > 1 {
-            compose.from = self.accounts.get(compose.account).cloned();
-        }
-        self.compose = Some(compose);
+        let senders = self
+            .accounts
+            .iter()
+            .enumerate()
+            .map(|(i, address)| {
+                let signature = self.signatures.get(i).cloned().unwrap_or_default();
+                (address.clone(), signature)
+            })
+            .collect();
+        self.compose = Some(compose.with_senders(senders, account));
     }
 
     /// Shows the current folder's messages after a sync, keeping the

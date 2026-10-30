@@ -12,6 +12,8 @@ use crate::tui::{
 /// The part of the message keys go to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
+    /// The account it is sent from, picked from several on a new message.
+    From,
     To,
     Cc,
     Subject,
@@ -21,16 +23,18 @@ pub enum Field {
 impl Field {
     fn next(self) -> Self {
         match self {
+            Field::From => Field::To,
             Field::To => Field::Cc,
             Field::Cc => Field::Subject,
             Field::Subject => Field::Body,
-            Field::Body => Field::To,
+            Field::Body => Field::From,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Field::To => Field::Body,
+            Field::From => Field::Body,
+            Field::To => Field::From,
             Field::Cc => Field::To,
             Field::Subject => Field::Cc,
             Field::Body => Field::Subject,
@@ -65,8 +69,8 @@ pub struct Compose {
     pub sending: bool,
     /// The account it is sent from.
     pub account: usize,
-    /// The address it is sent from, shown when there are several to send from.
-    pub from: Option<String>,
+    /// Each account's address and signature, to send from.
+    senders: Vec<(String, String)>,
     /// The message as it was opened, to tell whether anything was written.
     opened: Draft,
 }
@@ -94,7 +98,7 @@ impl Compose {
             field,
             sending: false,
             account: 0,
-            from: None,
+            senders: vec![],
             opened: Draft {
                 kind: ComposeKind::New,
                 to: vec![],
@@ -128,6 +132,43 @@ impl Compose {
         self
     }
 
+    /// Sends from `account` of `senders`, each an address and its signature,
+    /// starting with that account's signature.
+    pub fn with_senders(self, senders: Vec<(String, String)>, account: usize) -> Self {
+        let signature = senders.get(account).map_or("", |(_, s)| s.as_str());
+        let mut compose = self.with_signature(signature);
+        compose.account = account;
+        compose.senders = senders;
+        compose
+    }
+
+    /// The address it is sent from, shown when there are several to send from.
+    pub fn from(&self) -> Option<&str> {
+        let several = self.senders.len() > 1;
+        let (address, _) = self.senders.get(self.account).filter(|_| several)?;
+        Some(address)
+    }
+
+    /// Whether the account it is sent from can be changed: a reply or
+    /// forward is sent from the account the original is in.
+    pub fn can_switch_sender(&self) -> bool {
+        self.from().is_some() && self.kind == ComposeKind::New
+    }
+
+    fn next_field(&mut self) {
+        self.field = self.field.next();
+        if self.field == Field::From && !self.can_switch_sender() {
+            self.field = self.field.next();
+        }
+    }
+
+    fn prev_field(&mut self) {
+        self.field = self.field.prev();
+        if self.field == Field::From && !self.can_switch_sender() {
+            self.field = self.field.prev();
+        }
+    }
+
     /// The message as it now stands.
     pub fn draft(&self) -> Draft {
         Draft {
@@ -153,8 +194,8 @@ impl Compose {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Char('s') if ctrl => return self.send(),
-            KeyCode::Tab => self.field = self.field.next(),
-            KeyCode::BackTab => self.field = self.field.prev(),
+            KeyCode::Tab => self.next_field(),
+            KeyCode::BackTab => self.prev_field(),
             _ if self.field == Field::Body => return self.body_key(key, page, register),
             _ => return self.header_key(key),
         }
@@ -176,15 +217,26 @@ impl Compose {
             Field::To => &mut self.to,
             Field::Cc => &mut self.cc,
             Field::Subject => &mut self.subject,
+            Field::From => return self.from_key(key),
             Field::Body => unreachable!("the body has its own keys"),
         };
         match key.code {
             KeyCode::Esc => return self.close(),
-            KeyCode::Enter | KeyCode::Down => self.field = self.field.next(),
-            KeyCode::Up => self.field = self.field.prev(),
+            KeyCode::Enter | KeyCode::Down => self.next_field(),
+            KeyCode::Up => self.prev_field(),
             _ => {
                 input.key(key);
             }
+        }
+        Request::None
+    }
+
+    fn from_key(&mut self, key: KeyEvent) -> Request {
+        match key.code {
+            KeyCode::Esc => return self.close(),
+            KeyCode::Enter | KeyCode::Down => self.next_field(),
+            KeyCode::Up => self.prev_field(),
+            _ => {}
         }
         Request::None
     }
@@ -301,6 +353,31 @@ mod tests {
         assert_eq!(compose.to.text(), "");
         assert_eq!(compose.subject.text(), "FW: Engine");
         assert_eq!(compose.field, Field::To);
+    }
+
+    fn senders() -> Vec<(String, String)> {
+        vec![
+            ("me@outlook.com".to_owned(), String::new()),
+            ("me@work.example".to_owned(), String::new()),
+        ]
+    }
+
+    #[test]
+    fn a_new_message_from_several_senders_moves_up_from_to_into_from() {
+        let mut compose = Compose::new(ComposeKind::New, None).with_senders(senders(), 1);
+
+        assert_eq!(compose.field, Field::To);
+        assert_eq!(compose.from(), Some("me@work.example"));
+        compose.key(
+            KeyEvent::from(KeyCode::BackTab),
+            10,
+            &mut Register::default(),
+        );
+        assert_eq!(compose.field, Field::From);
+        typing(&mut compose, "⇥");
+        assert_eq!(compose.field, Field::To);
+        typing(&mut compose, "⇥⇥⇥⇥");
+        assert_eq!(compose.field, Field::From, "the body's tab wraps to From");
     }
 
     #[test]
