@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Line numbers in the reading pane and in the body of a message or signature
+  being written, as Vim's hybrid line numbers: the cursor's line shows its
+  number and the others how far they are from it, to read counts such as `5j`
+  off.
 - Pinned mail: `p` pins the marked (or selected) messages, or unpins them.
   Pinned mail sits in its own group above Today, however old it is, shows a
   📌 after the sender, and pins sync with Outlook.com both ways.

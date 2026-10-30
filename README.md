@@ -305,6 +305,11 @@ the cursor in view, and scrolling with the mouse wheel drags the cursor along.
 `v` starts picking text at the cursor, as Vim's visual mode does, and `V` picks
 whole lines; `y` then copies what is picked to the clipboard.
 
+Lines are numbered as with Vim's `number` and `relativenumber` both on: the
+cursor's line shows its own number and every other line how far it is from the
+cursor, so the count to reach it, as in `5j`, can be read off. A line wrapped
+over several rows is numbered on its first.
+
 | Keys | What they do |
 | --- | --- |
 | `h` `j` `k` `l` `w` `b` `e` `0` `^` `$` `gg` `G` | Move the cursor |
@@ -416,7 +421,8 @@ The body is edited vim style. It starts in normal mode; press `i` to type.
 | `u` `Ctrl-R` | Undo / redo |
 | `v` `V` | Select characters / lines |
 
-Counts work too, like `3dd` or `5j`.
+Counts work too, like `3dd` or `5j`. The body's lines are numbered as in the
+reading pane, by how far each is from the cursor.
 
 ### Signatures
 
