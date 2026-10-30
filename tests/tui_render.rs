@@ -296,6 +296,7 @@ fn press(app: &mut AppState, keys: &str) {
         let code = match c {
             '⎋' => KeyCode::Esc,
             '⇥' => KeyCode::Tab,
+            '⇤' => KeyCode::BackTab,
             '⏎' => KeyCode::Enter,
             c => KeyCode::Char(c),
         };
@@ -489,6 +490,14 @@ fn a_message_says_which_account_it_is_sent_from() {
     let mut app = two_accounts();
     app.selected_folder = app.folders.iter().position(|f| f.id.0 == "work").unwrap();
     press(&mut app, "c");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn the_sender_is_picked_in_from() {
+    let mut app = two_accounts();
+    press(&mut app, "c⇤");
 
     insta::assert_snapshot!(render_tall(&app));
 }

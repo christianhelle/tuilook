@@ -509,12 +509,33 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
     );
     let areas = compose_areas(area, compose);
     if let Some(from) = compose.from() {
+        let focused = compose.field == Field::From;
         let label = format!("{:<width$}", "From:", width = usize::from(LABEL_WIDTH));
-        let line = Line::from(vec![
-            Span::styled(label, Style::new().fg(Color::DarkGray)),
-            Span::raw(from.to_owned()),
-        ]);
+        let label_style = if focused {
+            Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::new().fg(Color::DarkGray)
+        };
+        // While picked, arrows either side say the sender can be changed.
+        let arrows = Style::new().fg(Color::DarkGray);
+        let line = if focused {
+            Line::from(vec![
+                Span::styled(label, label_style),
+                Span::styled("‹ ", arrows),
+                Span::raw(from.to_owned()),
+                Span::styled(" ›", arrows),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(label, label_style),
+                Span::raw(from.to_owned()),
+            ])
+        };
         frame.render_widget(line, areas.from);
+        if focused {
+            let row = areas.from;
+            frame.set_cursor_position((row.x + LABEL_WIDTH + 2, row.y));
+        }
     }
     let fields = [
         (Field::To, "To:", &compose.to, areas.to),
