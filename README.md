@@ -464,6 +464,7 @@ and syncs it in the background, so it works offline too.
 | `e` | Change the selected appointment |
 | `d` | Delete it, after asking; anyone invited is told it is cancelled |
 | `F5` | Sync the calendar now |
+| `Tab` / `Shift-Tab` | Show the next / previous account's calendar |
 | `Esc` `q` | Back to the mail |
 
 A new appointment runs from 9:00 to 10:00 unless you change it. Write the date
