@@ -15,6 +15,7 @@ static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(include_str!("migrations/001_folders_messages.sql")),
         M::up(include_str!("migrations/002_bodies.sql")),
         M::up(include_str!("migrations/003_resync_blanked_messages.sql")),
+        M::up(include_str!("migrations/004_pinned.sql")),
     ])
 });
 
@@ -102,14 +103,17 @@ impl Store {
         Ok(())
     }
 
+    /// Caches messages. A message keeps its pin when it comes again
+    /// unpinned, since only the pin sync knows which mail is pinned.
     pub fn upsert_messages(&mut self, messages: &[Message]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
             let mut stmt = tx.prepare(
                 "INSERT INTO messages (
                      id, folder_id, conversation_id, subject, from_name, from_addr,
-                     received_at, is_read, flagged, importance, has_attachments, preview)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                     received_at, is_read, flagged, importance, has_attachments, preview,
+                     pinned)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT (id) DO UPDATE SET
                      folder_id = excluded.folder_id,
                      conversation_id = excluded.conversation_id,
@@ -121,7 +125,8 @@ impl Store {
                      flagged = excluded.flagged,
                      importance = excluded.importance,
                      has_attachments = excluded.has_attachments,
-                     preview = excluded.preview",
+                     preview = excluded.preview,
+                     pinned = MAX(pinned, excluded.pinned)",
             )?;
             for m in messages {
                 stmt.execute((
@@ -137,6 +142,7 @@ impl Store {
                     importance_to_str(m.importance),
                     m.has_attachments,
                     &m.preview,
+                    m.pinned,
                 ))?;
             }
         }
@@ -275,13 +281,14 @@ impl Store {
         Ok(body)
     }
 
-    /// Messages in one folder, newest first.
+    /// Messages in one folder, pinned then newest first.
     pub fn messages_in(&self, folder: &FolderId) -> Result<Vec<Message>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, folder_id, conversation_id, subject, from_name, from_addr,
-                    received_at, is_read, flagged, importance, has_attachments, preview
+                    received_at, is_read, flagged, importance, has_attachments, preview,
+                    pinned
              FROM messages WHERE folder_id = ?1
-             ORDER BY received_at DESC",
+             ORDER BY pinned DESC, received_at DESC",
         )?;
         let messages = stmt
             .query_map([&folder.0], message_from_row)?
@@ -298,12 +305,14 @@ impl Store {
     }
 
     /// Messages in any folder whose subject, sender, preview or fetched body
-    /// contains `query`, ignoring case, newest first, at most `limit` of them.
+    /// contains `query`, ignoring case, pinned then newest first, at most
+    /// `limit` of them.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<Message>> {
         let pattern = format!("%{}%", escape_like(query));
         let mut stmt = self.conn.prepare(
             "SELECT id, folder_id, conversation_id, subject, from_name, from_addr,
-                    received_at, is_read, flagged, importance, has_attachments, preview
+                    received_at, is_read, flagged, importance, has_attachments, preview,
+                    pinned
              FROM messages m
              WHERE subject LIKE ?1 ESCAPE '\\'
                 OR from_name LIKE ?1 ESCAPE '\\'
@@ -311,7 +320,7 @@ impl Store {
                 OR preview LIKE ?1 ESCAPE '\\'
                 OR EXISTS (SELECT 1 FROM bodies b
                            WHERE b.message_id = m.id AND b.body LIKE ?1 ESCAPE '\\')
-             ORDER BY received_at DESC
+             ORDER BY pinned DESC, received_at DESC
              LIMIT ?2",
         )?;
         let limit = i64::try_from(limit).unwrap_or(i64::MAX);
@@ -383,7 +392,7 @@ fn message_from_row(row: &Row) -> rusqlite::Result<Message> {
         })?,
         is_read: row.get(7)?,
         flagged: row.get(8)?,
-        pinned: false,
+        pinned: row.get(12)?,
         importance: importance_from_str(&row.get::<_, String>(9)?),
         has_attachments: row.get(10)?,
         preview: row.get(11)?,

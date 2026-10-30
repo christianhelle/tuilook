@@ -174,6 +174,9 @@ fn opening_a_cache_blanked_by_partial_changes_drops_them_and_resyncs() {
     }
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.pragma_update(None, "user_version", 2).unwrap();
+    // Nor did 0.1.0 have pins.
+    conn.execute("ALTER TABLE messages DROP COLUMN pinned", [])
+        .unwrap();
     drop(conn);
 
     let store = Store::open(&path).unwrap();
@@ -427,4 +430,25 @@ fn unread_in_lists_a_folders_unread_mail_and_those_kept() {
             .unwrap()),
         ["unread", "kept"]
     );
+}
+
+fn pinned(mut message: Message) -> Message {
+    message.pinned = true;
+    message
+}
+
+#[test]
+fn pinned_messages_come_first_and_stay_pinned_when_synced_again() {
+    let old = pinned(message("m1", "inbox", "2026-01-01T09:00:00Z"));
+    let new = message("m2", "inbox", "2026-02-01T09:00:00Z");
+    let mut store = store_with(&[old.clone(), new.clone()]);
+
+    // Delta sync does not know about pins, so it sends the message unpinned.
+    store
+        .upsert_messages(&[message("m1", "inbox", "2026-01-01T09:00:00Z")])
+        .unwrap();
+
+    let inbox = FolderId("inbox".to_owned());
+    assert_eq!(store.messages_in(&inbox).unwrap(), [old.clone(), new]);
+    assert_eq!(ids(&store.search("subject", 10).unwrap()), ["m1", "m2"]);
 }
