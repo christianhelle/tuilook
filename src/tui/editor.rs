@@ -62,6 +62,15 @@ impl Editor {
         self.vim = Vim::default();
     }
 
+    /// Changes the whole text as one change to undo, keeping the cursor
+    /// where it was, as near as the new text allows.
+    pub fn change_text(&mut self, text: &str) {
+        self.checkpoint();
+        let (row, column) = self.cursor();
+        self.lines = text.split('\n').map(String::from).collect();
+        self.move_to(row, column);
+    }
+
     /// Remembers the text as it is, for the change about to be made to be undone.
     pub fn checkpoint(&mut self) {
         let snapshot = self.snapshot();

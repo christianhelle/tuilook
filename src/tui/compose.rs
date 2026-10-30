@@ -254,13 +254,19 @@ impl Compose {
     }
 
     /// Sends from the account `step` further round the senders.
-    /// An untouched message takes that account's signature instead.
+    /// The signature at the end of the body becomes that account's: an
+    /// untouched message is as if just opened, and a signature changed by
+    /// hand is kept.
     fn switch_sender(&mut self, step: usize) {
         let untouched = self.draft() == self.opened;
+        let old = signed(&self.senders[self.account].1);
         self.account = (self.account + step) % self.senders.len();
+        let signature = self.senders[self.account].1.clone();
         if untouched {
-            let (_, signature) = &self.senders[self.account];
-            self.start_with(&signature.clone());
+            self.start_with(&signature);
+        } else if let Some(text) = self.body.text().strip_suffix(&old) {
+            self.body
+                .change_text(&format!("{text}{}", signed(&signature)));
         }
     }
 
@@ -283,6 +289,19 @@ impl Compose {
         }
         self.sending = true;
         Request::Send(draft)
+    }
+}
+
+/// `signature` as it ends a body, below an empty line, or nothing.
+fn signed(signature: &str) -> String {
+    if signature.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "
+
+{signature}"
+        )
     }
 }
 
@@ -462,6 +481,42 @@ Grace"
         typing(&mut compose, "→");
         assert_eq!(compose.body.text(), "");
         assert_eq!(typing(&mut compose, "⎋"), Request::Close);
+    }
+
+    #[test]
+    fn a_written_message_swaps_the_signature_it_still_ends_with() {
+        let senders = vec![
+            ("me@outlook.com".to_owned(), "Ada".to_owned()),
+            (
+                "me@work.example".to_owned(),
+                "Grace
+Navy"
+                    .to_owned(),
+            ),
+        ];
+        let mut compose = Compose::new(ComposeKind::New, None).with_senders(senders, 0);
+        typing(&mut compose, "ada@example.com⇥⇥Hi⇥iAgreed⎋");
+        typing(&mut compose, "⇥");
+        assert_eq!(compose.field, Field::From);
+
+        typing(&mut compose, "→");
+        assert_eq!(
+            compose.body.text(),
+            "Agreed
+
+Grace
+Navy"
+        );
+
+        typing(&mut compose, "⇥⇥⇥⇥Gdd⇥");
+        typing(&mut compose, "→");
+        assert_eq!(
+            compose.body.text(),
+            "Agreed
+
+Grace",
+            "a changed signature is kept"
+        );
     }
 
     #[test]
