@@ -30,6 +30,7 @@ use tuilook::model::MailBackend;
 use tuilook::store::Store;
 use tuilook::tui::{
     app::{AppState, Mouse},
+    appointment_form::Field as AppointmentField,
     compose::Field,
     demo,
     dialog::Dialog,
@@ -487,10 +488,13 @@ impl Cursor {
         }
         match &app.compose {
             None if app.typing_search() => Cursor::Bar,
-            None => match &app.signature {
-                Some(editor) if editor.body.vim.mode == VimMode::Insert => Cursor::Bar,
-                Some(_) => Cursor::Block,
-                None => Cursor::Default,
+            None => match (&app.signature, &app.appointment) {
+                (Some(editor), _) if editor.body.vim.mode == VimMode::Insert => Cursor::Bar,
+                (Some(_), _) => Cursor::Block,
+                (None, Some(form)) if form.field != AppointmentField::Notes => Cursor::Bar,
+                (None, Some(form)) if form.notes.vim.mode == VimMode::Insert => Cursor::Bar,
+                (None, Some(_)) => Cursor::Block,
+                (None, None) => Cursor::Default,
             },
             Some(compose) if compose.field != Field::Body => Cursor::Bar,
             Some(compose) if compose.body.vim.mode == VimMode::Insert => Cursor::Bar,
