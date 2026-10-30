@@ -2,7 +2,9 @@
 
 use crate::tui::{app::Confirm, folder_edit::NamePrompt, mover::MovePicker};
 
-/// At most one dialog is open at a time.
+/// At most one dialog is open at a time. A dialog owns its state and answers
+/// each key with a request of its own, which the app acts on; it never
+/// reaches into the app's state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Dialog {
     /// The keys, until the next key or click.

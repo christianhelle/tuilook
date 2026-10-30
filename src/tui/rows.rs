@@ -69,7 +69,8 @@ pub fn is_own_row(folder: &Folder) -> bool {
     !is_account_row(folder) && !is_favorite_row(folder) && !is_unread_row(folder)
 }
 
-/// What a row of the folder pane stands for.
+/// What a row of the folder pane stands for. Ask the app for it, rather than
+/// reading it from the row's id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Row<'a> {
     /// The row heading an account's folders, here or in the unread section.

@@ -4,7 +4,9 @@ use jiff::Timestamp;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AppointmentId(pub String);
 
-/// Something in the calendar: a meeting, or time kept for oneself.
+/// Something in the calendar: a meeting, or time kept for oneself. Graph
+/// calls it an event, but [`Event`](crate::model::Event) is what core tells
+/// the UI happened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Appointment {
     pub id: AppointmentId,
