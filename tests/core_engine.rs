@@ -595,3 +595,36 @@ async fn pinning_tells_the_backend_and_reports_the_folder_changed() {
     assert_eq!(events.recv().await, changed);
     assert!(pinned.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn flagging_tells_the_backend_and_reports_the_folder_changed() {
+    let backend = FakeBackend {
+        folders: vec![folder("a")],
+        messages: [(FolderId("a".to_owned()), vec![in_folder("m1", "a")])].into(),
+        ..Default::default()
+    };
+    let flagged = backend.flagged.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    let flag = |flagged| Command::SetFlagged {
+        ids: ids(&["m1"]),
+        flagged,
+    };
+    commands.send(flag(true)).await.unwrap();
+
+    let changed = Some(Event::FolderSynced(FolderId("a".to_owned())));
+    assert_eq!(events.recv().await, changed);
+    assert!(
+        flagged
+            .lock()
+            .unwrap()
+            .contains(&MessageId("m1".to_owned()))
+    );
+
+    commands.send(flag(false)).await.unwrap();
+
+    assert_eq!(events.recv().await, changed);
+    assert!(flagged.lock().unwrap().is_empty());
+}

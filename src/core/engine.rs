@@ -52,6 +52,11 @@ pub enum Command {
         ids: Vec<MessageId>,
         pinned: bool,
     },
+    /// Flag messages for follow-up, or clear their flags.
+    SetFlagged {
+        ids: Vec<MessageId>,
+        flagged: bool,
+    },
     Send(Draft),
 }
 
@@ -116,6 +121,9 @@ pub async fn run_engine(
             }
             Command::SetPinned { ids, pinned } => {
                 set_pinned(&backend, &mut store, &ids, pinned, &events).await
+            }
+            Command::SetFlagged { ids, flagged } => {
+                set_flagged(&backend, &mut store, &ids, flagged, &events).await
             }
             Command::Send(draft) => send(&backend, &mut store, &draft, &events).await,
         };
@@ -319,6 +327,38 @@ async fn set_pinned(
             Ok(_) => {}
             Err(e) => {
                 let verb = if pinned { "pin" } else { "unpin" };
+                events
+                    .send(Event::Error(format!("could not {verb}: {e}")))
+                    .await?;
+            }
+        }
+    }
+    for folder in changed {
+        events.send(Event::FolderSynced(folder)).await?;
+    }
+    Ok(())
+}
+
+/// Flags or unflags messages on the server, then in the store, and reports
+/// each folder whose messages changed.
+async fn set_flagged(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    ids: &[MessageId],
+    flagged: bool,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    let mut changed = Vec::new();
+    for id in ids {
+        let done = match backend.set_flagged(id, flagged).await {
+            Ok(()) => store.set_flagged(id, flagged).map_err(|e| e.to_string()),
+            Err(e) => Err(e.to_string()),
+        };
+        match done {
+            Ok(Some(folder)) if !changed.contains(&folder) => changed.push(folder),
+            Ok(_) => {}
+            Err(e) => {
+                let verb = if flagged { "flag" } else { "unflag" };
                 events
                     .send(Event::Error(format!("could not {verb}: {e}")))
                     .await?;
