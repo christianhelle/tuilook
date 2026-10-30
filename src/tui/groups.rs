@@ -1,5 +1,6 @@
-//! The message list's date groups, as Outlook shows them: Today, Yesterday,
-//! This Week and so on, each under a header that folds its messages away.
+//! The message list's date groups, as Outlook shows them: Pinned, then
+//! Today, Yesterday, This Week and so on, each under a header that folds its
+//! messages away.
 
 use std::collections::BTreeSet;
 
@@ -8,9 +9,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Message;
 
-/// A span of days the message list groups mail by, newest first.
+/// A span of days the message list groups mail by, newest first, after
+/// the pinned mail that stays on top.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum DateGroup {
+    Pinned,
     Today,
     Yesterday,
     ThisWeek,
@@ -23,6 +26,7 @@ pub enum DateGroup {
 impl DateGroup {
     pub fn title(self) -> &'static str {
         match self {
+            Self::Pinned => "Pinned",
             Self::Today => "Today",
             Self::Yesterday => "Yesterday",
             Self::ThisWeek => "This Week",
@@ -67,6 +71,15 @@ pub fn group_of(received: Timestamp, today: Date, tz: &TimeZone) -> DateGroup {
     DateGroup::Older
 }
 
+/// The group `message` is shown in: Pinned when it is pinned, else the
+/// group of the day it came.
+fn group_for(message: &Message, today: Date, tz: &TimeZone) -> DateGroup {
+    if message.pinned {
+        return DateGroup::Pinned;
+    }
+    group_of(message.received_at, today, tz)
+}
+
 /// A row of the message list: a group's header, or a message by its index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageRow {
@@ -79,7 +92,7 @@ pub enum MessageRow {
     Message(usize),
 }
 
-/// The rows of newest-first `messages` seen at `now`: each group's header,
+/// The rows of `messages`, pinned then newest first, seen at `now`: each group's header,
 /// then its messages unless the group is in `collapsed`.
 pub fn message_rows(
     messages: &[Message],
@@ -88,11 +101,11 @@ pub fn message_rows(
 ) -> Vec<MessageRow> {
     let today = now.date();
     let tz = now.time_zone();
-    let mut rows = Vec::with_capacity(messages.len() + 7);
+    let mut rows = Vec::with_capacity(messages.len() + 8);
     // The group being filled, and where its header is.
     let mut current: Option<(DateGroup, usize)> = None;
     for (index, message) in messages.iter().enumerate() {
-        let group = group_of(message.received_at, today, tz);
+        let group = group_for(message, today, tz);
         let folded = collapsed.contains(&group);
         let header = match current {
             Some((filling, header)) if filling == group => header,
@@ -119,7 +132,7 @@ pub fn message_rows(
 /// The group the message at `index` is in.
 pub fn group_at(messages: &[Message], index: usize, now: &Zoned) -> Option<DateGroup> {
     let message = messages.get(index)?;
-    Some(group_of(message.received_at, now.date(), now.time_zone()))
+    Some(group_for(message, now.date(), now.time_zone()))
 }
 
 #[cfg(test)]
@@ -221,6 +234,35 @@ mod tests {
                 MessageRow::Message(2),
             ]
         );
+    }
+
+    #[test]
+    fn pinned_mail_heads_the_list_in_its_own_group() {
+        let mut pinned = message("a", "2026-10-28");
+        pinned.pinned = true;
+        let messages = [pinned, message("b", "2026-10-28")];
+
+        let rows = message_rows(&messages, &BTreeSet::new(), &now());
+
+        assert_eq!(
+            rows,
+            [
+                MessageRow::Header {
+                    group: DateGroup::Pinned,
+                    count: 1,
+                    collapsed: false
+                },
+                MessageRow::Message(0),
+                MessageRow::Header {
+                    group: DateGroup::Today,
+                    count: 1,
+                    collapsed: false
+                },
+                MessageRow::Message(1),
+            ]
+        );
+        assert_eq!(DateGroup::Pinned.title(), "Pinned");
+        assert_eq!(group_at(&messages, 0, &now()), Some(DateGroup::Pinned));
     }
 
     #[test]
