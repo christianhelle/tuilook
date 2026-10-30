@@ -39,7 +39,7 @@ pub fn accounts() -> Vec<(String, FakeBackend)> {
 
 fn personal() -> FakeBackend {
     use WellKnown::*;
-    mailbox(
+    let backend = mailbox(
         "p",
         &[
             ("inbox", None, "Inbox", Some(Inbox)),
@@ -258,7 +258,21 @@ fn personal() -> FakeBackend {
         .into_iter()
         .chain(newsletters())
         .chain(spam()),
-    )
+    );
+    pin(&backend, &["Your October statement", "Lecture tickets"]);
+    backend
+}
+
+/// Pins the mail of `backend` with these subjects.
+fn pin(backend: &FakeBackend, subjects: &[&str]) {
+    let ids = backend
+        .messages
+        .values()
+        .flatten()
+        .filter(|m| subjects.contains(&m.subject.as_str()))
+        .map(|m| m.id.clone());
+    let mut pinned = backend.pinned.lock().expect("nothing else holds it yet");
+    pinned.extend(ids);
 }
 
 fn work() -> FakeBackend {
@@ -1047,6 +1061,19 @@ mod tests {
         let (_, personal) = &accounts()[0];
         let inbox = &personal.messages[&FolderId("p-inbox".to_owned())];
         assert!(inbox.len() >= 40, "only {} in the inbox", inbox.len());
+    }
+
+    #[test]
+    fn the_personal_inbox_has_older_mail_pinned_on_top() {
+        let (_, personal) = &accounts()[0];
+        let inbox = &personal.messages[&FolderId("p-inbox".to_owned())];
+        let pinned = personal.pinned.lock().unwrap();
+        let subjects: Vec<_> = inbox
+            .iter()
+            .filter(|m| pinned.contains(&m.id))
+            .map(|m| m.subject.as_str())
+            .collect();
+        assert_eq!(subjects, ["Your October statement", "Lecture tickets"]);
     }
 
     #[test]
