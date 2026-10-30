@@ -4,8 +4,8 @@ use jiff::{SignedDuration, Timestamp};
 use tokio::sync::mpsc;
 use tuilook::core::{Command, calendar_window, fake::FakeBackend, run_engine};
 use tuilook::model::{
-    Appointment, AppointmentId, BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Event,
-    Folder, FolderId, Importance, Message, MessageId, WellKnown,
+    Appointment, AppointmentDraft, AppointmentId, BackendError, Body, BodyType, ComposeKind,
+    DeltaPage, Draft, Event, Folder, FolderId, Importance, Message, MessageId, WellKnown,
 };
 use tuilook::store::Store;
 
@@ -707,6 +707,141 @@ async fn a_calendar_that_cannot_sync_says_why() {
         events.recv().await,
         Some(Event::Error(
             "could not sync the calendar: offline".to_owned()
+        ))
+    );
+}
+
+fn appointment_draft(subject: &str, start: Timestamp) -> AppointmentDraft {
+    AppointmentDraft {
+        subject: subject.to_owned(),
+        start,
+        end: start + SignedDuration::from_hours(1),
+        all_day: false,
+        location: String::new(),
+        attendees: vec![],
+        notes: String::new(),
+    }
+}
+
+#[tokio::test]
+async fn a_saved_new_appointment_shows_once_the_calendar_syncs() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let (commands, mut events) = start_on(FakeBackend::default(), &path);
+    let start = now() + SignedDuration::from_hours(2);
+
+    commands
+        .send(Command::CreateAppointment(appointment_draft(
+            "Planning", start,
+        )))
+        .await
+        .unwrap();
+
+    assert_eq!(events.recv().await, Some(Event::AppointmentSaved));
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+    let cached = cached_appointments(&path);
+    assert_eq!(cached.len(), 1);
+    assert_eq!(
+        (cached[0].subject.as_str(), cached[0].start),
+        ("Planning", start)
+    );
+}
+
+#[tokio::test]
+async fn a_changed_appointment_shows_changed_once_the_calendar_syncs() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let start = now() + SignedDuration::from_hours(2);
+    let backend = FakeBackend {
+        appointments: Arc::new(Mutex::new(vec![appointment("a1", start)])),
+        ..Default::default()
+    };
+    let (commands, mut events) = start_on(backend, &path);
+
+    commands
+        .send(Command::UpdateAppointment {
+            id: AppointmentId("a1".to_owned()),
+            draft: appointment_draft("Moved", start + SignedDuration::from_hours(1)),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(events.recv().await, Some(Event::AppointmentSaved));
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+    let cached = cached_appointments(&path);
+    assert_eq!(
+        (cached[0].subject.as_str(), cached[0].start),
+        ("Moved", start + SignedDuration::from_hours(1))
+    );
+}
+
+#[tokio::test]
+async fn an_appointment_that_cannot_be_saved_says_why() {
+    let backend = FakeBackend {
+        calendar_error: Some(BackendError::Other("offline".to_owned())),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::CreateAppointment(appointment_draft(
+            "Planning",
+            now(),
+        )))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error(
+            "could not save the appointment: offline".to_owned()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn a_deleted_appointment_leaves_the_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let kept = appointment("a1", now() + SignedDuration::from_hours(2));
+    let deleted = appointment("a2", now() + SignedDuration::from_hours(4));
+    let backend = FakeBackend {
+        appointments: Arc::new(Mutex::new(vec![kept.clone(), deleted.clone()])),
+        ..Default::default()
+    };
+    let (commands, mut events) = start_on(backend, &path);
+    commands.send(Command::SyncCalendar).await.unwrap();
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+
+    commands
+        .send(Command::DeleteAppointment(deleted.id.clone()))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::AppointmentDeleted(deleted.id))
+    );
+    assert_eq!(cached_appointments(&path), [kept]);
+}
+
+#[tokio::test]
+async fn an_appointment_that_cannot_be_deleted_says_why() {
+    let backend = FakeBackend {
+        calendar_error: Some(BackendError::Other("offline".to_owned())),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    commands
+        .send(Command::DeleteAppointment(AppointmentId("a1".to_owned())))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error(
+            "could not delete the appointment: offline".to_owned()
         ))
     );
 }

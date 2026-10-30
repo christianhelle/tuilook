@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::model::{BackendError, Draft, Event, FolderId, MailBackend, MessageId, WellKnown};
+use crate::model::{
+    AppointmentDraft, AppointmentId, BackendError, Draft, Event, FolderId, MailBackend, MessageId,
+    WellKnown,
+};
 use crate::store::Store;
 use jiff::Timestamp;
 use tokio::sync::mpsc;
@@ -60,6 +63,13 @@ pub enum Command {
     Send(Draft),
     /// Refresh the appointments around today.
     SyncCalendar,
+    CreateAppointment(AppointmentDraft),
+    /// Change an appointment to be as `draft` has it.
+    UpdateAppointment {
+        id: AppointmentId,
+        draft: AppointmentDraft,
+    },
+    DeleteAppointment(AppointmentId),
 }
 
 /// Runs until the UI drops its command sender. Owns every write to `store`.
@@ -135,11 +145,50 @@ pub async fn run_engine(
                 };
                 events.send(event).await
             }
+            Command::CreateAppointment(draft) => {
+                let saved = backend.create_appointment(&draft).await;
+                appointment_saved(&backend, &mut store, saved, &events).await
+            }
+            Command::UpdateAppointment { id, draft } => {
+                let saved = backend.update_appointment(&id, &draft).await;
+                appointment_saved(&backend, &mut store, saved, &events).await
+            }
+            Command::DeleteAppointment(id) => {
+                let deleted = match backend.delete_appointment(&id).await {
+                    Ok(()) => store.remove_appointment(&id).map_err(|e| e.to_string()),
+                    Err(e) => Err(e.to_string()),
+                };
+                let event = match deleted {
+                    Ok(()) => Event::AppointmentDeleted(id),
+                    Err(e) => Event::Error(format!("could not delete the appointment: {e}")),
+                };
+                events.send(event).await
+            }
         };
         if sent.is_err() {
             return; // The UI has gone away.
         }
     }
+}
+
+/// Reports a saved appointment, or why it was not, then syncs the calendar
+/// so the change shows.
+async fn appointment_saved(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    saved: Result<(), BackendError>,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    if let Err(e) = saved {
+        let error = format!("could not save the appointment: {e}");
+        return events.send(Event::Error(error)).await;
+    }
+    events.send(Event::AppointmentSaved).await?;
+    let event = match sync_calendar(backend, store).await {
+        Ok(()) => Event::CalendarSynced,
+        Err(e) => Event::Error(format!("could not sync the calendar: {e}")),
+    };
+    events.send(event).await
 }
 
 /// Caches a page of a folder's older mail. There is more to fetch only

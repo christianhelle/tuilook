@@ -1,4 +1,4 @@
-use crate::model::{FolderId, MessageId};
+use crate::model::{AppointmentId, FolderId, MessageId};
 
 /// Something the user asked for. The UI applies it to its own state and
 /// forwards anything that needs IO to core.
@@ -113,5 +113,9 @@ pub enum Event {
     SendBlocked(String),
     /// The calendar's appointments in the store changed.
     CalendarSynced,
+    /// An appointment was saved. The calendar is synced right after.
+    AppointmentSaved,
+    /// The appointment was deleted and is gone from the store.
+    AppointmentDeleted(AppointmentId),
     Error(String),
 }
