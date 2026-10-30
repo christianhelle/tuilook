@@ -316,3 +316,18 @@ async fn every_request_says_it_comes_from_tuilook() {
 
     assert!(tuilook::auth::USER_AGENT.starts_with("tuilook/"));
 }
+
+#[tokio::test]
+async fn delete_sends_a_delete_and_ignores_the_empty_answer() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/me/events/e1"))
+        .and(header("authorization", "Bearer token-1"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (client, _, _) = support::client(&server);
+
+    client.delete("/me/events/e1").await.unwrap();
+}

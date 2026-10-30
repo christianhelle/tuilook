@@ -119,6 +119,13 @@ impl<T: TokenSource> GraphClient<T> {
         Ok(())
     }
 
+    /// DELETEs `path`, ignoring the answer.
+    pub async fn delete(&self, path: &str) -> Result<(), GraphError> {
+        self.request(Method::DELETE, &self.url(path), &[], None)
+            .await?;
+        Ok(())
+    }
+
     fn url(&self, path: &str) -> String {
         if path.starts_with("http") {
             path.to_owned()
