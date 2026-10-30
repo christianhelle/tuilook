@@ -24,3 +24,15 @@ stands for is asked of the app as a `Row`, never read from its id.
 **Mailbox**: one account's cache, read on the UI thread, and the channel to
 the core that syncs it. The mailboxes perform the effects the app asks for
 and show it the events each core reports.
+
+**Appointment**: something in an account's calendar, such as a meeting or time
+kept for oneself. Graph calls it an event; tuilook does not, since an
+**Event** is what core tells the UI happened. Each occurrence of a repeating
+appointment is an appointment of its own.
+
+**Agenda**: one account's calendar taking over the screen, listing the cached
+appointments under the day each starts. It owns its state and answers each key
+with a **Request**.
+
+**Appointment form**: the appointment being written or changed from the
+agenda. It takes over the agenda until it is saved or closed.
