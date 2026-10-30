@@ -40,13 +40,14 @@ use tuilook::tui::{
     vim::VimMode,
 };
 
-/// Delegated Graph scopes; calendar and contacts can be added post-v1.
-const SCOPES: [&str; 5] = [
+/// Delegated Graph scopes; contacts can be added later.
+const SCOPES: [&str; 6] = [
     "offline_access",
     "User.Read",
     "Mail.ReadWrite",
     "Mail.Send",
     "MailboxSettings.Read",
+    "Calendars.ReadWrite",
 ];
 
 /// Keychain account the refresh token was stored under before tuilook knew
