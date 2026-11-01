@@ -7,6 +7,17 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::input::TextInput;
 
+/// Where to pick the first file to attach from: the documents folder, or
+/// else the home folder, or else the folder tuilook was started in.
+pub fn start_dir() -> PathBuf {
+    let dirs = directories::UserDirs::new();
+    dirs.as_ref()
+        .and_then(|d| d.document_dir().map(PathBuf::from))
+        .or_else(|| dirs.as_ref().map(|d| d.home_dir().to_path_buf()))
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default()
+}
+
 /// What a key asks for while picking a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
@@ -290,5 +301,38 @@ mod tests {
 
         assert!(picker.error.is_some());
         assert_eq!(shown(&picker), [".."]);
+    }
+
+    #[test]
+    fn ctrl_a_while_writing_picks_a_file_to_attach_from_the_last_folder() {
+        use crate::model::ComposeKind;
+        use crate::tui::{app::AppState, compose::Compose, dialog::Dialog, keymap::Keymap};
+        use ratatui::crossterm::event::KeyModifiers;
+
+        let dir = folder();
+        let mut app = AppState {
+            attach_dir: Some(dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        app.start_compose(Compose::new(ComposeKind::New, None));
+        let mut keymap = Keymap::default();
+        let ctrl_a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
+
+        app.on_key(ctrl_a, &mut keymap);
+        assert!(matches!(app.dialog, Some(Dialog::Files(_))));
+        for code in typed("b.t").into_iter().chain([KeyCode::Enter]) {
+            app.on_key(KeyEvent::from(code), &mut keymap);
+        }
+
+        assert_eq!(app.dialog, None);
+        let compose = app.compose.as_ref().unwrap();
+        assert_eq!(compose.attachments, [dir.path().join("b.txt")]);
+
+        // The next file is picked from where the last one was.
+        app.on_key(ctrl_a, &mut keymap);
+        let Some(Dialog::Files(picker)) = &app.dialog else {
+            panic!("no file picker");
+        };
+        assert_eq!(picker.dir, dir.path());
     }
 }

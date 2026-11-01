@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeSet, HashSet},
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
@@ -19,6 +20,7 @@ use crate::tui::{
     attachments::{self, human_size},
     compose::{Compose, Request},
     dialog::Dialog,
+    files::{self, FilePicker},
     folder_edit,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
@@ -270,6 +272,9 @@ pub struct AppState {
     pub status_since: Option<Instant>,
     pub sync: SyncState,
     pub viewport: Viewport,
+    /// The folder the last attached file was picked in, to pick the next
+    /// one from.
+    pub attach_dir: Option<PathBuf>,
     /// Lines of the reading pane scrolled out of view at the top.
     pub reader_scroll: usize,
     /// Whether the focused pane fills the screen.
@@ -446,7 +451,10 @@ impl AppState {
                 Request::Close => self.compose = None,
                 Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
                 Request::Help => self.dialog = Some(Dialog::Help),
-                Request::Attach => {}
+                Request::Attach => {
+                    let dir = self.attach_dir.clone().unwrap_or_else(files::start_dir);
+                    self.dialog = Some(Dialog::Files(FilePicker::open(dir)));
+                }
                 Request::Invalid(why) => self.show_error(why),
             }
             return None;
@@ -542,6 +550,20 @@ impl AppState {
                     self.dialog = Some(Dialog::Attachments(picker));
                 }
                 self.save_requested(request)
+            }
+            Dialog::Files(mut picker) => {
+                let request = picker.key(key);
+                match request {
+                    files::Request::None => self.dialog = Some(Dialog::Files(picker)),
+                    files::Request::Close => {}
+                    files::Request::Pick(file) => {
+                        self.attach_dir = Some(picker.dir);
+                        if let Some(compose) = &mut self.compose {
+                            compose.attach(file);
+                        }
+                    }
+                }
+                None
             }
         }
     }
@@ -848,7 +870,7 @@ impl AppState {
 
     /// Opens a message to write from the account being looked at, or for
     /// a reply or forward, the account the original is in.
-    fn start_compose(&mut self, compose: Compose) {
+    pub(crate) fn start_compose(&mut self, compose: Compose) {
         let account = match (&compose.kind, self.selected()) {
             (ComposeKind::New, _) | (_, None) => self.current_account(),
             (_, Some(original)) => self.message_account(&original.id),

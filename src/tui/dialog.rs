@@ -1,7 +1,8 @@
 //! The dialog shown over the panes, which takes every key until it closes.
 
 use crate::tui::{
-    app::Confirm, attachments::AttachmentPicker, folder_edit::NamePrompt, mover::MovePicker,
+    app::Confirm, attachments::AttachmentPicker, files::FilePicker, folder_edit::NamePrompt,
+    mover::MovePicker,
 };
 
 /// At most one dialog is open at a time. A dialog owns its state and answers
@@ -22,11 +23,13 @@ pub enum Dialog {
     Move(MovePicker),
     /// The attached files being picked to save.
     Attachments(AttachmentPicker),
+    /// The file being picked to attach.
+    Files(FilePicker),
 }
 
 impl Dialog {
     /// Whether text is typed into the dialog, at a cursor.
     pub fn takes_text(&self) -> bool {
-        matches!(self, Dialog::Name(_) | Dialog::Move(_))
+        matches!(self, Dialog::Name(_) | Dialog::Move(_) | Dialog::Files(_))
     }
 }

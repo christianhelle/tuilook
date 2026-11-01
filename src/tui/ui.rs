@@ -17,6 +17,7 @@ use crate::tui::{
     compose::{Compose, Field},
     dialog::Dialog,
     editor::{Editor, Pos},
+    files::FilePicker,
     folder_edit::NamePrompt,
     groups::MessageRow,
     input::TextInput,
@@ -202,6 +203,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Dialog::Name(prompt)) => draw_name_prompt(frame, prompt),
         Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
         Some(Dialog::Attachments(picker)) => draw_attachment_picker(frame, picker),
+        Some(Dialog::Files(picker)) => draw_file_picker(frame, picker),
         None => {}
     }
 }
@@ -356,6 +358,88 @@ fn draw_attachment_picker(frame: &mut Frame, picker: &AttachmentPicker) {
         area,
     );
 }
+
+/// Width of the dialog picking a file to attach, borders included.
+const FILES_WIDTH: u16 = 60;
+
+/// The folder being looked in, the filter typed, then the folders and files
+/// it leaves.
+fn draw_file_picker(frame: &mut Frame, picker: &FilePicker) {
+    let choices = picker.choices();
+    // Borders, the folder, the filter, the gap and the keys take 6 lines.
+    let fits = usize::from(frame.area().height).saturating_sub(6).max(1);
+    let visible = choices.len().clamp(1, MOVE_ROWS).min(fits);
+    let first = list_offset(picker.selected, visible);
+    let inside = usize::from(FILES_WIDTH - 2);
+    let dir = picker.dir.display().to_string();
+    // A long folder keeps its end, which says most about where it is.
+    let skip = dir.chars().count().saturating_sub(inside);
+    let dir: String = dir.chars().skip(skip).collect();
+    let room = inside.saturating_sub(1 + NAME_LABEL.len());
+    let (filter, column) = typed(&picker.filter, room);
+    let dim = Style::new().fg(Color::DarkGray);
+    let mut lines = vec![
+        Line::styled(dir, dim),
+        Line::raw(format!("{NAME_LABEL}{filter}")),
+        Line::raw(""),
+    ];
+    if let Some(error) = &picker.error {
+        lines.push(Line::styled(error.clone(), Style::new().fg(Color::Red)));
+    } else if choices.is_empty() {
+        lines.push(Line::styled("Nothing here matches", dim));
+    }
+    for (row, &index) in choices.iter().enumerate().skip(first).take(visible) {
+        let entry = &picker.entries[index];
+        let picked = row == picker.selected;
+        let name = format!(
+            "{}{}",
+            if picked { "> " } else { "  " },
+            shown(&entry.label())
+        );
+        let size = if entry.folder {
+            String::new()
+        } else {
+            human_size(entry.size)
+        };
+        let gap = inside.saturating_sub(name.chars().count() + size.len() + 1);
+        let style = if picked {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::new()
+        };
+        lines.push(Line::styled(
+            format!("{name}{}{size} ", " ".repeat(gap)),
+            style,
+        ));
+    }
+    lines.push(Line::from(vec![
+        Span::styled("Enter", Style::new().fg(Color::Yellow)),
+        Span::raw(" open / attach   "),
+        Span::styled("Backspace", Style::new().fg(Color::Cyan)),
+        Span::raw(" up   "),
+        Span::styled("Esc", Style::new().fg(Color::Cyan)),
+        Span::raw(" cancel"),
+    ]));
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(FILES_WIDTH), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title(" Attach a file ")
+                .border_style(Style::new().fg(Color::Yellow)),
+        ),
+        area,
+    );
+    let label = u16::try_from(NAME_LABEL.len()).unwrap_or(u16::MAX);
+    let x = area.x.saturating_add(1 + label).saturating_add(column);
+    frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 2));
+}
+
+/// What the file dialog's filter is labelled with.
+const NAME_LABEL: &str = "Name: ";
 
 /// What the move dialog's filter is labelled with.
 const FILTER_LABEL: &str = "Folder: ";
@@ -553,6 +637,8 @@ struct ComposeAreas {
     to: Rect,
     cc: Rect,
     subject: Rect,
+    /// The files attached, once there are any.
+    attachments: Rect,
     rule: Rect,
     /// Says the original is quoted below, for a reply or forward.
     note: Rect,
@@ -563,11 +649,13 @@ fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
     let inner = Block::bordered().inner(area);
     let note = u16::from(compose.quotes_original());
     let from = u16::from(compose.from().is_some());
-    let [from, to, cc, subject, rule, note, body] = Layout::vertical([
+    let attachments = u16::from(!compose.attachments.is_empty());
+    let [from, to, cc, subject, attachments, rule, note, body] = Layout::vertical([
         Constraint::Length(from),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
+        Constraint::Length(attachments),
         Constraint::Length(1),
         Constraint::Length(note),
         Constraint::Fill(1),
@@ -578,6 +666,7 @@ fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
         to,
         cc,
         subject,
+        attachments,
         rule,
         note,
         body,
@@ -662,6 +751,9 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
             frame.set_cursor_position((row.x + LABEL_WIDTH + column, row.y));
         }
     }
+    if !areas.attachments.is_empty() {
+        draw_attached(frame, compose, areas.attachments);
+    }
     let rule = "─".repeat(usize::from(areas.rule.width));
     frame.render_widget(
         Line::styled(rule, Style::new().fg(Color::DarkGray)),
@@ -682,6 +774,35 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
         compose.field == Field::Body,
         areas.body,
     );
+}
+
+/// The files attached to a message being written, the one picked shown
+/// picked while the row has the keys.
+fn draw_attached(frame: &mut Frame, compose: &Compose, row: Rect) {
+    let focused = compose.field == Field::Attachments;
+    let label_style = if focused {
+        Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    } else {
+        Style::new().fg(Color::DarkGray)
+    };
+    let label = format!("{:<width$}", "Attach:", width = usize::from(LABEL_WIDTH));
+    let mut spans = vec![Span::styled(label, label_style)];
+    for (index, file) in compose.attachments.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw(", "));
+        }
+        let name = file.file_name().map_or_else(
+            || file.display().to_string(),
+            |n| n.to_string_lossy().into(),
+        );
+        let style = if focused && index == compose.picked_attachment {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::new()
+        };
+        spans.push(Span::styled(shown(&name), style));
+    }
+    frame.render_widget(Line::from(spans), row);
 }
 
 /// The agenda: each day's heading, then its appointments, with the

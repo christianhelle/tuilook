@@ -10,6 +10,8 @@ use tuilook::model::{
 use tuilook::tui::{
     app::{AppState, Pane},
     demo,
+    dialog::Dialog,
+    files::{Entry, FilePicker},
     groups::MessageRow,
     ui,
 };
@@ -360,6 +362,42 @@ fn the_message_being_written_numbers_its_lines_from_the_cursor() {
 fn a_new_message_takes_over_the_screen() {
     let mut app = sample_app();
     press(&mut app, "cada@example.com⇥⇥Lunch⇥iShall we?⏎Friday works");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn attached_files_show_under_the_subject() {
+    let mut app = sample_app();
+    press(&mut app, "cada@example.com⇥⇥Lunch⇥");
+    let compose = app.compose.as_mut().unwrap();
+    compose.attach(std::path::PathBuf::from("menu.pdf"));
+    compose.attach(std::path::PathBuf::from("map.png"));
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn ctrl_a_picks_a_file_to_attach() {
+    let mut app = sample_app();
+    press(&mut app, "c");
+    let entry = |name: &str, folder, size| Entry {
+        name: name.to_owned(),
+        folder,
+        size,
+    };
+    app.dialog = Some(Dialog::Files(FilePicker {
+        dir: std::path::PathBuf::from("/home/ada/Documents"),
+        entries: vec![
+            entry("..", true, 0),
+            entry("reports", true, 0),
+            entry("menu.pdf", false, 1_258_291),
+            entry("notes.txt", false, 2_048),
+        ],
+        filter: Default::default(),
+        selected: 2,
+        error: None,
+    }));
 
     insta::assert_snapshot!(render_tall(&app));
 }
