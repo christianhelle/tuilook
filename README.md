@@ -296,6 +296,16 @@ mail is fetched.
 HTML mail is shown as plain text. Links become numbered footnotes at the end of
 the message.
 
+### Attachments
+
+Files attached to a message are listed under its subject, with their sizes.
+Pictures shown in the body are left out. `s` saves the attached file to your
+Downloads folder; with several, it asks which: `Enter` saves the picked one and
+`a` saves them all. A file already in Downloads is never overwritten: the new
+one is saved as `report (1).pdf`, and so on. An attached mail is saved as an
+`.eml` file. Links to files in OneDrive have nothing to download and are
+skipped.
+
 ### Moving in a message and copying from it
 
 The reading pane works like Vim's normal mode: it has a cursor, shown while
@@ -407,6 +417,7 @@ Outlook does.
 | --- | --- |
 | `Tab` / `Shift-Tab` | Next field / previous field |
 | `Enter` `↓` `↑` | Move between To, Cc and Subject |
+| `Ctrl-A` | Attach a file |
 | `Ctrl-S` | Send |
 | `Esc` (in a field or in normal mode) | Close, asking first if anything was written |
 | `?` (in normal mode) | Show the keys |
@@ -426,6 +437,13 @@ The body is edited vim style. It starts in normal mode; press `i` to type.
 
 Counts work too, like `3dd` or `5j`. The body's lines are numbered as in the
 reading pane, by how far each is from the cursor.
+
+`Ctrl-A` opens a file picker, starting in your Documents folder and then
+wherever you last attached from. Type part of a name to narrow the list, `↑`
+`↓` to pick, `Enter` to open a folder or attach a file and `Backspace` to go
+up a folder. Attached files are listed under the subject; `Tab` to them, then
+`←` `→` pick one and `d` takes it off. Files can be up to 150 MB. A forward
+keeps the original's attachments.
 
 ### Signatures
 
