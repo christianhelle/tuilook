@@ -211,6 +211,19 @@ impl Store {
         Ok(folder.map(FolderId))
     }
 
+    /// The folder a message is in, when it is cached.
+    pub fn folder_of(&self, id: &MessageId) -> Result<Option<FolderId>> {
+        let folder = self
+            .conn
+            .query_row(
+                "SELECT folder_id FROM messages WHERE id = ?1",
+                [&id.0],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(folder.map(FolderId))
+    }
+
     /// Pins or unpins a message. Returns its folder when it is cached.
     pub fn set_pinned(&mut self, id: &MessageId, pinned: bool) -> Result<Option<FolderId>> {
         let folder = self

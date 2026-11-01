@@ -133,21 +133,16 @@ pub async fn run_engine(
                 move_messages(&backend, &mut store, &ids, to, &events).await
             }
             Command::MarkRead(message) => {
-                let event = match mark_read(&backend, &mut store, &message).await {
-                    Ok(Some(folder)) => Some(Event::FolderSynced(folder)),
-                    Ok(None) => None,
-                    Err(e) => Some(Event::Error(format!("could not mark as read: {e}"))),
-                };
-                match event {
-                    Some(event) => events.send(event).await,
-                    None => Ok(()),
-                }
+                let ids = [message];
+                change_messages(&backend, &mut store, &ids, Change::Read, &events).await
             }
             Command::SetPinned { ids, pinned } => {
-                set_pinned(&backend, &mut store, &ids, pinned, &events).await
+                let change = Change::Pinned(pinned);
+                change_messages(&backend, &mut store, &ids, change, &events).await
             }
             Command::SetFlagged { ids, flagged } => {
-                set_flagged(&backend, &mut store, &ids, flagged, &events).await
+                let change = Change::Flagged(flagged);
+                change_messages(&backend, &mut store, &ids, change, &events).await
             }
             Command::SaveAttachments {
                 message,
@@ -367,76 +362,70 @@ async fn move_messages(
     events.send(event).await
 }
 
-/// Marks a message read on the server, then in the store. Returns the folder
-/// whose messages and unread count changed, if one did.
-async fn mark_read(
-    backend: &impl MailBackend,
-    store: &mut Store,
-    message: &MessageId,
-) -> Result<Option<FolderId>, String> {
-    backend
-        .mark_read(message)
-        .await
-        .map_err(|e| e.to_string())?;
-    store.mark_read(message).map_err(|e| e.to_string())
+/// A change to a message that the UI shows before the server has agreed.
+#[derive(Debug, Clone, Copy)]
+enum Change {
+    Read,
+    Pinned(bool),
+    Flagged(bool),
 }
 
-/// Pins or unpins messages on the server, then in the store, and reports
-/// each folder whose messages changed.
-async fn set_pinned(
-    backend: &impl MailBackend,
-    store: &mut Store,
-    ids: &[MessageId],
-    pinned: bool,
-    events: &mpsc::Sender<Event>,
-) -> Result<(), mpsc::error::SendError<Event>> {
-    let mut changed = Vec::new();
-    for id in ids {
-        let done = match backend.set_pinned(id, pinned).await {
-            Ok(()) => store.set_pinned(id, pinned).map_err(|e| e.to_string()),
-            Err(e) => Err(e.to_string()),
-        };
-        match done {
-            Ok(Some(folder)) if !changed.contains(&folder) => changed.push(folder),
-            Ok(_) => {}
-            Err(e) => {
-                let verb = if pinned { "pin" } else { "unpin" };
-                events
-                    .send(Event::Error(format!("could not {verb}: {e}")))
-                    .await?;
-            }
+impl Change {
+    /// What could not be done, for the error.
+    fn verb(self) -> &'static str {
+        match self {
+            Change::Read => "mark as read",
+            Change::Pinned(true) => "pin",
+            Change::Pinned(false) => "unpin",
+            Change::Flagged(true) => "flag",
+            Change::Flagged(false) => "unflag",
         }
     }
-    for folder in changed {
-        events.send(Event::FolderSynced(folder)).await?;
+
+    /// Makes the change on the server, then in the store.
+    async fn make(
+        self,
+        backend: &impl MailBackend,
+        store: &mut Store,
+        id: &MessageId,
+    ) -> Result<(), String> {
+        let told = match self {
+            Change::Read => backend.mark_read(id).await,
+            Change::Pinned(pinned) => backend.set_pinned(id, pinned).await,
+            Change::Flagged(flagged) => backend.set_flagged(id, flagged).await,
+        };
+        told.map_err(|e| e.to_string())?;
+        let stored = match self {
+            Change::Read => store.mark_read(id),
+            Change::Pinned(pinned) => store.set_pinned(id, pinned),
+            Change::Flagged(flagged) => store.set_flagged(id, flagged),
+        };
+        stored.map(|_| ()).map_err(|e| e.to_string())
     }
-    Ok(())
 }
 
-/// Flags or unflags messages on the server, then in the store, and reports
-/// each folder whose messages changed.
-async fn set_flagged(
+/// Makes `change` to each message, reporting why any failed, then reports
+/// each folder they are in. Failed ones count too: the UI showed the change
+/// already, and reading the folder again takes it back.
+async fn change_messages(
     backend: &impl MailBackend,
     store: &mut Store,
     ids: &[MessageId],
-    flagged: bool,
+    change: Change,
     events: &mpsc::Sender<Event>,
 ) -> Result<(), mpsc::error::SendError<Event>> {
     let mut changed = Vec::new();
     for id in ids {
-        let done = match backend.set_flagged(id, flagged).await {
-            Ok(()) => store.set_flagged(id, flagged).map_err(|e| e.to_string()),
-            Err(e) => Err(e.to_string()),
-        };
-        match done {
-            Ok(Some(folder)) if !changed.contains(&folder) => changed.push(folder),
-            Ok(_) => {}
-            Err(e) => {
-                let verb = if flagged { "flag" } else { "unflag" };
-                events
-                    .send(Event::Error(format!("could not {verb}: {e}")))
-                    .await?;
-            }
+        if let Err(e) = change.make(backend, store, id).await {
+            let verb = change.verb();
+            events
+                .send(Event::Error(format!("could not {verb}: {e}")))
+                .await?;
+        }
+        if let Ok(Some(folder)) = store.folder_of(id)
+            && !changed.contains(&folder)
+        {
+            changed.push(folder);
         }
     }
     for folder in changed {

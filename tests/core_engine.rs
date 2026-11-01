@@ -574,6 +574,92 @@ async fn a_message_that_will_not_move_is_reported_and_the_rest_still_go() {
     );
 }
 
+/// The next event, or `None` when core stays quiet.
+async fn next(events: &mut mpsc::Receiver<Event>) -> Option<Event> {
+    let wait = std::time::Duration::from_secs(5);
+    tokio::time::timeout(wait, events.recv())
+        .await
+        .ok()
+        .flatten()
+}
+
+/// A core whose folder `a` holds m1, which the server refuses to change.
+async fn with_a_message_that_will_not_change() -> (mpsc::Sender<Command>, mpsc::Receiver<Event>) {
+    let backend = FakeBackend {
+        folders: vec![folder("a")],
+        messages: [(FolderId("a".to_owned()), vec![in_folder("m1", "a")])].into(),
+        unchangeable: [MessageId("m1".to_owned())].into(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).await.unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+    (commands, events)
+}
+
+#[tokio::test]
+async fn a_failed_pin_still_reports_the_folder_so_the_ui_shows_it_unpinned() {
+    let (commands, mut events) = with_a_message_that_will_not_change().await;
+
+    commands
+        .send(Command::SetPinned {
+            ids: ids(&["m1"]),
+            pinned: true,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        next(&mut events).await,
+        Some(Event::Error("could not pin: refused".to_owned()))
+    );
+    assert_eq!(
+        next(&mut events).await,
+        Some(Event::FolderSynced(FolderId("a".to_owned())))
+    );
+}
+
+#[tokio::test]
+async fn a_failed_flag_still_reports_the_folder_so_the_ui_shows_it_unflagged() {
+    let (commands, mut events) = with_a_message_that_will_not_change().await;
+
+    commands
+        .send(Command::SetFlagged {
+            ids: ids(&["m1"]),
+            flagged: true,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        next(&mut events).await,
+        Some(Event::Error("could not flag: refused".to_owned()))
+    );
+    assert_eq!(
+        next(&mut events).await,
+        Some(Event::FolderSynced(FolderId("a".to_owned())))
+    );
+}
+
+#[tokio::test]
+async fn a_failed_mark_read_still_reports_the_folder_so_the_ui_shows_it_unread() {
+    let (commands, mut events) = with_a_message_that_will_not_change().await;
+
+    commands
+        .send(Command::MarkRead(MessageId("m1".to_owned())))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        next(&mut events).await,
+        Some(Event::Error("could not mark as read: refused".to_owned()))
+    );
+    assert_eq!(
+        next(&mut events).await,
+        Some(Event::FolderSynced(FolderId("a".to_owned())))
+    );
+}
+
 #[tokio::test]
 async fn pinning_tells_the_backend_and_reports_the_folder_changed() {
     let backend = FakeBackend {

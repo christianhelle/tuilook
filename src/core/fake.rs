@@ -45,6 +45,8 @@ pub struct FakeBackend {
     pub moved: Arc<Mutex<Vec<(MessageId, FolderId)>>>,
     /// Messages that fail to delete or move.
     pub undeletable: HashSet<MessageId>,
+    /// Messages that fail to be marked read, pinned or flagged.
+    pub unchangeable: HashSet<MessageId>,
     /// Messages marked read so far. Later syncs report them as read.
     pub read: Arc<Mutex<HashSet<MessageId>>>,
     /// Messages pinned on the server, in `messages` or `older`.
@@ -59,6 +61,15 @@ pub struct FakeBackend {
     pub appointments: Arc<Mutex<Vec<Appointment>>>,
     /// Why every calendar call fails, if it does.
     pub calendar_error: Option<BackendError>,
+}
+
+impl FakeBackend {
+    fn refuse_change(&self, message: &MessageId) -> Result<(), BackendError> {
+        if self.unchangeable.contains(message) {
+            return Err(BackendError::Other("refused".to_owned()));
+        }
+        Ok(())
+    }
 }
 
 impl MailBackend for FakeBackend {
@@ -216,6 +227,7 @@ impl MailBackend for FakeBackend {
     }
 
     async fn mark_read(&self, message: &MessageId) -> Result<(), BackendError> {
+        self.refuse_change(message)?;
         let mut read = self.read.lock().expect("no test panics holding it");
         read.insert(message.clone());
         Ok(())
@@ -236,6 +248,7 @@ impl MailBackend for FakeBackend {
     }
 
     async fn set_pinned(&self, message: &MessageId, pinned: bool) -> Result<(), BackendError> {
+        self.refuse_change(message)?;
         let mut pins = self.pinned.lock().expect("no test panics holding it");
         if pinned {
             pins.insert(message.clone());
@@ -246,6 +259,7 @@ impl MailBackend for FakeBackend {
     }
 
     async fn set_flagged(&self, message: &MessageId, flagged: bool) -> Result<(), BackendError> {
+        self.refuse_change(message)?;
         let mut flags = self.flagged.lock().expect("no test panics holding it");
         if flagged {
             flags.insert(message.clone());
