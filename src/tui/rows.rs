@@ -20,22 +20,22 @@ const FAVORITE_ROW: &str = "favorite:";
 const UNREAD_ROW: &str = "unread:";
 
 /// The id of the favorites row showing folder `id`.
-pub fn favorite_row(id: &FolderId) -> FolderId {
+pub(crate) fn favorite_row(id: &FolderId) -> FolderId {
     FolderId(format!("{FAVORITE_ROW}{}", id.0))
 }
 
 /// Whether `folder` is a row in the favorites.
-pub fn is_favorite_row(folder: &Folder) -> bool {
+pub(crate) fn is_favorite_row(folder: &Folder) -> bool {
     folder.id.0.starts_with(FAVORITE_ROW)
 }
 
 /// The id of the unread section's row standing for `id`.
-pub fn unread_row(id: &FolderId) -> FolderId {
+pub(crate) fn unread_row(id: &FolderId) -> FolderId {
     FolderId(format!("{UNREAD_ROW}{}", id.0))
 }
 
 /// Whether `folder` is a row in the unread section.
-pub fn is_unread_row(folder: &Folder) -> bool {
+pub(crate) fn is_unread_row(folder: &Folder) -> bool {
     folder.id.0.starts_with(UNREAD_ROW)
 }
 
@@ -53,19 +53,19 @@ pub fn row_target(row: &FolderId) -> FolderId {
 }
 
 /// The id of the row heading `address`'s folders.
-pub fn account_row(address: &str) -> FolderId {
+pub(crate) fn account_row(address: &str) -> FolderId {
     FolderId(format!("{ACCOUNT_ROW}{address}"))
 }
 
 /// Whether `folder` is the row heading an account, not a real folder,
 /// here or in the unread section.
-pub fn is_account_row(folder: &Folder) -> bool {
+pub(crate) fn is_account_row(folder: &Folder) -> bool {
     row_target(&folder.id).0.starts_with(ACCOUNT_ROW)
 }
 
 /// Whether `folder` is an account's folder in that account's tree, not a
 /// row heading it or showing a folder again.
-pub fn is_own_row(folder: &Folder) -> bool {
+pub(crate) fn is_own_row(folder: &Folder) -> bool {
     !is_account_row(folder) && !is_favorite_row(folder) && !is_unread_row(folder)
 }
 
