@@ -306,6 +306,8 @@ one is saved as `report (1).pdf`, and so on. An attached mail is saved as an
 `.eml` file. Links to files in OneDrive have nothing to download and are
 skipped.
 
+![Picking which attached file to save to Downloads](images/save-attachments.jpg)
+
 ### Moving in a message and copying from it
 
 The reading pane works like Vim's normal mode: it has a cursor, shown while
