@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::core::fake::FakeBackend;
 use crate::model::{
-    Appointment, AppointmentId, Body, BodyType, Folder, FolderId, Importance, Message, MessageId,
-    WellKnown,
+    Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder,
+    FolderId, Importance, Message, MessageId, WellKnown,
 };
 use jiff::{SignedDuration, Timestamp, ToSpan, Zoned, civil::Time};
 
@@ -406,7 +406,44 @@ fn personal() -> FakeBackend {
     );
     pin(&backend, &["Your October statement", "Lecture tickets"]);
     flag(&mut backend, &["Your translation", "Books due next week"]);
+    attach(
+        &mut backend,
+        "Your translation",
+        &[
+            (
+                "notes-on-the-engine.txt",
+                "Notes on the Analytical Engine.\n",
+            ),
+            ("table-of-bernoulli-numbers.csv", "n,B(n)\n1,1/6\n2,-1/30\n"),
+        ],
+    );
     backend
+}
+
+/// Attaches `files`, each a name and what it holds, to the mail of
+/// `backend` with this subject.
+fn attach(backend: &mut FakeBackend, subject: &str, files: &[(&str, &str)]) {
+    for m in backend.messages.values_mut().flatten() {
+        if m.subject != subject {
+            continue;
+        }
+        m.has_attachments = true;
+        let mut attached = vec![];
+        for (index, (name, content)) in files.iter().enumerate() {
+            let id = AttachmentId(format!("{}-a{index}", m.id.0));
+            backend
+                .contents
+                .insert(id.clone(), content.as_bytes().to_vec());
+            attached.push(Attachment {
+                id,
+                name: (*name).to_owned(),
+                content_type: "text/plain".to_owned(),
+                size: content.len() as u64,
+                kind: AttachmentKind::File,
+            });
+        }
+        backend.attachments.insert(m.id.clone(), attached);
+    }
 }
 
 /// Flags the mail of `backend` with these subjects.
