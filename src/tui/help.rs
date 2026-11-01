@@ -82,7 +82,10 @@ pub const COMPOSE_HELP: [(&str, &str); 13] = [
 /// What each key does in the agenda, shown with `?`.
 pub const AGENDA_HELP: [(&str, &str); 11] = [
     ("↑ ↓  j k", "Move between appointments"),
-    ("g  G  t", "Jump to the first, the last, or today's first"),
+    (
+        "g Home  G End  t",
+        "Jump to the first, the last, or today's first",
+    ),
     ("Enter", "Show the appointment in full, or hide it"),
     ("c", "Write a new appointment"),
     ("e", "Change the appointment"),
@@ -175,3 +178,118 @@ pub const HELP: [(&str, &str); 22] = [
     ("?  q  Ctrl-C", "Show this help, quit"),
     ("", "Press any key to close"),
 ];
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::*;
+    use crate::tui::keymap::Keymap;
+
+    /// The keys a help table's first column names.
+    fn named(table: &[Row]) -> HashSet<String> {
+        table
+            .iter()
+            .flat_map(|(keys, _)| keys.split([' ', ',']))
+            .filter(|key| !key.is_empty())
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// What the help calls a key, and the key itself.
+    fn every_key() -> Vec<(String, KeyEvent)> {
+        let mut keys = Vec::new();
+        for c in ('!'..='~').filter(|c| c.is_ascii_graphic()) {
+            keys.push((c.to_string(), KeyEvent::from(KeyCode::Char(c))));
+        }
+        for c in 'a'..='z' {
+            let ctrl = KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+            keys.push((format!("Ctrl-{}", c.to_ascii_uppercase()), ctrl));
+        }
+        for n in 1..=12 {
+            keys.push((format!("F{n}"), KeyEvent::from(KeyCode::F(n))));
+        }
+        for (name, code) in [
+            ("Space", KeyCode::Char(' ')),
+            ("Enter", KeyCode::Enter),
+            ("Tab", KeyCode::Tab),
+            ("Shift-Tab", KeyCode::BackTab),
+            ("Esc", KeyCode::Esc),
+            ("Home", KeyCode::Home),
+            ("End", KeyCode::End),
+            ("PgUp", KeyCode::PageUp),
+            ("PgDn", KeyCode::PageDown),
+            ("Insert", KeyCode::Insert),
+            ("↑", KeyCode::Up),
+            ("↓", KeyCode::Down),
+            ("←", KeyCode::Left),
+            ("→", KeyCode::Right),
+        ] {
+            keys.push((name.to_owned(), KeyEvent::from(code)));
+        }
+        keys
+    }
+
+    #[test]
+    fn every_key_the_panes_handle_is_in_their_help() {
+        let named = named(&HELP);
+        let missing: Vec<String> = every_key()
+            .into_iter()
+            .filter(|(_, key)| Keymap::default().action_for(*key).is_some())
+            .map(|(name, _)| name)
+            .filter(|name| !named.contains(name))
+            // The help says what Esc does where it says what it undoes.
+            .filter(|name| name != "Esc")
+            .collect();
+
+        assert_eq!(missing, Vec::<String>::new());
+    }
+
+    #[test]
+    fn every_key_the_help_bar_offers_on_the_panes_is_handled() {
+        let app = AppState::default();
+        let hints = key_hints(&app, false);
+        let handled: Vec<String> = every_key()
+            .into_iter()
+            .filter(|(_, key)| Keymap::default().action_for(*key).is_some())
+            .map(|(name, _)| name)
+            .collect();
+
+        for hint in hints.split('·') {
+            let key = hint.split_whitespace().next().unwrap();
+            assert!(handled.iter().any(|h| h == key), "{key} does nothing");
+        }
+    }
+
+    #[test]
+    fn every_key_the_agenda_handles_is_in_its_help() {
+        let named = named(&AGENDA_HELP);
+
+        // As Agenda::key takes them.
+        for key in [
+            "↑",
+            "↓",
+            "j",
+            "k",
+            "g",
+            "G",
+            "Home",
+            "End",
+            "t",
+            "Enter",
+            "c",
+            "e",
+            "d",
+            "F5",
+            "Tab",
+            "Shift-Tab",
+            "Esc",
+            "q",
+            "Ctrl-C",
+        ] {
+            assert!(named.contains(key), "{key} is missing");
+        }
+    }
+}
