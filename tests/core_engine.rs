@@ -890,3 +890,39 @@ async fn saving_an_attachment_writes_it_beside_any_file_of_the_same_name() {
         b"older"
     );
 }
+
+#[tokio::test]
+async fn saved_names_are_safe_attached_mail_is_eml_and_cloud_links_are_skipped() {
+    let dir = tempfile::tempdir().unwrap();
+    let backend = FakeBackend {
+        contents: [
+            (AttachmentId("a1".to_owned()), b"txt".to_vec()),
+            (AttachmentId("a2".to_owned()), b"mime".to_vec()),
+        ]
+        .into(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    let attachments = vec![
+        attachment("a1", "../plans: v2?.txt", AttachmentKind::File),
+        attachment("a2", "Minutes", AttachmentKind::Item),
+        attachment("a3", "Budget.xlsx", AttachmentKind::Reference),
+    ];
+    commands.send(save(attachments, dir.path())).await.unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::AttachmentSaved(dir.path().join(".._plans_ v2_.txt")))
+    );
+    assert_eq!(
+        events.recv().await,
+        Some(Event::AttachmentSaved(dir.path().join("Minutes.eml")))
+    );
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error(
+            "Budget.xlsx is a link to a file in the cloud, with nothing to save".to_owned()
+        ))
+    );
+}

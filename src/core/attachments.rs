@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use tokio::sync::mpsc;
 
-use crate::model::{Attachment, Event, MailBackend, MessageId};
+use crate::model::{Attachment, AttachmentKind, Event, MailBackend, MessageId};
 
 /// Saves each of `attachments` of `message` into `dir`, reporting where
 /// each went, or why it did not.
@@ -16,6 +16,14 @@ pub async fn save_attachments(
     events: &mpsc::Sender<Event>,
 ) -> Result<(), mpsc::error::SendError<Event>> {
     for attachment in attachments {
+        if attachment.kind == AttachmentKind::Reference {
+            let skipped = format!(
+                "{} is a link to a file in the cloud, with nothing to save",
+                attachment.name
+            );
+            events.send(Event::Error(skipped)).await?;
+            continue;
+        }
         let event = match save(backend, message, attachment, dir).await {
             Ok(path) => Event::AttachmentSaved(path),
             Err(e) => Event::Error(format!("could not save {}: {e}", attachment.name)),
@@ -35,9 +43,32 @@ async fn save(
         .attachment_content(message, &attachment.id)
         .await
         .map_err(|e| e.to_string())?;
-    let path = free_path(dir, &attachment.name);
+    let path = free_path(dir, &file_name(attachment));
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
     Ok(path)
+}
+
+/// A name to save `attachment` as that keeps it in the folder it is saved
+/// to and that every system allows. Attached mail is saved as MIME.
+fn file_name(attachment: &Attachment) -> String {
+    let name: String = attachment
+        .name
+        .chars()
+        .map(|c| match c {
+            '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    // Windows drops dots and spaces at the end of a name.
+    let name = name.trim_end_matches(['.', ' ']);
+    let name = if name.is_empty() { "attachment" } else { name };
+    let eml = name.to_lowercase().ends_with(".eml");
+    if attachment.kind == AttachmentKind::Item && !eml {
+        format!("{name}.eml")
+    } else {
+        name.to_owned()
+    }
 }
 
 /// `name` in `dir`, numbered like `report (1).pdf` if a file has it already.
