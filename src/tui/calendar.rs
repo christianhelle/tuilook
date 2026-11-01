@@ -1,6 +1,7 @@
 //! The calendar in the app: the agenda that takes over the screen, and the
 //! appointment being written or changed from it.
 
+use crate::core::Command;
 use crate::model::Appointment;
 
 use crate::tui::{
@@ -53,7 +54,7 @@ impl AppState {
             }
             agenda::Request::Refresh => {
                 self.show_busy(SYNCING);
-                return Some(Effect::SyncCalendar(account));
+                return Some(Effect::core(account, Command::SyncCalendar));
             }
             agenda::Request::New => {
                 let today = agenda.today();
@@ -98,7 +99,11 @@ impl AppState {
             appointment_form::Request::None => {}
             appointment_form::Request::Save { id, draft } => {
                 self.show_busy("Saving…");
-                return Some(Effect::SaveAppointment { account, id, draft });
+                let command = match id {
+                    Some(id) => Command::UpdateAppointment { id, draft },
+                    None => Command::CreateAppointment(draft),
+                };
+                return Some(Effect::core(account, command));
             }
             appointment_form::Request::Close => self.appointment = None,
             appointment_form::Request::ConfirmDiscard => {
@@ -229,11 +234,15 @@ mod tests {
         press(&mut app, KeyCode::Char('c'));
         typing(&mut app, "Planning");
 
-        let Some(Effect::SaveAppointment { account, id, draft }) = ctrl_s(&mut app) else {
-            panic!("saving asks core to save");
+        let Some(Effect::Core {
+            account,
+            command: Command::CreateAppointment(draft),
+        }) = ctrl_s(&mut app)
+        else {
+            panic!("saving asks core to create it");
         };
 
-        assert_eq!((account, id), (0, None));
+        assert_eq!(account, 0);
         assert_eq!(draft.subject, "Planning");
         assert_eq!(draft.start, at("2026-11-03T09:00:00Z"));
         assert_eq!(app.status, Some(Status::Busy("Saving…".to_owned())));
@@ -300,10 +309,10 @@ mod tests {
 
         assert_eq!(
             press(&mut app, KeyCode::Char('y')),
-            Some(Effect::DeleteAppointment {
-                account: 0,
-                id: AppointmentId("tomorrow".to_owned()),
-            })
+            Some(Effect::core(
+                0,
+                Command::DeleteAppointment(AppointmentId("tomorrow".to_owned()))
+            ))
         );
     }
 
@@ -365,7 +374,7 @@ mod tests {
 
         assert_eq!(
             press(&mut app, KeyCode::F(5)),
-            Some(Effect::SyncCalendar(0))
+            Some(Effect::core(0, Command::SyncCalendar))
         );
         assert_eq!(
             app.status,

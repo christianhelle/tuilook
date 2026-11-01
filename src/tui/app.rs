@@ -6,8 +6,8 @@ use std::{
 
 use crate::core::Command;
 use crate::model::{
-    Action, AppointmentDraft, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId,
-    Message, MessageId, sort_messages,
+    Action, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId, Message, MessageId,
+    sort_messages,
 };
 use jiff::Zoned;
 use ratatui::{
@@ -66,7 +66,6 @@ pub enum Effect {
         message: MessageId,
         attachments: Vec<Attachment>,
     },
-    Send(Draft),
     /// Search every account's cached mail.
     Search(String),
     /// Keep `text` as the account's signature.
@@ -81,19 +80,6 @@ pub enum Effect {
     LoadAgenda {
         account: usize,
         sync: bool,
-    },
-    /// Sync `account`'s calendar now.
-    SyncCalendar(usize),
-    /// Save an appointment in `account`'s calendar: a new one, or a change
-    /// to the one with this id.
-    SaveAppointment {
-        account: usize,
-        id: Option<AppointmentId>,
-        draft: AppointmentDraft,
-    },
-    DeleteAppointment {
-        account: usize,
-        id: AppointmentId,
     },
 }
 
@@ -426,7 +412,7 @@ impl AppState {
                         return None;
                     }
                     self.show_busy("Sending…");
-                    return Some(Effect::Send(draft));
+                    return Some(Effect::core(account, Command::Send(draft)));
                 }
                 Request::Close => self.compose = None,
                 Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
@@ -802,12 +788,7 @@ impl AppState {
             | Effect::Sync
             | Effect::Search(_)
             | Effect::Copy(_) => self.current_account(),
-            Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
-            Effect::SaveSignature { account, .. }
-            | Effect::LoadAgenda { account, .. }
-            | Effect::SaveAppointment { account, .. }
-            | Effect::DeleteAppointment { account, .. }
-            | Effect::SyncCalendar(account) => *account,
+            Effect::SaveSignature { account, .. } | Effect::LoadAgenda { account, .. } => *account,
         }
     }
 
@@ -1041,15 +1022,16 @@ impl AppState {
                 subject,
             } => {
                 self.show_busy(format!("Deleting {subject}…"));
-                Some(Effect::DeleteAppointment { account, id })
+                Some(Effect::core(account, Command::DeleteAppointment(id)))
             }
             Confirm::DiscardAppointment => {
                 self.appointment = None;
                 None
             }
             Confirm::SendAnyway { draft, .. } => {
+                let account = self.compose.as_ref()?.account;
                 self.show_busy("Sending…");
-                Some(Effect::Send(draft))
+                Some(Effect::core(account, Command::Send(draft)))
             }
         }
     }
@@ -2121,14 +2103,17 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::Send(Draft {
-                kind: ComposeKind::Reply(MessageId("m1".to_owned())),
-                to: vec!["grace@example.com".to_owned()],
-                cc: vec![],
-                subject: "RE: m1".to_owned(),
-                body: "Thanks".to_owned(),
-                attachments: vec![],
-            }))
+            Some(Effect::core(
+                0,
+                Command::Send(Draft {
+                    kind: ComposeKind::Reply(MessageId("m1".to_owned())),
+                    to: vec!["grace@example.com".to_owned()],
+                    cc: vec![],
+                    subject: "RE: m1".to_owned(),
+                    body: "Thanks".to_owned(),
+                    attachments: vec![],
+                })
+            ))
         );
         assert_eq!(app.selected_message, 1, "j and k were typed, not moved");
         assert_eq!(app.status, Some(Status::Busy("Sending…".to_owned())));
@@ -2207,12 +2192,16 @@ Ada"
             app.compose.as_ref().unwrap().from(),
             Some("me@work.example")
         );
-        let Effect::Send(draft) = &effect else {
+        let Effect::Core {
+            account,
+            command: Command::Send(draft),
+        } = &effect
+        else {
             panic!("sent, not {effect:?}");
         };
         assert_eq!(draft.to, ["grace@example.com"]);
         assert_eq!(draft.body, "\n\nAda");
-        assert_eq!(app.account_for(&effect), 1);
+        assert_eq!(*account, 1);
     }
 
     #[test]
@@ -2319,7 +2308,13 @@ Ada"
     fn a_few_sends_in_a_row_go_straight_out() {
         let mut app = replying_after(PACE_LIMIT - 1);
 
-        assert!(matches!(ctrl_s(&mut app), Some(Effect::Send(_))));
+        assert!(matches!(
+            ctrl_s(&mut app),
+            Some(Effect::Core {
+                command: Command::Send(_),
+                ..
+            })
+        ));
         assert_eq!(app.confirm(), None);
     }
 
@@ -2338,7 +2333,10 @@ Ada"
 
         assert!(matches!(
             key(&mut app, KeyCode::Char('y')),
-            Some(Effect::Send(_))
+            Some(Effect::Core {
+                command: Command::Send(_),
+                ..
+            })
         ));
         assert_eq!(app.status, Some(Status::Busy("Sending…".to_owned())));
     }

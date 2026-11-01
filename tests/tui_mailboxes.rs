@@ -322,20 +322,18 @@ fn draft(subject: &str) -> AppointmentDraft {
 #[test]
 fn saving_or_deleting_an_appointment_goes_to_the_agendas_account() {
     let mut s = setup(&[&[], &[]]);
-    let new = Effect::SaveAppointment {
-        account: 1,
-        id: None,
-        draft: draft("New"),
-    };
-    let changed = Effect::SaveAppointment {
-        account: 1,
-        id: Some(AppointmentId("a1".to_owned())),
-        draft: draft("Changed"),
-    };
-    let deleted = Effect::DeleteAppointment {
-        account: 1,
-        id: AppointmentId("a2".to_owned()),
-    };
+    let new = Effect::core(1, Command::CreateAppointment(draft("New")));
+    let changed = Effect::core(
+        1,
+        Command::UpdateAppointment {
+            id: AppointmentId("a1".to_owned()),
+            draft: draft("Changed"),
+        },
+    );
+    let deleted = Effect::core(
+        1,
+        Command::DeleteAppointment(AppointmentId("a2".to_owned())),
+    );
 
     for effect in [new, changed, deleted] {
         s.mailboxes.apply(&mut s.app, Some(effect)).unwrap();

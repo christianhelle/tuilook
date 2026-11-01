@@ -209,10 +209,6 @@ impl Mailboxes {
                     commands.send(save)?;
                     None
                 }
-                Effect::Send(draft) => {
-                    commands.send(Command::Send(draft))?;
-                    None
-                }
                 Effect::Search(query) => app.search_results(search_all(mailboxes, &query)?),
                 Effect::SaveSignature { account, text } => {
                     let saved = self.accounts_file.as_deref().map_or(Ok(()), |path| {
@@ -235,22 +231,6 @@ impl Mailboxes {
                     if sync {
                         commands.send(Command::SyncCalendar)?;
                     }
-                    None
-                }
-                Effect::SaveAppointment { id, draft, .. } => {
-                    let save = match id {
-                        Some(id) => Command::UpdateAppointment { id, draft },
-                        None => Command::CreateAppointment(draft),
-                    };
-                    commands.send(save)?;
-                    None
-                }
-                Effect::DeleteAppointment { id, .. } => {
-                    commands.send(Command::DeleteAppointment(id))?;
-                    None
-                }
-                Effect::SyncCalendar(_) => {
-                    commands.send(Command::SyncCalendar)?;
                     None
                 }
                 Effect::SetPinned { ids, pinned } => {
