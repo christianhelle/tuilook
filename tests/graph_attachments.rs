@@ -222,3 +222,18 @@ async fn a_file_over_150_mb_is_refused_before_anything_is_sent() {
         ))
     );
 }
+
+#[tokio::test]
+async fn a_file_that_will_not_attach_takes_its_draft_away_unsent() {
+    let server = MockServer::start().await;
+    let (_dir, notes) = file("notes.txt", b"hello");
+    expect(&server, "POST", "/me/messages", 201, 1).await;
+    expect(&server, "POST", "/me/messages/d1/attachments", 400, 1).await;
+    expect(&server, "DELETE", "/me/messages/d1", 204, 1).await;
+    expect(&server, "POST", "/me/messages/d1/send", 202, 0).await;
+    let backend = GraphBackend::new(support::client(&server).0);
+
+    let sent = backend.send(&new_message(vec![notes])).await;
+
+    assert!(sent.is_err());
+}

@@ -548,7 +548,12 @@ impl<T: TokenSource> GraphBackend<T> {
         };
         let path = format!("/me/messages/{id}");
         for file in &draft.attachments {
-            self.attach(&path, file).await?;
+            if let Err(e) = self.attach(&path, file).await {
+                // A half-attached draft is no use to anyone; the error
+                // matters more than whether it went.
+                let _ = self.client.delete(&path).await;
+                return Err(e);
+            }
         }
         self.client
             .post_no_content(&format!("{path}/send"), None)
