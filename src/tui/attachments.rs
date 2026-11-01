@@ -13,7 +13,12 @@ use crate::tui::{
 pub enum Request {
     None,
     Close,
-    Save(Vec<Attachment>),
+    /// Save these files of `message`, the mail the picker was opened on,
+    /// whatever a sync has selected since.
+    Save {
+        message: MessageId,
+        attachments: Vec<Attachment>,
+    },
 }
 
 /// The attachments of a message, to pick which to save.
@@ -33,10 +38,18 @@ impl AttachmentPicker {
             KeyCode::Esc | KeyCode::Char('q') => return Request::Close,
             KeyCode::Enter => {
                 if let Some(picked) = self.attachments.get(self.selected) {
-                    return Request::Save(vec![picked.clone()]);
+                    return Request::Save {
+                        message: self.message.clone(),
+                        attachments: vec![picked.clone()],
+                    };
                 }
             }
-            KeyCode::Char('a') => return Request::Save(self.attachments.clone()),
+            KeyCode::Char('a') => {
+                return Request::Save {
+                    message: self.message.clone(),
+                    attachments: self.attachments.clone(),
+                };
+            }
             KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
                 self.selected = (self.selected + 1).min(last);
             }
@@ -59,7 +72,10 @@ impl AppState {
                 self.show_info("No files are attached to this mail");
                 None
             }
-            [only] => self.save_requested(Request::Save(vec![only.clone()])),
+            [only] => self.save_requested(Request::Save {
+                message,
+                attachments: vec![only.clone()],
+            }),
             several => {
                 self.dialog = Some(Dialog::Attachments(AttachmentPicker {
                     message,
@@ -73,10 +89,13 @@ impl AppState {
 
     /// Saves the attachments the picker asked for, if it did.
     pub(crate) fn save_requested(&mut self, request: Request) -> Option<Effect> {
-        let Request::Save(attachments) = request else {
+        let Request::Save {
+            message,
+            attachments,
+        } = request
+        else {
             return None;
         };
-        let message = self.selected()?.id.clone();
         let s = if attachments.len() == 1 { "" } else { "s" };
         self.show_busy(format!("Saving {} file{s}...", attachments.len()));
         Some(Effect::SaveAttachments {
@@ -182,6 +201,18 @@ mod tests {
         app.update(Action::SaveAttachments);
 
         assert_eq!(press(&mut app, KeyCode::Char('a')), saving(&["a1", "a2"]));
+    }
+
+    #[test]
+    fn the_picker_saves_from_its_message_even_if_a_sync_moves_the_selection() {
+        let mut app = reading(&["a1", "a2"]);
+        app.update(Action::SaveAttachments);
+        let mut other = app.messages[0].clone();
+        other.id = MessageId("m2".to_owned());
+
+        app.refresh_messages(vec![other]);
+
+        assert_eq!(press(&mut app, KeyCode::Enter), saving(&["a1"]));
     }
 
     #[test]

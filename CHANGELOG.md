@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving attached files always saves from the mail the picker was opened on,
+  even when a sync removes that mail while you pick.
+
 ## [0.1.4] - 2026-11-01
 
 ### Added
