@@ -279,22 +279,37 @@ fn draw_move_picker(frame: &mut Frame, mover: &MovePicker) {
         Span::styled("Esc", Style::new().fg(Color::Cyan)),
         Span::raw(" cancel"),
     ]));
+    let cursor = FILTER_LABEL.len() + usize::from(column);
+    show_picker(frame, lines, PROMPT_WIDTH, mover.title(), (cursor, 0));
+}
+
+/// Draws a picker's `lines` in a dialog `width` wide, with the cursor at
+/// `cursor`, a column and a line from the top left inside the border.
+fn show_picker(
+    frame: &mut Frame,
+    lines: Vec<Line>,
+    width: u16,
+    title: String,
+    cursor: (usize, u16),
+) {
     let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
     let area = frame
         .area()
-        .centered(Constraint::Length(PROMPT_WIDTH), Constraint::Length(height));
+        .centered(Constraint::Length(width), Constraint::Length(height));
     frame.render_widget(Clear, area);
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
-                .title(mover.title())
+                .title(title)
                 .border_style(Style::new().fg(Color::Yellow)),
         ),
         area,
     );
-    let label = u16::try_from(FILTER_LABEL.len()).unwrap_or(u16::MAX);
-    let x = area.x.saturating_add(1 + label).saturating_add(column);
-    frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 1));
+    let (column, line) = cursor;
+    let column = u16::try_from(column).unwrap_or(u16::MAX);
+    let x = area.x.saturating_add(1).saturating_add(column);
+    let y = area.y.saturating_add(1).saturating_add(line);
+    frame.set_cursor_position((x.min(area.right().saturating_sub(2)), y));
 }
 
 /// The attached files to pick from to save.
@@ -409,22 +424,9 @@ fn draw_file_picker(frame: &mut Frame, picker: &FilePicker) {
         Span::styled("Esc", Style::new().fg(Color::Cyan)),
         Span::raw(" cancel"),
     ]));
-    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
-    let area = frame
-        .area()
-        .centered(Constraint::Length(FILES_WIDTH), Constraint::Length(height));
-    frame.render_widget(Clear, area);
-    frame.render_widget(
-        Paragraph::new(lines).block(
-            Block::bordered()
-                .title(" Attach a file ")
-                .border_style(Style::new().fg(Color::Yellow)),
-        ),
-        area,
-    );
-    let label = u16::try_from(NAME_LABEL.len()).unwrap_or(u16::MAX);
-    let x = area.x.saturating_add(1 + label).saturating_add(column);
-    frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 2));
+    let cursor = NAME_LABEL.len() + usize::from(column);
+    let title = " Attach a file ".to_owned();
+    show_picker(frame, lines, FILES_WIDTH, title, (cursor, 1));
 }
 
 /// What the file dialog's filter is labelled with.
