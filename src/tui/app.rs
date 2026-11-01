@@ -42,23 +42,12 @@ pub enum Effect {
         account: usize,
         command: Command,
     },
+    /// Have several accounts' cores each do their part: search results can
+    /// be in more than one.
+    Cores(Vec<(usize, Command)>),
     LoadFolder(FolderId),
     /// Show only the unread messages of a folder.
     LoadUnread(FolderId),
-    /// Pin messages to the top of their folders, or unpin them.
-    SetPinned {
-        ids: Vec<MessageId>,
-        pinned: bool,
-    },
-    /// Flag messages for follow-up, or clear their flags.
-    SetFlagged {
-        ids: Vec<MessageId>,
-        flagged: bool,
-    },
-    Delete {
-        ids: Vec<MessageId>,
-        permanent: bool,
-    },
     /// Sync every folder.
     Sync,
     /// Save `attachments` of `message` to the downloads folder.
@@ -762,6 +751,26 @@ impl AppState {
         self.folder_account.get(index).copied().unwrap_or(0)
     }
 
+    /// Has each account's core do `command` with the messages of `ids` it holds.
+    fn each_account(
+        &self,
+        ids: Vec<MessageId>,
+        command: impl Fn(Vec<MessageId>) -> Command,
+    ) -> Effect {
+        let mut split: Vec<_> = self
+            .by_account(ids)
+            .into_iter()
+            .map(|(account, ids)| (account, command(ids)))
+            .collect();
+        match split.len() {
+            1 => {
+                let (account, command) = split.remove(0);
+                Effect::core(account, command)
+            }
+            _ => Effect::Cores(split),
+        }
+    }
+
     /// The account folder `id` is in.
     pub(crate) fn folder_home(&self, id: &FolderId) -> usize {
         self.folders
@@ -782,12 +791,9 @@ impl AppState {
             Effect::LoadFolder(id) | Effect::LoadUnread(id) => self.folder_home(id),
             Effect::Core { account, .. } => *account,
             Effect::SaveAttachments { message: id, .. } => self.message_account(id),
-            Effect::Delete { .. }
-            | Effect::SetPinned { .. }
-            | Effect::SetFlagged { .. }
-            | Effect::Sync
-            | Effect::Search(_)
-            | Effect::Copy(_) => self.current_account(),
+            Effect::Cores(_) | Effect::Sync | Effect::Search(_) | Effect::Copy(_) => {
+                self.current_account()
+            }
             Effect::SaveSignature { account, .. } | Effect::LoadAgenda { account, .. } => *account,
         }
     }
@@ -941,7 +947,7 @@ impl AppState {
             self.selected_message = index;
         }
         self.settle_selection();
-        Some(Effect::SetPinned { ids, pinned })
+        Some(self.each_account(ids, |ids| Command::SetPinned { ids, pinned }))
     }
 
     /// Flags the marked or selected messages, or unflags them when they all
@@ -960,7 +966,7 @@ impl AppState {
         for m in self.messages.iter_mut().filter(|m| ids.contains(&m.id)) {
             m.flagged = flagged;
         }
-        Some(Effect::SetFlagged { ids, flagged })
+        Some(self.each_account(ids, |ids| Command::SetFlagged { ids, flagged }))
     }
 
     /// The marked messages in list order, or else the selected one.
@@ -994,7 +1000,7 @@ impl AppState {
             Confirm::Delete { ids, permanent } => {
                 let s = if ids.len() == 1 { "" } else { "s" };
                 self.show_busy(format!("Deleting {} message{s}…", ids.len()));
-                Some(Effect::Delete { ids, permanent })
+                Some(self.each_account(ids, |ids| Command::Delete { ids, permanent }))
             }
             Confirm::DeleteFolder {
                 folder,
@@ -1877,10 +1883,13 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::SetPinned {
-                ids: message_ids(&["m1"]),
-                pinned: true
-            })
+            Some(Effect::core(
+                0,
+                Command::SetPinned {
+                    ids: message_ids(&["m1"]),
+                    pinned: true
+                }
+            ))
         );
         assert_eq!(app.messages[0].id.0, "m1");
         assert!(app.messages[0].pinned);
@@ -1897,10 +1906,13 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::SetPinned {
-                ids: message_ids(&["m1"]),
-                pinned: false
-            })
+            Some(Effect::core(
+                0,
+                Command::SetPinned {
+                    ids: message_ids(&["m1"]),
+                    pinned: false
+                }
+            ))
         );
         assert!(app.messages.iter().all(|m| !m.pinned));
         assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
@@ -1916,10 +1928,13 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::SetPinned {
-                ids: message_ids(&["m0", "m1"]),
-                pinned: true
-            })
+            Some(Effect::core(
+                0,
+                Command::SetPinned {
+                    ids: message_ids(&["m0", "m1"]),
+                    pinned: true
+                }
+            ))
         );
     }
 
@@ -1932,10 +1947,13 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::SetFlagged {
-                ids: message_ids(&["m1"]),
-                flagged: true
-            })
+            Some(Effect::core(
+                0,
+                Command::SetFlagged {
+                    ids: message_ids(&["m1"]),
+                    flagged: true
+                }
+            ))
         );
         assert!(app.messages[1].flagged);
         assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
@@ -1944,10 +1962,13 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::SetFlagged {
-                ids: message_ids(&["m1"]),
-                flagged: false
-            })
+            Some(Effect::core(
+                0,
+                Command::SetFlagged {
+                    ids: message_ids(&["m1"]),
+                    flagged: false
+                }
+            ))
         );
         assert!(app.messages.iter().all(|m| !m.flagged));
     }
@@ -1962,10 +1983,13 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::SetFlagged {
-                ids: message_ids(&["m0", "m1"]),
-                flagged: true
-            })
+            Some(Effect::core(
+                0,
+                Command::SetFlagged {
+                    ids: message_ids(&["m0", "m1"]),
+                    flagged: true
+                }
+            ))
         );
     }
 
@@ -1979,10 +2003,13 @@ Dear Charles,"
         let effect = key(&mut app, KeyCode::Char('y'));
         assert_eq!(
             effect,
-            Some(Effect::Delete {
-                ids: message_ids(&["m0"]),
-                permanent: false
-            })
+            Some(Effect::core(
+                0,
+                Command::Delete {
+                    ids: message_ids(&["m0"]),
+                    permanent: false
+                }
+            ))
         );
         assert_eq!(app.confirm(), None);
     }
@@ -2001,10 +2028,13 @@ Dear Charles,"
 
         assert_eq!(
             effect,
-            Some(Effect::Delete {
-                ids: message_ids(&["m0", "m2"]),
-                permanent: true
-            }),
+            Some(Effect::core(
+                0,
+                Command::Delete {
+                    ids: message_ids(&["m0", "m2"]),
+                    permanent: true
+                }
+            )),
             "in list order"
         );
     }

@@ -13,8 +13,9 @@ use tuilook::model::{
 };
 use tuilook::store::Store;
 use tuilook::tui::{
-    app::{AppState, Effect, Status},
+    app::{AppState, Confirm, Effect, Status},
     clipboard,
+    dialog::Dialog,
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
 };
@@ -152,11 +153,14 @@ fn deleting_search_results_asks_each_account_to_delete_its_own() {
     search(&mut s.app, &mut s.mailboxes, "lunch");
     assert_eq!(s.app.messages.len(), 2);
 
-    let delete = Effect::Delete {
+    s.app.dialog = Some(Dialog::Confirm(Confirm::Delete {
         ids: ids(&["a1", "b1"]),
         permanent: false,
-    };
-    s.mailboxes.apply(&mut s.app, Some(delete)).unwrap();
+    }));
+    let delete = s
+        .app
+        .on_key(KeyEvent::from(KeyCode::Char('y')), &mut Keymap::default());
+    s.mailboxes.apply(&mut s.app, delete).unwrap();
 
     let deletes = |id| {
         vec![Command::Delete {

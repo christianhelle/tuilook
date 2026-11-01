@@ -188,6 +188,12 @@ impl Mailboxes {
                     commands.send(command)?;
                     None
                 }
+                Effect::Cores(work) => {
+                    for (account, command) in work {
+                        mailboxes[account].commands.send(command)?;
+                    }
+                    None
+                }
                 Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
                 Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
                 Effect::Sync => {
@@ -230,30 +236,6 @@ impl Mailboxes {
                     app.appointments_loaded(account, store.appointments_between(from, to)?);
                     if sync {
                         commands.send(Command::SyncCalendar)?;
-                    }
-                    None
-                }
-                Effect::SetPinned { ids, pinned } => {
-                    // Search results may be in several accounts.
-                    for (account, ids) in app.by_account(ids) {
-                        let pin = Command::SetPinned { ids, pinned };
-                        mailboxes[account].commands.send(pin)?;
-                    }
-                    None
-                }
-                Effect::SetFlagged { ids, flagged } => {
-                    // Search results may be in several accounts.
-                    for (account, ids) in app.by_account(ids) {
-                        let flag = Command::SetFlagged { ids, flagged };
-                        mailboxes[account].commands.send(flag)?;
-                    }
-                    None
-                }
-                Effect::Delete { ids, permanent } => {
-                    // Search results may be in several accounts.
-                    for (account, ids) in app.by_account(ids) {
-                        let delete = Command::Delete { ids, permanent };
-                        mailboxes[account].commands.send(delete)?;
                     }
                     None
                 }
