@@ -4,7 +4,7 @@ use crate::model::Folder;
 
 use crate::tui::{
     app::{AppState, Effect},
-    rows::{Row, favorite_row, is_favorite_row},
+    rows::{Row, favorite_row},
 };
 
 impl AppState {
@@ -53,19 +53,10 @@ impl AppState {
             .unzip()
     }
 
-    /// How many rows the favorites take at the top of `folders`.
-    pub fn favorite_count(&self) -> usize {
-        self.folder_pane
-            .folders
-            .iter()
-            .take_while(|f| is_favorite_row(f))
-            .count()
-    }
-
     /// `*` in the folder pane: adds the selected folder to the favorites,
     /// or takes it out if it is in them already.
     pub(crate) fn toggle_favorite(&mut self) -> Option<Effect> {
-        let Row::Folder(folder) = self.selected_folder_row()? else {
+        let Row::Folder(folder) = self.folder_pane.selected_folder_row()? else {
             return None;
         };
         let (id, name) = (folder.id.clone(), folder.name.clone());
@@ -124,7 +115,8 @@ mod tests {
     }
 
     fn names(app: &AppState) -> Vec<&str> {
-        app.visible_folders()
+        app.folder_pane
+            .visible_folders()
             .into_iter()
             .map(|i| app.folder_pane.folders[i].name.as_str())
             .collect()
@@ -150,9 +142,12 @@ mod tests {
 
         assert_eq!(app.update(Action::ToggleFavorite), None);
 
-        assert_eq!(app.favorite_count(), 1);
+        assert_eq!(app.folder_pane.favorite_count(), 1);
         assert_eq!(names(&app)[0], "Receipts");
-        assert_eq!(app.current_folder(), Some(&FolderId("receipts".to_owned())));
+        assert_eq!(
+            app.folder_pane.current_folder(),
+            Some(&FolderId("receipts".to_owned()))
+        );
     }
 
     #[test]
@@ -161,15 +156,15 @@ mod tests {
         select(&mut app, "projects");
         app.update(Action::ToggleFavorite);
         app.update(Action::ToggleFavorite);
-        assert_eq!(app.favorite_count(), 0);
+        assert_eq!(app.folder_pane.favorite_count(), 0);
 
         app.update(Action::ToggleFavorite);
         select(&mut app, "favorite:projects");
         app.update(Action::ToggleFavorite);
 
-        assert_eq!(app.favorite_count(), 0);
+        assert_eq!(app.folder_pane.favorite_count(), 0);
         assert_eq!(
-            app.current_folder(),
+            app.folder_pane.current_folder(),
             Some(&FolderId("projects".to_owned())),
             "the folder stays selected in its account"
         );
@@ -216,7 +211,7 @@ mod tests {
         assert_eq!(app.shown_folder(), Some(FolderId("work-inbox".to_owned())));
         assert_eq!(app.account_for(&load("work-inbox").unwrap()), 1);
         assert_eq!(app.current_account(), 1);
-        assert_eq!(app.unread_shown(0), 4);
+        assert_eq!(app.folder_pane.unread_shown(0), 4);
     }
 
     #[test]
@@ -251,7 +246,7 @@ mod tests {
 
         assert_eq!(effect, None);
         assert_eq!(
-            app.current_folder(),
+            app.folder_pane.current_folder(),
             Some(&FolderId("favorite:receipts".to_owned()))
         );
         assert_eq!(app.folder_pane.folders[0].unread, 5);
@@ -262,7 +257,7 @@ mod tests {
         let mut app = AppState::default();
         app.folder_pane.favorites = vec![FolderId("later".to_owned())];
         app.set_folders(vec![folder("inbox", "Inbox", None, 0)]);
-        assert_eq!(app.favorite_count(), 0);
+        assert_eq!(app.folder_pane.favorite_count(), 0);
 
         app.set_folders(vec![
             folder("inbox", "Inbox", None, 0),

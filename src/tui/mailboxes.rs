@@ -167,7 +167,7 @@ fn refresh_shown(app: &mut AppState, store: &Store, folder: &FolderId) -> Result
     if app.results_query().is_some() || app.shown_folder().as_ref() != Some(folder) {
         return Ok(None);
     }
-    let messages = if app.shows_unread() {
+    let messages = if app.folder_pane.shows_unread() {
         store.unread_in(folder, &app.kept_read())?
     } else {
         store.messages_in(folder)?

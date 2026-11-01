@@ -35,7 +35,7 @@ impl Snapshot {
     pub fn of(app: &AppState) -> Self {
         Snapshot {
             focus: app.focus,
-            folder: app.current_folder().map(|id| id.0.clone()),
+            folder: app.folder_pane.current_folder().map(|id| id.0.clone()),
             message: app
                 .messages
                 .get(app.selected_message)
@@ -101,7 +101,7 @@ impl AppState {
         for id in &snapshot.collapsed {
             self.folder_pane.expanded.remove(&FolderId(id.clone()));
         }
-        self.reveal_selected_folder();
+        self.folder_pane.reveal_selected_folder();
         effect
     }
 
@@ -167,7 +167,7 @@ mod tests {
 
         let effect = app.restore(&snapshot);
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
-        assert_eq!(app.favorite_count(), 1);
+        assert_eq!(app.folder_pane.favorite_count(), 1);
         app.set_messages(vec![message("m1"), message("m2")]);
         let effect = app.select_message("m2");
 
@@ -210,7 +210,7 @@ mod tests {
             ..Default::default()
         });
 
-        assert_eq!(app.visible_folders(), [0, 1, 2]);
+        assert_eq!(app.folder_pane.visible_folders(), [0, 1, 2]);
         assert_eq!(app.folder_pane.selected, 1);
     }
 
@@ -227,7 +227,7 @@ mod tests {
     }
 
     fn shown(app: &AppState) -> Vec<String> {
-        let visible = app.visible_folders();
+        let visible = app.folder_pane.visible_folders();
         visible
             .iter()
             .map(|&i| app.folder_pane.folders[i].id.0.clone())

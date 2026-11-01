@@ -22,7 +22,7 @@ impl AppState {
         if self.loading_older.is_some() || self.results_query().is_some() {
             return None;
         }
-        let Row::Folder(row) = self.selected_folder_row()? else {
+        let Row::Folder(row) = self.folder_pane.selected_folder_row()? else {
             return None;
         };
         // The end is a message: a folded last group hides the mail fetched.
@@ -32,7 +32,7 @@ impl AppState {
             Some(MessageRow::Message(_)) => self.selected_row(&rows) == Some(rows.len() - 1),
             Some(MessageRow::Header { .. }) => false,
         };
-        let unread_only = self.shows_unread();
+        let unread_only = self.folder_pane.shows_unread();
         let folder = row.id.clone();
         let key = (folder.clone(), unread_only);
         if !at_end || self.no_older.contains(&key) {
@@ -54,7 +54,7 @@ impl AppState {
         self.loading_older = Some(key);
         self.show_busy(LOADING_OLDER);
         Some(Effect::core(
-            self.folder_home(&folder),
+            self.folder_pane.folder_home(&folder),
             Command::LoadOlder {
                 folder,
                 before,

@@ -127,7 +127,7 @@ impl AppState {
     /// selected one or, with `top_level` or on an account's row, at the top
     /// level of the selected folder's account.
     pub(crate) fn ask_folder_name(&mut self, top_level: bool) {
-        let Some(row) = self.selected_folder_row() else {
+        let Some(row) = self.folder_pane.selected_folder_row() else {
             return;
         };
         let (parent, under) = match row {
@@ -143,7 +143,7 @@ impl AppState {
     /// F2 in the folder pane: asks a new name for the selected folder,
     /// starting from the one it has. Outlook's own folders keep theirs.
     pub(crate) fn ask_new_name(&mut self) {
-        let Some(Row::Folder(folder)) = self.selected_folder_row() else {
+        let Some(Row::Folder(folder)) = self.folder_pane.selected_folder_row() else {
             return;
         };
         let account = self.current_account();

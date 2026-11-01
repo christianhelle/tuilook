@@ -707,7 +707,7 @@ impl AppState {
     /// unread section and the favorites, keeping the selected row, or
     /// failing that the folder it showed.
     pub(crate) fn rebuild_folders(&mut self) -> Option<Effect> {
-        let previous = self.current_folder().cloned();
+        let previous = self.folder_pane.current_folder().cloned();
         let shown = self.load_shown();
         let (folders, owners) = self.folder_tree();
         let find = |id: &FolderId| folders.iter().position(|f| &f.id == id);
@@ -719,7 +719,7 @@ impl AppState {
             .unwrap_or(0);
         self.folder_pane.folders = folders;
         self.folder_pane.owners = owners;
-        self.reveal_selected_folder();
+        self.folder_pane.reveal_selected_folder();
         let current = self.load_shown();
         // Search results stay until the search is left.
         (current != shown && self.results_query().is_none())
@@ -731,35 +731,21 @@ impl AppState {
     /// the unread ones for a row in the unread section.
     pub(crate) fn load_shown(&self) -> Option<Effect> {
         let id = self.shown_folder()?;
-        Some(if self.shows_unread() {
+        Some(if self.folder_pane.shows_unread() {
             Effect::LoadUnread(id)
         } else {
             Effect::LoadFolder(id)
         })
     }
 
-    /// The id of the selected row, which for a favorite or unread row is not
-    /// the folder's.
-    pub fn current_folder(&self) -> Option<&FolderId> {
-        self.folder_pane
-            .folders
-            .get(self.folder_pane.selected)
-            .map(|f| &f.id)
-    }
-
     /// The folder whose messages are shown.
     pub fn shown_folder(&self) -> Option<FolderId> {
-        self.current_folder().map(row_target)
+        self.folder_pane.current_folder().map(row_target)
     }
 
     /// The account of the selected folder, and so of the messages shown.
     pub fn current_account(&self) -> usize {
-        self.account_of(self.folder_pane.selected)
-    }
-
-    /// The account the folder at `index` belongs to.
-    pub fn account_of(&self, index: usize) -> usize {
-        self.folder_pane.owners.get(index).copied().unwrap_or(0)
+        self.folder_pane.account_of(self.folder_pane.selected)
     }
 
     /// Has each account's core do `command` with the messages of `ids` it holds.
@@ -782,15 +768,6 @@ impl AppState {
         }
     }
 
-    /// The account folder `id` is in.
-    pub(crate) fn folder_home(&self, id: &FolderId) -> usize {
-        self.folder_pane
-            .folders
-            .iter()
-            .position(|f| &f.id == id)
-            .map_or(0, |index| self.account_of(index))
-    }
-
     /// Has the core of the account holding message `id` load its body.
     pub(crate) fn load_body(&self, id: MessageId) -> Effect {
         Effect::core(self.message_account(&id), Command::LoadBody(id))
@@ -800,7 +777,7 @@ impl AppState {
     /// account instead.
     pub fn account_for(&self, effect: &Effect) -> usize {
         match effect {
-            Effect::LoadFolder(id) | Effect::LoadUnread(id) => self.folder_home(id),
+            Effect::LoadFolder(id) | Effect::LoadUnread(id) => self.folder_pane.folder_home(id),
             Effect::Core { account, .. } => *account,
             Effect::SaveAttachments { message: id, .. } => self.message_account(id),
             Effect::Cores(_) | Effect::Sync | Effect::Search(_) | Effect::Copy(_) => {
@@ -1021,7 +998,7 @@ impl AppState {
                 permanent,
             } => {
                 self.show_busy(format!("Deleting {name}…"));
-                let account = self.folder_home(&folder);
+                let account = self.folder_pane.folder_home(&folder);
                 Some(Effect::core(
                     account,
                     Command::DeleteFolder { folder, permanent },
@@ -1332,7 +1309,7 @@ impl AppState {
         match self.focus {
             Pane::Folders => {
                 // Move among the folders shown, past those folded away.
-                let visible = self.visible_folders();
+                let visible = self.folder_pane.visible_folders();
                 let at = visible
                     .iter()
                     .position(|&i| i == self.folder_pane.selected)?;
@@ -1795,7 +1772,10 @@ Dear Charles,"
         let effect = app.set_folders(vec![folder("a"), folder("b")]);
 
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("a".to_owned()))));
-        assert_eq!(app.current_folder(), Some(&FolderId("a".to_owned())));
+        assert_eq!(
+            app.folder_pane.current_folder(),
+            Some(&FolderId("a".to_owned()))
+        );
     }
 
     #[test]

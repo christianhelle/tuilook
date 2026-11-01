@@ -137,8 +137,8 @@ fn split_folders(area: Rect, app: &AppState) -> [Rect; 3] {
         rows.saturating_add(2).min(area.height / 3)
     };
     Layout::vertical([
-        Constraint::Length(height(app.favorite_count())),
-        Constraint::Length(height(app.unread_rows_shown())),
+        Constraint::Length(height(app.folder_pane.favorite_count())),
+        Constraint::Length(height(app.folder_pane.unread_rows_shown())),
         Constraint::Fill(1),
     ])
     .areas(area)
@@ -1431,10 +1431,10 @@ fn section_block(focused: bool, title: &str) -> Block<'static> {
 /// The rows shown in the favorites, in the unread section and below them,
 /// as indexes into `folders`.
 fn folder_sections(app: &AppState) -> [Vec<usize>; 3] {
-    let favorites = app.favorite_count();
-    let unread = favorites + app.unread_count();
+    let favorites = app.folder_pane.favorite_count();
+    let unread = favorites + app.folder_pane.unread_count();
     let mut sections: [Vec<usize>; 3] = Default::default();
-    for i in app.visible_folders() {
+    for i in app.folder_pane.visible_folders() {
         let section = if i < favorites {
             0
         } else if i < unread {
@@ -1451,8 +1451,8 @@ fn folder_sections(app: &AppState) -> [Vec<usize>; 3] {
 /// the areas given, in that order.
 fn draw_folders(frame: &mut Frame, app: &AppState, areas: [Rect; 3]) {
     let depths = folder_depths(&app.folder_pane.folders);
-    let favorites = app.favorite_count();
-    let unread = favorites + app.unread_count();
+    let favorites = app.folder_pane.favorite_count();
+    let unread = favorites + app.folder_pane.unread_count();
     let selected = app.folder_pane.selected;
     let section = if selected < favorites {
         0
@@ -1491,7 +1491,10 @@ fn draw_folder_rows(
 ) {
     let items = rows.iter().map(|&index| {
         let folder = &app.folder_pane.folders[index];
-        let marker = match (app.has_subfolders(index), app.is_expanded(index)) {
+        let marker = match (
+            app.folder_pane.has_subfolders(index),
+            app.folder_pane.is_expanded(index),
+        ) {
             (false, _) => "  ",
             (true, true) => "▾ ",
             (true, false) => "▸ ",
@@ -1499,7 +1502,7 @@ fn draw_folder_rows(
         let mut spans = vec![
             Span::raw("  ".repeat(depths[index])),
             Span::styled(marker, Style::new().fg(Color::DarkGray)),
-            if app.folder_row(index) == Some(Row::Account) {
+            if app.folder_pane.folder_row(index) == Some(Row::Account) {
                 Span::styled(
                     shown(&folder.name),
                     Style::new().add_modifier(Modifier::BOLD),
@@ -1508,7 +1511,7 @@ fn draw_folder_rows(
                 Span::raw(shown(&folder.name))
             },
         ];
-        let unread = app.unread_shown(index);
+        let unread = app.folder_pane.unread_shown(index);
         if unread > 0 {
             spans.push(Span::raw(format!(" ({unread})")));
         }
@@ -1598,6 +1601,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
 /// several.
 fn found_in(app: &AppState, message: &Message) -> String {
     let folder = app
+        .folder_pane
         .real_folder(&message.folder_id)
         .map_or("?", |f| f.name.as_str());
     let account = app

@@ -101,25 +101,6 @@ impl AppState {
         (rows, owners)
     }
 
-    /// How many rows of the unread section are shown, its folded folders'
-    /// subfolders left out.
-    pub fn unread_rows_shown(&self) -> usize {
-        self.visible_folders()
-            .into_iter()
-            .filter(|&i| is_unread_row(&self.folder_pane.folders[i]))
-            .count()
-    }
-
-    /// How many rows the unread section takes, below the favorites.
-    pub fn unread_count(&self) -> usize {
-        self.folder_pane
-            .folders
-            .iter()
-            .skip(self.favorite_count())
-            .take_while(|f| is_unread_row(f))
-            .count()
-    }
-
     /// The read messages the unread list keeps when it is loaded again after
     /// a sync: every one it shows, so going back to mail just read still
     /// works. After F5 only the one being read stays. Picking the folder
@@ -130,15 +111,6 @@ impl AppState {
             return selected.map(|m| m.id.clone()).into_iter().collect();
         }
         self.messages.iter().map(|m| m.id.clone()).collect()
-    }
-
-    /// Whether the selected row is in the unread section, and so the
-    /// message list shows only unread mail.
-    pub fn shows_unread(&self) -> bool {
-        self.folder_pane
-            .folders
-            .get(self.folder_pane.selected)
-            .is_some_and(is_unread_row)
     }
 }
 
@@ -183,8 +155,9 @@ mod tests {
     }
 
     fn unread_names(app: &AppState) -> Vec<&str> {
-        let rows = app.unread_count();
-        app.visible_folders()
+        let rows = app.folder_pane.unread_count();
+        app.folder_pane
+            .visible_folders()
             .into_iter()
             .filter(|&i| i < rows)
             .map(|i| app.folder_pane.folders[i].name.as_str())
@@ -210,16 +183,23 @@ mod tests {
             ["me@outlook.com", "Inbox", "me@work.example", "Inbox"],
             "Receipts is inside the collapsed Inbox"
         );
-        assert_eq!(app.unread_count(), 5);
-        assert_eq!(app.unread_shown(1), 2, "Inbox counts Receipts' unread mail");
+        assert_eq!(app.folder_pane.unread_count(), 5);
+        assert_eq!(
+            app.folder_pane.unread_shown(1),
+            2,
+            "Inbox counts Receipts' unread mail"
+        );
     }
 
     #[test]
     fn the_first_real_folder_is_still_selected_to_start() {
         let app = two_accounts();
 
-        assert_eq!(app.current_folder(), Some(&FolderId("inbox".to_owned())));
-        assert!(!app.shows_unread());
+        assert_eq!(
+            app.folder_pane.current_folder(),
+            Some(&FolderId("inbox".to_owned()))
+        );
+        assert!(!app.folder_pane.shows_unread());
     }
 
     #[test]
@@ -230,7 +210,7 @@ mod tests {
 
         let load = Effect::LoadUnread(FolderId("work-inbox".to_owned()));
         assert_eq!(effect, Some(load.clone()));
-        assert!(app.shows_unread());
+        assert!(app.folder_pane.shows_unread());
         assert_eq!(app.account_for(&load), 1);
         assert_eq!(app.current_account(), 1);
     }
@@ -242,7 +222,7 @@ mod tests {
 
         assert_eq!(app.set_account_folders(0, outlook(0)), None);
         assert_eq!(
-            app.current_folder(),
+            app.folder_pane.current_folder(),
             Some(&FolderId("unread:receipts".to_owned()))
         );
 
@@ -317,6 +297,6 @@ mod tests {
 
         app.set_folders(outlook(0));
 
-        assert_eq!(app.unread_count(), 0);
+        assert_eq!(app.folder_pane.unread_count(), 0);
     }
 }

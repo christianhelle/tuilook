@@ -1,7 +1,5 @@
 //! The folder tree: which folders are expanded, and so which are shown.
 
-use std::collections::HashSet;
-
 use crate::model::FolderId;
 
 use crate::tui::{
@@ -11,70 +9,11 @@ use crate::tui::{
 };
 
 impl AppState {
-    /// Indexes into `folders` of the folders shown, in order: the top-level
-    /// ones, and the subfolders of expanded folders that are shown.
-    pub fn visible_folders(&self) -> Vec<usize> {
-        let mut earlier: HashSet<&FolderId> = HashSet::new();
-        let mut shown: HashSet<&FolderId> = HashSet::new();
-        let mut visible = Vec::new();
-        for (index, folder) in self.folder_pane.folders.iter().enumerate() {
-            let show = match &folder.parent_id {
-                // The tree lists a parent before its subfolders; a folder
-                // whose parent is not before it is shown at the top level.
-                Some(parent) if earlier.contains(parent) => {
-                    shown.contains(parent) && self.folder_pane.expanded.contains(parent)
-                }
-                _ => true,
-            };
-            earlier.insert(&folder.id);
-            if show {
-                shown.insert(&folder.id);
-                visible.push(index);
-            }
-        }
-        visible
-    }
-
-    pub fn has_subfolders(&self, index: usize) -> bool {
-        let id = &self.folder_pane.folders[index].id;
-        self.folder_pane
-            .folders
-            .iter()
-            .any(|f| f.parent_id.as_ref() == Some(id))
-    }
-
-    pub fn is_expanded(&self, index: usize) -> bool {
-        self.folder_pane
-            .expanded
-            .contains(&self.folder_pane.folders[index].id)
-    }
-
-    /// Unread messages in a folder, counting its subfolders' while they are
-    /// folded away inside it so new mail is never hidden.
-    pub fn unread_shown(&self, index: usize) -> u32 {
-        if self.is_expanded(index) {
-            return self.folder_pane.folders[index].unread;
-        }
-        let mut inside = HashSet::from([&self.folder_pane.folders[index].id]);
-        let mut unread = self.folder_pane.folders[index].unread;
-        // Subfolders follow their parent, so one pass finds them all.
-        for folder in &self.folder_pane.folders[index + 1..] {
-            match &folder.parent_id {
-                Some(parent) if inside.contains(parent) => {
-                    inside.insert(&folder.id);
-                    unread += folder.unread;
-                }
-                _ => break,
-            }
-        }
-        unread
-    }
-
     /// → in the folder pane: expands the folder, or if it already is,
     /// moves to its first subfolder.
     pub(crate) fn expand_folder(&mut self) -> Option<Effect> {
         let index = self.folder_pane.selected;
-        if self.folder_pane.folders.is_empty() || !self.has_subfolders(index) {
+        if self.folder_pane.folders.is_empty() || !self.folder_pane.has_subfolders(index) {
             return None;
         }
         if self
@@ -121,7 +60,7 @@ impl AppState {
     /// d or D in the folder pane: asks before deleting the selected folder.
     /// Outlook's own folders, such as Inbox, cannot be deleted.
     pub(crate) fn ask_to_delete_folder(&mut self, permanent: bool) {
-        let Some(Row::Folder(folder)) = self.selected_folder_row() else {
+        let Some(Row::Folder(folder)) = self.folder_pane.selected_folder_row() else {
             return;
         };
         let name = folder.name.clone();
@@ -147,23 +86,6 @@ impl AppState {
             .find(|f| &f.id == folder)
             .map_or_else(|| "the folder".to_owned(), |f| f.name.clone());
         self.show_info(format!("Deleted {name}"));
-    }
-
-    /// Expands every folder above the selected one, so it is shown.
-    pub(crate) fn reveal_selected_folder(&mut self) {
-        let mut parent = self
-            .folder_pane
-            .folders
-            .get(self.folder_pane.selected)
-            .and_then(|f| f.parent_id.clone());
-        while let Some(id) = parent {
-            let Some(folder) = self.folder_pane.folders.iter().find(|f| f.id == id) else {
-                break;
-            };
-            // Above an expanded folder may still be a folded account.
-            self.folder_pane.expanded.insert(id);
-            parent = folder.parent_id.clone();
-        }
     }
 }
 
@@ -198,9 +120,10 @@ mod tests {
 
     /// The folders shown below the unread section.
     fn names(app: &AppState) -> Vec<&str> {
-        app.visible_folders()
+        app.folder_pane
+            .visible_folders()
             .into_iter()
-            .filter(|&i| i >= app.unread_count())
+            .filter(|&i| i >= app.folder_pane.unread_count())
             .map(|i| app.folder_pane.folders[i].name.as_str())
             .collect()
     }
@@ -357,15 +280,15 @@ mod tests {
     fn a_collapsed_folder_counts_the_unread_mail_inside_it() {
         let mut app = tree();
 
-        assert_eq!(app.unread_shown(at(&app, "inbox")), 7);
+        assert_eq!(app.folder_pane.unread_shown(at(&app, "inbox")), 7);
         app.update(Action::Expand);
-        assert_eq!(app.unread_shown(at(&app, "inbox")), 1);
+        assert_eq!(app.folder_pane.unread_shown(at(&app, "inbox")), 1);
         assert_eq!(
-            app.unread_shown(at(&app, "receipts")),
+            app.folder_pane.unread_shown(at(&app, "receipts")),
             6,
             "receipts is still collapsed"
         );
-        assert_eq!(app.unread_shown(at(&app, "archive")), 0);
+        assert_eq!(app.folder_pane.unread_shown(at(&app, "archive")), 0);
     }
 
     #[test]
@@ -373,7 +296,7 @@ mod tests {
         let mut app = tree();
         app.folder_pane.selected = at(&app, "2026");
 
-        app.reveal_selected_folder();
+        app.folder_pane.reveal_selected_folder();
 
         assert_eq!(
             names(&app),
@@ -416,7 +339,7 @@ mod tests {
             ["me@outlook.com", "inbox", "me@work.example", "work-inbox"]
         );
         assert_eq!(
-            app.folder_pane.owners[app.unread_count()..],
+            app.folder_pane.owners[app.folder_pane.unread_count()..],
             [0, 0, 0, 1, 1]
         );
     }
@@ -433,7 +356,11 @@ mod tests {
         app.update(Action::Collapse);
 
         assert_eq!(names(&app), ["me@outlook.com", "inbox", "me@work.example"]);
-        assert_eq!(app.unread_shown(at(&app, "account:me@work.example")), 4);
+        assert_eq!(
+            app.folder_pane
+                .unread_shown(at(&app, "account:me@work.example")),
+            4
+        );
     }
 
     #[test]
