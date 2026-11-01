@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::model::{AppointmentId, Attachment, FolderId, MessageId};
 
 /// Something the user asked for. The UI applies it to its own state and
@@ -109,6 +111,8 @@ pub enum Event {
         ids: Vec<MessageId>,
         to: FolderId,
     },
+    /// An attached file was saved here.
+    AttachmentSaved(PathBuf),
     Sent,
     /// The message being sent was not; it is still open to try again.
     SendFailed(String),

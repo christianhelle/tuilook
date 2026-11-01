@@ -1,14 +1,16 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, path::PathBuf};
 
 use crate::model::{
-    AppointmentDraft, AppointmentId, BackendError, Draft, Event, FolderId, MailBackend, MessageId,
-    WellKnown,
+    AppointmentDraft, AppointmentId, Attachment, BackendError, Draft, Event, FolderId, MailBackend,
+    MessageId, WellKnown,
 };
 use crate::store::Store;
 use jiff::Timestamp;
 use tokio::sync::mpsc;
 
-use crate::core::{calendar::sync_calendar, load_body, sync_folders, sync_messages};
+use crate::core::{
+    attachments::save_attachments, calendar::sync_calendar, load_body, sync_folders, sync_messages,
+};
 
 /// What the UI asks core to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +61,12 @@ pub enum Command {
     SetFlagged {
         ids: Vec<MessageId>,
         flagged: bool,
+    },
+    /// Save `attachments` of `message` as files in `dir`.
+    SaveAttachments {
+        message: MessageId,
+        attachments: Vec<Attachment>,
+        dir: PathBuf,
     },
     Send(Draft),
     /// Refresh the appointments around today.
@@ -141,6 +149,11 @@ pub async fn run_engine(
             Command::SetFlagged { ids, flagged } => {
                 set_flagged(&backend, &mut store, &ids, flagged, &events).await
             }
+            Command::SaveAttachments {
+                message,
+                attachments,
+                dir,
+            } => save_attachments(&backend, &message, &attachments, &dir, &events).await,
             Command::Send(draft) => send(&backend, &mut store, &draft, &events).await,
             Command::SyncCalendar => {
                 let event = match sync_calendar(&backend, &mut store).await {

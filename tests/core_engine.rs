@@ -4,8 +4,9 @@ use jiff::{SignedDuration, Timestamp};
 use tokio::sync::mpsc;
 use tuilook::core::{Command, calendar_window, fake::FakeBackend, run_engine};
 use tuilook::model::{
-    Appointment, AppointmentDraft, AppointmentId, BackendError, Body, BodyType, ComposeKind,
-    DeltaPage, Draft, Event, Folder, FolderId, Importance, Message, MessageId, WellKnown,
+    Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, AttachmentKind,
+    BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Event, Folder, FolderId,
+    Importance, Message, MessageId, WellKnown,
 };
 use tuilook::store::Store;
 
@@ -844,5 +845,48 @@ async fn an_appointment_that_cannot_be_deleted_says_why() {
         Some(Event::Error(
             "could not delete the appointment: offline".to_owned()
         ))
+    );
+}
+
+fn attachment(id: &str, name: &str, kind: AttachmentKind) -> Attachment {
+    Attachment {
+        id: AttachmentId(id.to_owned()),
+        name: name.to_owned(),
+        content_type: String::new(),
+        size: 3,
+        kind,
+    }
+}
+
+fn save(attachments: Vec<Attachment>, dir: &std::path::Path) -> Command {
+    Command::SaveAttachments {
+        message: MessageId("m1".to_owned()),
+        attachments,
+        dir: dir.to_path_buf(),
+    }
+}
+
+#[tokio::test]
+async fn saving_an_attachment_writes_it_beside_any_file_of_the_same_name() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("report.pdf"), "older").unwrap();
+    let backend = FakeBackend {
+        contents: [(AttachmentId("a1".to_owned()), b"pdf".to_vec())].into(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start(backend);
+
+    let report = attachment("a1", "report.pdf", AttachmentKind::File);
+    commands.send(save(vec![report], dir.path())).await.unwrap();
+
+    let saved = dir.path().join("report (1).pdf");
+    assert_eq!(
+        events.recv().await,
+        Some(Event::AttachmentSaved(saved.clone()))
+    );
+    assert_eq!(std::fs::read(saved).unwrap(), b"pdf");
+    assert_eq!(
+        std::fs::read(dir.path().join("report.pdf")).unwrap(),
+        b"older"
     );
 }

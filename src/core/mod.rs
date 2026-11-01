@@ -1,5 +1,6 @@
 //! Sync engine and command handlers. Core owns every write to the store.
 
+mod attachments;
 mod body;
 mod calendar;
 mod engine;

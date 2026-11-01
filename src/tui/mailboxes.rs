@@ -113,6 +113,10 @@ impl Mailboxes {
             } => app.body_loaded(message, text, attachments),
             Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
             Event::MessagesMoved { ids, to } => app.messages_moved(&ids, &to),
+            Event::AttachmentSaved(path) => {
+                app.show_info(format!("Saved to {}", path.display()));
+                None
+            }
             Event::Sent => {
                 app.mail_sent(Instant::now());
                 None
