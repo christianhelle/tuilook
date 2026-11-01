@@ -69,6 +69,13 @@ pub struct Attachment {
     pub is_inline: Option<bool>,
 }
 
+/// Where to upload a large attachment.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadSession {
+    pub upload_url: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Recipient {

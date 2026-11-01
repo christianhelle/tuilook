@@ -125,6 +125,27 @@ impl<T: TokenSource> GraphClient<T> {
         Ok(())
     }
 
+    /// PUTs `chunk`, the `range` of a file, to an upload session's `url`.
+    /// The URL is its own credential: Graph refuses it with a token too.
+    pub async fn put_chunk(&self, url: &str, range: &str, chunk: &[u8]) -> Result<(), GraphError> {
+        let _permit = self
+            .limit
+            .acquire()
+            .await
+            .expect("semaphore is never closed");
+        let response = self
+            .http
+            .put(url)
+            .header("Content-Range", range)
+            .body(chunk.to_vec())
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(status_error(response).await);
+        }
+        Ok(())
+    }
+
     /// PATCHes `path` with `body`, ignoring the answer.
     pub async fn patch(&self, path: &str, body: &Value) -> Result<(), GraphError> {
         self.request(Method::PATCH, &self.url(path), &[], Some(body))

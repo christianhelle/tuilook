@@ -41,6 +41,12 @@ const EVENT_SELECT: &str =
 /// Messages fetched at a time from past a folder's sync window.
 const OLDER_PAGE: usize = 50;
 
+/// Files up to this size are sent whole; Graph takes larger ones in chunks.
+const INLINE_LIMIT: usize = 3 * 1024 * 1024;
+
+/// Bytes uploaded at a time; Graph wants a multiple of 320 KiB.
+const UPLOAD_CHUNK: usize = 12 * 320 * 1024;
+
 const ATTACHMENT_SELECT: &str = "$select=id,name,contentType,size,isInline";
 
 const FOLDER_SELECT: &str =
@@ -587,6 +593,9 @@ impl<T: TokenSource> GraphBackend<T> {
         let name = file
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        if content.len() > INLINE_LIMIT {
+            return self.upload(draft, &name, &content).await;
+        }
         let attachment = json!({
             "@odata.type": "#microsoft.graph.fileAttachment",
             "name": name,
@@ -596,6 +605,29 @@ impl<T: TokenSource> GraphBackend<T> {
             .client
             .post(&format!("{draft}/attachments"), &attachment)
             .await?;
+        Ok(())
+    }
+
+    /// Attaches a file too big to send in one request, a chunk at a time.
+    async fn upload(&self, draft: &str, name: &str, content: &[u8]) -> Result<(), GraphError> {
+        let item = json!({
+            "AttachmentItem": {
+                "attachmentType": "file",
+                "name": name,
+                "size": content.len(),
+            },
+        });
+        let path = format!("{draft}/attachments/createUploadSession");
+        let session: dto::UploadSession = self.client.post(&path, &item).await?;
+        let total = content.len();
+        for (index, chunk) in content.chunks(UPLOAD_CHUNK).enumerate() {
+            let first = index * UPLOAD_CHUNK;
+            let last = first + chunk.len() - 1;
+            let range = format!("bytes {first}-{last}/{total}");
+            self.client
+                .put_chunk(&session.upload_url, &range, chunk)
+                .await?;
+        }
         Ok(())
     }
 }

@@ -7,7 +7,7 @@ use tuilook::model::{
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{body_json, method, path},
+    matchers::{body_json, header, method, path},
 };
 
 #[tokio::test]
@@ -151,4 +151,51 @@ async fn a_new_message_with_a_file_is_drafted_given_the_file_then_sent() {
     let backend = GraphBackend::new(support::client(&server).0);
 
     backend.send(&new_message(vec![notes])).await.unwrap();
+}
+
+/// Whether a request carries no access token, as upload URLs want.
+fn unsigned(request: &wiremock::Request) -> bool {
+    !request.headers.contains_key("authorization")
+}
+
+#[tokio::test]
+async fn a_file_over_3_mb_is_uploaded_in_chunks_without_the_access_token() {
+    let server = MockServer::start().await;
+    let size = 5 * 1024 * 1024;
+    let (_dir, video) = file("demo.mp4", &vec![7u8; size]);
+    expect(&server, "POST", "/me/messages", 201, 1).await;
+    Mock::given(method("POST"))
+        .and(path("/me/messages/d1/attachments/createUploadSession"))
+        .and(body_json(json!({
+            "AttachmentItem": {
+                "attachmentType": "file",
+                "name": "demo.mp4",
+                "size": size,
+            },
+        })))
+        .respond_with(
+            ResponseTemplate::new(201)
+                .set_body_json(json!({ "uploadUrl": format!("{}/upload/s1", server.uri()) })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    for (range, status) in [
+        ("bytes 0-3932159/5242880", 200),
+        ("bytes 3932160-5242879/5242880", 201),
+    ] {
+        Mock::given(method("PUT"))
+            .and(path("/upload/s1"))
+            .and(header("Content-Range", range))
+            .and(unsigned)
+            .respond_with(ResponseTemplate::new(status))
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+    expect(&server, "POST", "/me/messages/d1/attachments", 201, 0).await;
+    expect(&server, "POST", "/me/messages/d1/send", 202, 1).await;
+    let backend = GraphBackend::new(support::client(&server).0);
+
+    backend.send(&new_message(vec![video])).await.unwrap();
 }
