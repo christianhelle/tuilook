@@ -359,7 +359,29 @@ fn saving_or_deleting_an_appointment_goes_to_the_agendas_account() {
 }
 
 #[test]
-fn an_error_lets_the_appointment_being_saved_be_saved_again() {
+fn an_unrelated_error_leaves_the_appointment_saving() {
+    let mut s = setup(&[&[]]);
+    let effect = s.app.on_key(shift_c(), &mut Keymap::default());
+    s.mailboxes.apply(&mut s.app, effect).unwrap();
+    s.app
+        .on_key(KeyEvent::from(KeyCode::Char('c')), &mut Keymap::default());
+    for c in "Planning".chars() {
+        s.app
+            .on_key(KeyEvent::from(KeyCode::Char(c)), &mut Keymap::default());
+    }
+    let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+    let effect = s.app.on_key(ctrl_s, &mut Keymap::default());
+    s.mailboxes.apply(&mut s.app, effect).unwrap();
+
+    s.mailboxes
+        .on_event(&mut s.app, 0, Event::Error("a sync failed".to_owned()))
+        .unwrap();
+
+    assert!(s.app.appointment.as_ref().unwrap().saving);
+}
+
+#[test]
+fn a_failed_save_lets_the_appointment_be_saved_again() {
     let mut s = setup(&[&[]]);
     let effect = s.app.on_key(shift_c(), &mut Keymap::default());
     s.mailboxes.apply(&mut s.app, effect).unwrap();
@@ -378,7 +400,7 @@ fn an_error_lets_the_appointment_being_saved_be_saved_again() {
         .on_event(
             &mut s.app,
             0,
-            Event::Error("could not save the appointment: offline".to_owned()),
+            Event::AppointmentNotSaved("offline".to_owned()),
         )
         .unwrap();
 

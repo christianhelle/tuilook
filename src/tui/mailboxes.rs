@@ -135,15 +135,28 @@ impl Mailboxes {
                 None
             }
             Event::AppointmentDeleted(_) => app.appointment_deleted(account),
-            Event::Error(error) => {
+            Event::AppointmentNotSaved(why) => {
                 app.appointment_not_saved();
-                match app.accounts.get(account).filter(|_| app.accounts.len() > 1) {
-                    Some(address) => app.show_error(format!("{address}: {error}")),
-                    None => app.show_error(error),
-                }
+                show_error(
+                    app,
+                    account,
+                    format!("could not save the appointment: {why}"),
+                );
+                None
+            }
+            Event::Error(error) => {
+                show_error(app, account, error);
                 None
             }
         })
+    }
+}
+
+/// Shows an error from `account`, naming it when there are several.
+fn show_error(app: &mut AppState, account: usize, error: String) {
+    match app.accounts.get(account).filter(|_| app.accounts.len() > 1) {
+        Some(address) => app.show_error(format!("{address}: {error}")),
+        None => app.show_error(error),
     }
 }
 

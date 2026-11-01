@@ -127,5 +127,7 @@ pub enum Event {
     AppointmentSaved,
     /// The appointment was deleted and is gone from the store.
     AppointmentDeleted(AppointmentId),
+    /// The appointment being saved was not, and why.
+    AppointmentNotSaved(String),
     Error(String),
 }

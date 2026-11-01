@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Saving attached files always saves from the mail the picker was opened on,
   even when a sync removes that mail while you pick.
+- An error from a sync no longer lets you press save again on an appointment
+  that is still being saved.
 
 ## [0.1.4] - 2026-11-01
 

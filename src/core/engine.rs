@@ -197,8 +197,7 @@ async fn appointment_saved(
     events: &mpsc::Sender<Event>,
 ) -> Result<(), mpsc::error::SendError<Event>> {
     if let Err(e) = saved {
-        let error = format!("could not save the appointment: {e}");
-        return events.send(Event::Error(error)).await;
+        return events.send(Event::AppointmentNotSaved(e.to_string())).await;
     }
     events.send(Event::AppointmentSaved).await?;
     let event = match sync_calendar(backend, store).await {

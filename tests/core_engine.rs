@@ -796,9 +796,7 @@ async fn an_appointment_that_cannot_be_saved_says_why() {
 
     assert_eq!(
         events.recv().await,
-        Some(Event::Error(
-            "could not save the appointment: offline".to_owned()
-        ))
+        Some(Event::AppointmentNotSaved("offline".to_owned()))
     );
 }
 
