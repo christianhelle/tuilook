@@ -381,58 +381,69 @@ impl AppState {
         if let Some(dialog) = self.dialog.take() {
             return self.dialog_key(dialog, key);
         }
-        if let Some(compose) = self.screen.compose_mut() {
-            match compose.key(key, self.viewport.compose, &mut self.register) {
-                Request::None => {}
-                Request::Send(draft) => {
-                    let account = compose.account;
-                    let sent_lately = self.sent_lately(account, Instant::now());
-                    if sent_lately >= PACE_LIMIT {
-                        self.dialog =
-                            Some(Dialog::Confirm(Confirm::SendAnyway { draft, sent_lately }));
-                        return None;
-                    }
-                    self.show_busy("Sending…");
-                    return Some(Effect::core(account, Command::Send(draft)));
+        match &self.screen {
+            Screen::Panes => self.panes_key(key, keymap),
+            Screen::Compose(_) => self.compose_key(key),
+            Screen::Signature(_) => self.signature_key(key),
+            Screen::Agenda { form: Some(_), .. } => self.appointment_key(key),
+            Screen::Agenda { form: None, .. } => self.agenda_key(key),
+        }
+    }
+
+    /// A key for the message being written.
+    fn compose_key(&mut self, key: KeyEvent) -> Option<Effect> {
+        let compose = self.screen.compose_mut()?;
+        match compose.key(key, self.viewport.compose, &mut self.register) {
+            Request::None => {}
+            Request::Send(draft) => {
+                let account = compose.account;
+                let sent_lately = self.sent_lately(account, Instant::now());
+                if sent_lately >= PACE_LIMIT {
+                    self.dialog = Some(Dialog::Confirm(Confirm::SendAnyway { draft, sent_lately }));
+                    return None;
                 }
-                Request::Close => self.screen.close_compose(),
-                Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
-                Request::Help => self.dialog = Some(Dialog::Help),
-                Request::Attach => {
-                    let dir = self.attach_dir.clone().unwrap_or_else(files::start_dir);
-                    self.dialog = Some(Dialog::Files(FilePicker::open(dir)));
-                }
-                Request::Invalid(why) => self.show_error(why),
+                self.show_busy("Sending…");
+                return Some(Effect::core(account, Command::Send(draft)));
             }
-            return None;
-        }
-        if let Some(editor) = self.screen.signature_mut() {
-            match editor.key(key, self.viewport.compose, &mut self.register) {
-                signature::Request::None => {}
-                signature::Request::Save(text) => {
-                    let account = editor.account;
-                    if self.signatures.len() <= account {
-                        self.signatures.resize(account + 1, String::new());
-                    }
-                    self.signatures[account] = text.clone();
-                    self.screen.close_signature();
-                    self.show_info("Signature saved");
-                    return Some(Effect::SaveSignature { account, text });
-                }
-                signature::Request::Close => self.screen.close_signature(),
-                signature::Request::ConfirmDiscard => {
-                    self.dialog = Some(Dialog::Confirm(Confirm::DiscardSignature));
-                }
-                signature::Request::Help => self.dialog = Some(Dialog::Help),
+            Request::Close => self.screen.close_compose(),
+            Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
+            Request::Help => self.dialog = Some(Dialog::Help),
+            Request::Attach => {
+                let dir = self.attach_dir.clone().unwrap_or_else(files::start_dir);
+                self.dialog = Some(Dialog::Files(FilePicker::open(dir)));
             }
-            return None;
+            Request::Invalid(why) => self.show_error(why),
         }
-        if self.screen.appointment().is_some() {
-            return self.appointment_key(key);
+        None
+    }
+
+    /// A key for the signature being written.
+    fn signature_key(&mut self, key: KeyEvent) -> Option<Effect> {
+        let editor = self.screen.signature_mut()?;
+        match editor.key(key, self.viewport.compose, &mut self.register) {
+            signature::Request::None => {}
+            signature::Request::Save(text) => {
+                let account = editor.account;
+                if self.signatures.len() <= account {
+                    self.signatures.resize(account + 1, String::new());
+                }
+                self.signatures[account] = text.clone();
+                self.screen.close_signature();
+                self.show_info("Signature saved");
+                return Some(Effect::SaveSignature { account, text });
+            }
+            signature::Request::Close => self.screen.close_signature(),
+            signature::Request::ConfirmDiscard => {
+                self.dialog = Some(Dialog::Confirm(Confirm::DiscardSignature));
+            }
+            signature::Request::Help => self.dialog = Some(Dialog::Help),
         }
-        if self.screen.agenda().is_some() {
-            return self.agenda_key(key);
-        }
+        None
+    }
+
+    /// A key for the panes: the search being typed takes it first, then the
+    /// reading pane when focused, then the keymap.
+    fn panes_key(&mut self, key: KeyEvent, keymap: &mut Keymap) -> Option<Effect> {
         if self.typing_search() {
             return self.search_key(key);
         }
