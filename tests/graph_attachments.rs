@@ -3,7 +3,8 @@ mod support;
 use serde_json::json;
 use tuilook::graph::GraphBackend;
 use tuilook::model::{
-    Attachment, AttachmentId, AttachmentKind, ComposeKind, Draft, MailBackend, MessageId,
+    Attachment, AttachmentId, AttachmentKind, BackendError, ComposeKind, Draft, MailBackend,
+    MessageId,
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -198,4 +199,26 @@ async fn a_file_over_3_mb_is_uploaded_in_chunks_without_the_access_token() {
     let backend = GraphBackend::new(support::client(&server).0);
 
     backend.send(&new_message(vec![video])).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_file_over_150_mb_is_refused_before_anything_is_sent() {
+    let server = MockServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let huge = dir.path().join("backup.zip");
+    std::fs::File::create(&huge)
+        .unwrap()
+        .set_len(150 * 1024 * 1024 + 1)
+        .unwrap();
+    expect(&server, "POST", "/me/messages", 201, 0).await;
+    let backend = GraphBackend::new(support::client(&server).0);
+
+    let sent = backend.send(&new_message(vec![huge])).await;
+
+    assert_eq!(
+        sent,
+        Err(BackendError::Other(
+            "backup.zip is over 150 MB, too big to attach".to_owned()
+        ))
+    );
 }

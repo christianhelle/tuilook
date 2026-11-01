@@ -44,6 +44,9 @@ const OLDER_PAGE: usize = 50;
 /// Files up to this size are sent whole; Graph takes larger ones in chunks.
 const INLINE_LIMIT: usize = 3 * 1024 * 1024;
 
+/// The largest file Graph takes as an attachment.
+const ATTACHMENT_LIMIT: u64 = 150 * 1024 * 1024;
+
 /// Bytes uploaded at a time; Graph wants a multiple of 320 KiB.
 const UPLOAD_CHUNK: usize = 12 * 320 * 1024;
 
@@ -460,6 +463,7 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
     }
 
     async fn send(&self, draft: &Draft) -> Result<(), BackendError> {
+        check_sizes(&draft.attachments)?;
         self.send_draft(draft).await.map_err(sending_error)
     }
 
@@ -747,6 +751,25 @@ const BLOCKED_CODES: [&str; 5] = [
 
 /// Tells a send the service refused because the account is blocked from
 /// sending apart from any other failure.
+/// Fails unless every file can be read and is small enough to attach.
+fn check_sizes(files: &[std::path::PathBuf]) -> Result<(), BackendError> {
+    for file in files {
+        let name = file.file_name().map_or_else(
+            || file.display().to_string(),
+            |n| n.to_string_lossy().into(),
+        );
+        let size = std::fs::metadata(file)
+            .map_err(|e| BackendError::Other(format!("could not read {name}: {e}")))?
+            .len();
+        if size > ATTACHMENT_LIMIT {
+            return Err(BackendError::Other(format!(
+                "{name} is over 150 MB, too big to attach"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn sending_error(e: GraphError) -> BackendError {
     if let GraphError::Status {
         status,
