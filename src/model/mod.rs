@@ -2,6 +2,7 @@
 
 mod action;
 mod appointment;
+mod attachment;
 mod backend;
 mod draft;
 mod folder;
@@ -9,6 +10,7 @@ mod message;
 
 pub use action::{Action, Event};
 pub use appointment::{Appointment, AppointmentDraft, AppointmentId};
+pub use attachment::{Attachment, AttachmentId, AttachmentKind};
 pub use backend::{BackendError, Body, BodyType, DeltaPage, MailBackend, OlderPage};
 pub use draft::{ComposeKind, Draft, parse_addresses};
 pub use folder::{Folder, FolderId, WellKnown, folder_depths, sort_folders};
