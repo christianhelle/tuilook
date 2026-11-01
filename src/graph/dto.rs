@@ -59,6 +59,18 @@ pub struct Message {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    #[serde(rename = "@odata.type")]
+    pub odata_type: Option<String>,
+    pub id: String,
+    pub name: Option<String>,
+    pub content_type: Option<String>,
+    pub size: Option<u64>,
+    pub is_inline: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Recipient {
     pub email_address: EmailAddress,
 }

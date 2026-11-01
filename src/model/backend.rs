@@ -3,8 +3,8 @@ use std::future::Future;
 use jiff::Timestamp;
 
 use crate::model::{
-    Appointment, AppointmentDraft, AppointmentId, Draft, Folder, FolderId, Message, MessageChange,
-    MessageId,
+    Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, Draft, Folder,
+    FolderId, Message, MessageChange, MessageId,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -77,6 +77,20 @@ pub trait MailBackend {
         &self,
         message: &MessageId,
     ) -> impl Future<Output = Result<Body, BackendError>> + Send;
+
+    /// The files attached to a message, leaving out pictures shown in its
+    /// body.
+    fn attachments(
+        &self,
+        message: &MessageId,
+    ) -> impl Future<Output = Result<Vec<Attachment>, BackendError>> + Send;
+
+    /// What an attached file holds; an attached mail comes as MIME.
+    fn attachment_content(
+        &self,
+        message: &MessageId,
+        attachment: &AttachmentId,
+    ) -> impl Future<Output = Result<Vec<u8>, BackendError>> + Send;
 
     /// Deletes a message: to Deleted Items, or for good when `permanent`.
     fn delete(

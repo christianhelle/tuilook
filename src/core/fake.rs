@@ -8,8 +8,8 @@ use std::{
 use jiff::Timestamp;
 
 use crate::model::{
-    Appointment, AppointmentDraft, AppointmentId, BackendError, Body, DeltaPage, Draft, Folder,
-    FolderId, MailBackend, Message, MessageId, OlderPage,
+    Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, BackendError, Body,
+    DeltaPage, Draft, Folder, FolderId, MailBackend, Message, MessageId, OlderPage,
 };
 
 /// Older messages the fake hands out at a time.
@@ -20,6 +20,12 @@ pub struct FakeBackend {
     pub folders: Vec<Folder>,
     pub messages: HashMap<FolderId, Vec<Message>>,
     pub bodies: HashMap<MessageId, Body>,
+    /// The files attached to each message.
+    pub attachments: HashMap<MessageId, Vec<Attachment>>,
+    /// What each attached file holds.
+    pub contents: HashMap<AttachmentId, Vec<u8>>,
+    /// How many times each message's attachments were listed.
+    pub listed: Arc<Mutex<HashMap<MessageId, usize>>>,
     /// Answers for a folder's delta sync from a given link. A first sync
     /// (`None`) that is not scripted returns all of the folder's `messages`.
     pub deltas: HashMap<(FolderId, Option<String>), Result<DeltaPage, BackendError>>,
@@ -128,6 +134,23 @@ impl MailBackend for FakeBackend {
             .get(message)
             .cloned()
             .ok_or_else(|| BackendError::Other(format!("no body for {}", message.0)))
+    }
+
+    async fn attachments(&self, message: &MessageId) -> Result<Vec<Attachment>, BackendError> {
+        let mut listed = self.listed.lock().expect("no test panics holding it");
+        *listed.entry(message.clone()).or_default() += 1;
+        Ok(self.attachments.get(message).cloned().unwrap_or_default())
+    }
+
+    async fn attachment_content(
+        &self,
+        _message: &MessageId,
+        attachment: &AttachmentId,
+    ) -> Result<Vec<u8>, BackendError> {
+        self.contents
+            .get(attachment)
+            .cloned()
+            .ok_or_else(|| BackendError::Other(format!("no content for {}", attachment.0)))
     }
 
     async fn delete(&self, message: &MessageId, permanent: bool) -> Result<(), BackendError> {

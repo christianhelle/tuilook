@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::auth::TokenSource;
 use crate::model::{
-    Appointment, AppointmentDraft, AppointmentId, BackendError, Body, BodyType, ComposeKind,
-    DeltaPage, Draft, Folder, FolderId, Importance, MailBackend, Message, MessageChange, MessageId,
-    OlderPage, WellKnown,
+    Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, AttachmentKind,
+    BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
+    MailBackend, Message, MessageChange, MessageId, OlderPage, WellKnown,
 };
 use jiff::{SignedDuration, Timestamp, Unit, civil, tz::TimeZone};
 use reqwest::StatusCode;
@@ -36,6 +36,8 @@ const EVENT_SELECT: &str =
 
 /// Messages fetched at a time from past a folder's sync window.
 const OLDER_PAGE: usize = 50;
+
+const ATTACHMENT_SELECT: &str = "$select=id,name,contentType,size,isInline";
 
 const FOLDER_SELECT: &str =
     "$select=id,displayName,parentFolderId,childFolderCount,unreadItemCount,totalItemCount";
@@ -316,6 +318,28 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             },
             content: response.body.content,
         })
+    }
+
+    async fn attachments(&self, message: &MessageId) -> Result<Vec<Attachment>, BackendError> {
+        let path = format!("/me/messages/{}/attachments?{ATTACHMENT_SELECT}", message.0);
+        let attachments: Vec<dto::Attachment> = self.get_all(&path, &[]).await?;
+        Ok(attachments
+            .into_iter()
+            .filter(|a| a.is_inline != Some(true))
+            .map(to_attachment)
+            .collect())
+    }
+
+    async fn attachment_content(
+        &self,
+        message: &MessageId,
+        attachment: &AttachmentId,
+    ) -> Result<Vec<u8>, BackendError> {
+        let path = format!(
+            "/me/messages/{}/attachments/{}/$value",
+            message.0, attachment.0
+        );
+        Ok(self.client.get_bytes(&path).await?)
     }
 
     async fn delete(&self, message: &MessageId, permanent: bool) -> Result<(), BackendError> {
@@ -678,6 +702,21 @@ fn calendar_error(e: GraphError) -> BackendError {
             BackendError::Other("sign in again (otlk login) to allow calendar access".to_owned())
         }
         _ => e.into(),
+    }
+}
+
+fn to_attachment(a: dto::Attachment) -> Attachment {
+    let kind = match a.odata_type.as_deref() {
+        Some("#microsoft.graph.itemAttachment") => AttachmentKind::Item,
+        Some("#microsoft.graph.referenceAttachment") => AttachmentKind::Reference,
+        _ => AttachmentKind::File,
+    };
+    Attachment {
+        id: AttachmentId(a.id),
+        name: a.name.unwrap_or_default(),
+        content_type: a.content_type.unwrap_or_default(),
+        size: a.size.unwrap_or(0),
+        kind,
     }
 }
 

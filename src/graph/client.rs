@@ -89,6 +89,14 @@ impl<T: TokenSource> GraphClient<T> {
         decode(response, url).await
     }
 
+    /// GETs `path` and returns the answer as it is, for file contents.
+    pub async fn get_bytes(&self, path: &str) -> Result<Vec<u8>, GraphError> {
+        let response = self
+            .request(Method::GET, &self.url(path), &[], None)
+            .await?;
+        Ok(response.bytes().await?.to_vec())
+    }
+
     /// POSTs `body` to `path` and decodes the answer.
     pub async fn post<R: DeserializeOwned>(
         &self,
