@@ -17,12 +17,12 @@ impl AppState {
         let mut earlier: HashSet<&FolderId> = HashSet::new();
         let mut shown: HashSet<&FolderId> = HashSet::new();
         let mut visible = Vec::new();
-        for (index, folder) in self.folders.iter().enumerate() {
+        for (index, folder) in self.folder_pane.folders.iter().enumerate() {
             let show = match &folder.parent_id {
                 // The tree lists a parent before its subfolders; a folder
                 // whose parent is not before it is shown at the top level.
                 Some(parent) if earlier.contains(parent) => {
-                    shown.contains(parent) && self.expanded.contains(parent)
+                    shown.contains(parent) && self.folder_pane.expanded.contains(parent)
                 }
                 _ => true,
             };
@@ -36,26 +36,29 @@ impl AppState {
     }
 
     pub fn has_subfolders(&self, index: usize) -> bool {
-        let id = &self.folders[index].id;
-        self.folders
+        let id = &self.folder_pane.folders[index].id;
+        self.folder_pane
+            .folders
             .iter()
             .any(|f| f.parent_id.as_ref() == Some(id))
     }
 
     pub fn is_expanded(&self, index: usize) -> bool {
-        self.expanded.contains(&self.folders[index].id)
+        self.folder_pane
+            .expanded
+            .contains(&self.folder_pane.folders[index].id)
     }
 
     /// Unread messages in a folder, counting its subfolders' while they are
     /// folded away inside it so new mail is never hidden.
     pub fn unread_shown(&self, index: usize) -> u32 {
         if self.is_expanded(index) {
-            return self.folders[index].unread;
+            return self.folder_pane.folders[index].unread;
         }
-        let mut inside = HashSet::from([&self.folders[index].id]);
-        let mut unread = self.folders[index].unread;
+        let mut inside = HashSet::from([&self.folder_pane.folders[index].id]);
+        let mut unread = self.folder_pane.folders[index].unread;
         // Subfolders follow their parent, so one pass finds them all.
-        for folder in &self.folders[index + 1..] {
+        for folder in &self.folder_pane.folders[index + 1..] {
             match &folder.parent_id {
                 Some(parent) if inside.contains(parent) => {
                     inside.insert(&folder.id);
@@ -70,11 +73,15 @@ impl AppState {
     /// → in the folder pane: expands the folder, or if it already is,
     /// moves to its first subfolder.
     pub(crate) fn expand_folder(&mut self) -> Option<Effect> {
-        let index = self.selected_folder;
-        if self.folders.is_empty() || !self.has_subfolders(index) {
+        let index = self.folder_pane.selected;
+        if self.folder_pane.folders.is_empty() || !self.has_subfolders(index) {
             return None;
         }
-        if self.expanded.insert(self.folders[index].id.clone()) {
+        if self
+            .folder_pane
+            .expanded
+            .insert(self.folder_pane.folders[index].id.clone())
+        {
             return None;
         }
         // The first subfolder comes straight after its parent.
@@ -84,26 +91,30 @@ impl AppState {
     /// ← in the folder pane: collapses the folder, or if it already is (or
     /// has no subfolders), moves to its parent.
     pub(crate) fn collapse_folder(&mut self) -> Option<Effect> {
-        let folder = self.folders.get(self.selected_folder)?;
-        if self.expanded.remove(&folder.id) {
+        let folder = self.folder_pane.folders.get(self.folder_pane.selected)?;
+        if self.folder_pane.expanded.remove(&folder.id) {
             return None;
         }
         let parent = folder.parent_id.as_ref()?;
-        let index = self.folders.iter().position(|f| &f.id == parent)?;
+        let index = self
+            .folder_pane
+            .folders
+            .iter()
+            .position(|f| &f.id == parent)?;
         self.select_folder(index)
     }
 
     /// Selects a folder and asks for its messages.
     pub(crate) fn select_folder(&mut self, index: usize) -> Option<Effect> {
-        if index >= self.folders.len() {
+        if index >= self.folder_pane.folders.len() {
             return None;
         }
         // Picking a folder leaves a search, even the folder already picked.
         let searched = self.search.take().is_some_and(|s| s.results.is_some());
-        if index == self.selected_folder && !searched {
+        if index == self.folder_pane.selected && !searched {
             return None;
         }
-        self.selected_folder = index;
+        self.folder_pane.selected = index;
         self.load_shown()
     }
 
@@ -130,6 +141,7 @@ impl AppState {
     /// Says core deleted a folder; the folder tree follows.
     pub fn folder_deleted(&mut self, folder: &FolderId) {
         let name = self
+            .folder_pane
             .folders
             .iter()
             .find(|f| &f.id == folder)
@@ -140,15 +152,16 @@ impl AppState {
     /// Expands every folder above the selected one, so it is shown.
     pub(crate) fn reveal_selected_folder(&mut self) {
         let mut parent = self
+            .folder_pane
             .folders
-            .get(self.selected_folder)
+            .get(self.folder_pane.selected)
             .and_then(|f| f.parent_id.clone());
         while let Some(id) = parent {
-            let Some(folder) = self.folders.iter().find(|f| f.id == id) else {
+            let Some(folder) = self.folder_pane.folders.iter().find(|f| f.id == id) else {
                 break;
             };
             // Above an expanded folder may still be a folded account.
-            self.expanded.insert(id);
+            self.folder_pane.expanded.insert(id);
             parent = folder.parent_id.clone();
         }
     }
@@ -188,17 +201,21 @@ mod tests {
         app.visible_folders()
             .into_iter()
             .filter(|&i| i >= app.unread_count())
-            .map(|i| app.folders[i].name.as_str())
+            .map(|i| app.folder_pane.folders[i].name.as_str())
             .collect()
     }
 
     /// The index in `folders` of the row with `id`.
     fn at(app: &AppState, id: &str) -> usize {
-        app.folders.iter().position(|f| f.id.0 == id).unwrap()
+        app.folder_pane
+            .folders
+            .iter()
+            .position(|f| f.id.0 == id)
+            .unwrap()
     }
 
     fn selected(app: &AppState) -> &str {
-        &app.folders[app.selected_folder].name
+        &app.folder_pane.folders[app.folder_pane.selected].name
     }
 
     fn key(app: &mut AppState, c: char) -> Option<Effect> {
@@ -210,7 +227,7 @@ mod tests {
     #[test]
     fn d_in_the_folders_asks_then_moves_the_folder_to_deleted_items() {
         let mut app = tree();
-        app.selected_folder = at(&app, "archive");
+        app.folder_pane.selected = at(&app, "archive");
 
         assert_eq!(key(&mut app, 'd'), None);
         assert_eq!(
@@ -236,7 +253,7 @@ mod tests {
     #[test]
     fn shift_d_in_the_folders_deletes_for_good_and_any_other_key_cancels() {
         let mut app = tree();
-        app.selected_folder = at(&app, "archive");
+        app.folder_pane.selected = at(&app, "archive");
 
         key(&mut app, 'D');
         assert!(matches!(
@@ -323,7 +340,7 @@ mod tests {
         app.update(Action::Bottom);
 
         assert_eq!(app.update(Action::Expand), None);
-        assert!(app.expanded.is_empty());
+        assert!(app.folder_pane.expanded.is_empty());
     }
 
     #[test]
@@ -333,7 +350,7 @@ mod tests {
 
         app.update(Action::Expand);
 
-        assert!(app.expanded.is_empty());
+        assert!(app.folder_pane.expanded.is_empty());
     }
 
     #[test]
@@ -354,7 +371,7 @@ mod tests {
     #[test]
     fn the_folders_above_the_selected_one_are_expanded_to_show_it() {
         let mut app = tree();
-        app.selected_folder = at(&app, "2026");
+        app.folder_pane.selected = at(&app, "2026");
 
         app.reveal_selected_folder();
 
@@ -398,13 +415,16 @@ mod tests {
             names(&app),
             ["me@outlook.com", "inbox", "me@work.example", "work-inbox"]
         );
-        assert_eq!(app.folder_account[app.unread_count()..], [0, 0, 0, 1, 1]);
+        assert_eq!(
+            app.folder_pane.owners[app.unread_count()..],
+            [0, 0, 0, 1, 1]
+        );
     }
 
     #[test]
     fn a_folded_account_counts_the_unread_mail_inside_it() {
         let mut app = two_accounts();
-        app.selected_folder = at(&app, "work-inbox");
+        app.folder_pane.selected = at(&app, "work-inbox");
 
         assert_eq!(
             app.update(Action::Collapse),
@@ -419,7 +439,7 @@ mod tests {
     #[test]
     fn a_folded_account_stays_folded_after_a_sync() {
         let mut app = two_accounts();
-        app.selected_folder = at(&app, "account:me@outlook.com");
+        app.folder_pane.selected = at(&app, "account:me@outlook.com");
         app.update(Action::Collapse);
 
         app.set_account_folders(0, vec![folder("inbox", Some("root"), 1)]);
@@ -452,7 +472,7 @@ mod tests {
     #[test]
     fn effects_go_to_the_account_of_the_folder_looked_at() {
         let mut app = two_accounts();
-        app.selected_folder = at(&app, "work-inbox");
+        app.folder_pane.selected = at(&app, "work-inbox");
 
         assert_eq!(app.account_for(&load("inbox").unwrap()), 0);
         assert_eq!(app.account_for(&load("work-inbox").unwrap()), 1);
@@ -465,7 +485,7 @@ mod tests {
     #[test]
     fn a_message_is_written_from_the_account_looked_at() {
         let mut app = two_accounts();
-        app.selected_folder = at(&app, "work-inbox");
+        app.folder_pane.selected = at(&app, "work-inbox");
 
         app.update(Action::Compose);
 
@@ -490,7 +510,7 @@ mod tests {
     fn each_account_has_its_own_sending_pace() {
         let mut app = two_accounts();
         let now = std::time::Instant::now();
-        app.selected_folder = at(&app, "work-inbox");
+        app.folder_pane.selected = at(&app, "work-inbox");
         app.update(Action::Compose);
 
         app.mail_sent(now);

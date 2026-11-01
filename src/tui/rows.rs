@@ -83,7 +83,7 @@ pub enum Row<'a> {
 impl AppState {
     /// What the row at `index` of `folders` stands for.
     pub fn folder_row(&self, index: usize) -> Option<Row<'_>> {
-        let row = self.folders.get(index)?;
+        let row = self.folder_pane.folders.get(index)?;
         if is_account_row(row) {
             return Some(Row::Account);
         }
@@ -92,12 +92,12 @@ impl AppState {
 
     /// What the selected row of the folder pane stands for.
     pub fn selected_folder_row(&self) -> Option<Row<'_>> {
-        self.folder_row(self.selected_folder)
+        self.folder_row(self.folder_pane.selected)
     }
 
     /// The folder `id` itself, not a favorite or unread row standing for it.
     pub(crate) fn real_folder(&self, id: &FolderId) -> Option<&Folder> {
-        self.folders.iter().find(|f| &f.id == id)
+        self.folder_pane.folders.iter().find(|f| &f.id == id)
     }
 }
 
@@ -115,14 +115,12 @@ mod tests {
 
     #[test]
     fn favorite_and_unread_rows_stand_for_the_folder_itself() {
-        let mut app = AppState {
-            favorites: vec![FolderId("news".to_owned())],
-            ..AppState::default()
-        };
+        let mut app = AppState::default();
+        app.folder_pane.favorites = vec![FolderId("news".to_owned())];
         app.set_folders(vec![folder("news", 2), folder("bills", 0)]);
         let news = app.real_folder(&FolderId("news".to_owned())).unwrap();
 
-        let rows: Vec<_> = (0..app.folders.len())
+        let rows: Vec<_> = (0..app.folder_pane.folders.len())
             .filter_map(|i| app.folder_row(i))
             .filter(|row| *row == Row::Folder(news))
             .collect();

@@ -211,8 +211,10 @@ mod tests {
             folder("Inbox", None),
             folder("Receipts", Some("Inbox")),
         ]);
-        app.expanded.insert(FolderId("Inbox".to_owned()));
-        app.selected_folder = 1;
+        app.folder_pane
+            .expanded
+            .insert(FolderId("Inbox".to_owned()));
+        app.folder_pane.selected = 1;
         app.focus = Pane::Folders;
         app
     }
@@ -378,7 +380,7 @@ mod tests {
     #[test]
     fn outlooks_own_folders_cannot_be_renamed() {
         let mut app = on_receipts();
-        app.selected_folder = 0;
+        app.folder_pane.selected = 0;
 
         app.update(Action::RenameFolder);
 

@@ -37,14 +37,12 @@ fn message(id: &str, from: &str, subject: &str, preview: &str) -> Message {
 }
 
 fn sample_app() -> AppState {
-    let mut app = AppState {
-        folders: vec![
-            folder("inbox", "Inbox", Some(WellKnown::Inbox), 2),
-            folder("sent", "Sent Items", Some(WellKnown::SentItems), 0),
-            folder("proj", "Projects", None, 0),
-        ],
-        ..Default::default()
-    };
+    let mut app = AppState::default();
+    app.folder_pane.folders = vec![
+        folder("inbox", "Inbox", Some(WellKnown::Inbox), 2),
+        folder("sent", "Sent Items", Some(WellKnown::SentItems), 0),
+        folder("proj", "Projects", None, 0),
+    ];
     app.set_messages(vec![
         message("m1", "Ada", "Analytical engine", "Notes on the engine"),
         message("m2", "Grace", "Compiler draft", "First pass attached"),
@@ -189,7 +187,7 @@ fn with_subfolders() -> AppState {
     let mut year = folder("2026", "2026", None, 0);
     year.parent_id = Some(FolderId("receipts".to_owned()));
     let mut app = sample_app();
-    app.folders = vec![
+    app.folder_pane.folders = vec![
         folder("inbox", "Inbox", Some(WellKnown::Inbox), 2),
         receipts,
         year,
@@ -581,7 +579,12 @@ fn each_account_heads_its_own_folders() {
 #[test]
 fn a_message_says_which_account_it_is_sent_from() {
     let mut app = two_accounts();
-    app.selected_folder = app.folders.iter().position(|f| f.id.0 == "work").unwrap();
+    app.folder_pane.selected = app
+        .folder_pane
+        .folders
+        .iter()
+        .position(|f| f.id.0 == "work")
+        .unwrap();
     press(&mut app, "c");
 
     insta::assert_snapshot!(render_tall(&app));
@@ -598,7 +601,12 @@ fn the_sender_is_picked_in_from() {
 #[test]
 fn shift_s_writes_the_accounts_signature() {
     let mut app = two_accounts();
-    app.selected_folder = app.folders.iter().position(|f| f.id.0 == "work").unwrap();
+    app.folder_pane.selected = app
+        .folder_pane
+        .folders
+        .iter()
+        .position(|f| f.id.0 == "work")
+        .unwrap();
     press(&mut app, "SAda Lovelace⏎Analytical Engines");
 
     insta::assert_snapshot!(render_tall(&app));
@@ -613,7 +621,12 @@ fn a_new_message_starts_with_the_signature() {
 Analytical Engines"
             .to_owned(),
     ];
-    app.selected_folder = app.folders.iter().position(|f| f.id.0 == "work").unwrap();
+    app.folder_pane.selected = app
+        .folder_pane
+        .folders
+        .iter()
+        .position(|f| f.id.0 == "work")
+        .unwrap();
     press(&mut app, "c");
 
     insta::assert_snapshot!(render_tall(&app));
@@ -641,10 +654,15 @@ fn with_favorites() -> AppState {
     let mut app = two_accounts();
     app.focus = Pane::Folders;
     for id in ["inbox", "work", "sent"] {
-        app.selected_folder = app.folders.iter().position(|f| f.id.0 == id).unwrap();
+        app.folder_pane.selected = app
+            .folder_pane
+            .folders
+            .iter()
+            .position(|f| f.id.0 == id)
+            .unwrap();
         app.update(tuilook::model::Action::ToggleFavorite);
     }
-    app.selected_folder = 1;
+    app.folder_pane.selected = 1;
     app.status = None;
     app
 }
@@ -670,6 +688,7 @@ fn a_click_in_the_favorites_selects_the_favorite() {
 
     assert_eq!(app.shown_folder(), Some(FolderId("inbox".to_owned())));
     let first_account = app
+        .folder_pane
         .folders
         .iter()
         .position(|f| f.id.0 == "account:me@outlook.com");
@@ -785,7 +804,8 @@ fn read_mail_is_dimmed_and_unread_mail_is_bold() {
 fn the_unread_section_lists_folders_with_unread_mail() {
     let mut app = two_accounts();
     app.focus = Pane::Folders;
-    app.selected_folder = app
+    app.folder_pane.selected = app
+        .folder_pane
         .folders
         .iter()
         .position(|f| f.id.0 == "unread:work")
@@ -907,7 +927,7 @@ fn the_focused_reader_shows_normal_mode() {
 #[test]
 fn a_new_folder_asks_its_name() {
     let mut app = sample_app();
-    app.selected_folder = 2;
+    app.folder_pane.selected = 2;
     app.update(tuilook::model::Action::AddFolder);
     let mut keymap = tuilook::tui::keymap::Keymap::default();
     for c in "2026".chars() {
@@ -922,7 +942,7 @@ fn a_new_folder_asks_its_name() {
 #[test]
 fn moving_mail_picks_a_folder() {
     let mut app = sample_app();
-    let folders = app.folders.clone();
+    let folders = app.folder_pane.folders.clone();
     app.set_account_folders(0, folders);
     app.focus = Pane::Messages;
     app.update(tuilook::model::Action::Move);

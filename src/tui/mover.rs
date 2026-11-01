@@ -150,6 +150,7 @@ impl AppState {
         let first = from.next().flatten();
         let all_in: Option<&FolderId> = from.all(|f| f == first).then_some(first).flatten();
         let folders = self
+            .folder_pane
             .account_folders
             .get(account)
             .and_then(Option::clone)

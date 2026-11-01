@@ -19,13 +19,14 @@ impl AppState {
     pub(crate) fn unread_rows(&self) -> (Vec<Folder>, Vec<usize>) {
         let several = self.accounts.len() > 1;
         let kept = self
+            .folder_pane
             .folders
-            .get(self.selected_folder)
+            .get(self.folder_pane.selected)
             .filter(|f| is_unread_row(f))
             .map(|f| row_target(&f.id));
         let mut rows = Vec::new();
         let mut owners = Vec::new();
-        for (account, folders) in self.account_folders.iter().enumerate() {
+        for (account, folders) in self.folder_pane.account_folders.iter().enumerate() {
             let folders = folders.as_deref().unwrap_or_default();
             let ids: HashSet<&FolderId> = folders.iter().map(|f| &f.id).collect();
             // A parent comes before its subfolders, so one pass finds them all.
@@ -105,13 +106,14 @@ impl AppState {
     pub fn unread_rows_shown(&self) -> usize {
         self.visible_folders()
             .into_iter()
-            .filter(|&i| is_unread_row(&self.folders[i]))
+            .filter(|&i| is_unread_row(&self.folder_pane.folders[i]))
             .count()
     }
 
     /// How many rows the unread section takes, below the favorites.
     pub fn unread_count(&self) -> usize {
-        self.folders
+        self.folder_pane
+            .folders
             .iter()
             .skip(self.favorite_count())
             .take_while(|f| is_unread_row(f))
@@ -133,8 +135,9 @@ impl AppState {
     /// Whether the selected row is in the unread section, and so the
     /// message list shows only unread mail.
     pub fn shows_unread(&self) -> bool {
-        self.folders
-            .get(self.selected_folder)
+        self.folder_pane
+            .folders
+            .get(self.folder_pane.selected)
             .is_some_and(is_unread_row)
     }
 }
@@ -184,12 +187,17 @@ mod tests {
         app.visible_folders()
             .into_iter()
             .filter(|&i| i < rows)
-            .map(|i| app.folders[i].name.as_str())
+            .map(|i| app.folder_pane.folders[i].name.as_str())
             .collect()
     }
 
     fn select(app: &mut AppState, id: &str) -> Option<Effect> {
-        let index = app.folders.iter().position(|f| f.id.0 == id).unwrap();
+        let index = app
+            .folder_pane
+            .folders
+            .iter()
+            .position(|f| f.id.0 == id)
+            .unwrap();
         app.select_folder(index)
     }
 

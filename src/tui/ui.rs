@@ -1450,10 +1450,10 @@ fn folder_sections(app: &AppState) -> [Vec<usize>; 3] {
 /// Draws the favorites, the unread section and the accounts' folders in
 /// the areas given, in that order.
 fn draw_folders(frame: &mut Frame, app: &AppState, areas: [Rect; 3]) {
-    let depths = folder_depths(&app.folders);
+    let depths = folder_depths(&app.folder_pane.folders);
     let favorites = app.favorite_count();
     let unread = favorites + app.unread_count();
-    let selected = app.selected_folder;
+    let selected = app.folder_pane.selected;
     let section = if selected < favorites {
         0
     } else if selected < unread {
@@ -1490,7 +1490,7 @@ fn draw_folder_rows(
     area: Rect,
 ) {
     let items = rows.iter().map(|&index| {
-        let folder = &app.folders[index];
+        let folder = &app.folder_pane.folders[index];
         let marker = match (app.has_subfolders(index), app.is_expanded(index)) {
             (false, _) => "  ",
             (true, true) => "▾ ",
@@ -1515,7 +1515,7 @@ fn draw_folder_rows(
         ListItem::new(Line::from(spans))
     });
     let list = List::new(items).block(block).highlight_symbol("> ");
-    let selected = rows.iter().position(|&i| i == app.selected_folder);
+    let selected = rows.iter().position(|&i| i == app.folder_pane.selected);
     let mut state = ListState::default().with_selected(selected);
     frame.render_stateful_widget(list, area, &mut state);
 }
@@ -1692,7 +1692,7 @@ pub fn hit(area: Rect, app: &AppState, column: u16, row: u16) -> Option<Hit> {
                 folders
             };
             // A section without the selection shows its first rows.
-            let selected = section.iter().position(|&i| i == app.selected_folder);
+            let selected = section.iter().position(|&i| i == app.folder_pane.selected);
             let offset = selected.map_or(0, |selected| list_offset(selected, rows));
             section.get(offset + line).copied()
         }),

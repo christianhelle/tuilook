@@ -21,6 +21,7 @@ use crate::tui::{
     dialog::Dialog,
     files::{self, FilePicker},
     folder_edit,
+    folder_pane::FolderPane,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
     mover,
@@ -207,8 +208,7 @@ pub struct Viewport {
 pub struct AppState {
     pub focus: Pane,
     pub should_quit: bool,
-    pub folders: Vec<Folder>,
-    pub selected_folder: usize,
+    pub folder_pane: FolderPane,
     pub messages: Vec<Message>,
     pub selected_message: usize,
     /// The date group whose header is selected, instead of a message. The
@@ -236,8 +236,6 @@ pub struct AppState {
     pub folders_hidden: bool,
     /// Messages picked for acting on together, such as deleting.
     pub marked: BTreeSet<MessageId>,
-    /// Folders whose subfolders are shown.
-    pub expanded: BTreeSet<FolderId>,
     /// The dialog over the panes, which takes every key.
     pub dialog: Option<Dialog>,
     /// Which account sent recent messages, and when, to notice a burst.
@@ -249,14 +247,6 @@ pub struct AppState {
     pub accounts: Vec<String>,
     /// Each account's signature, put below each new message it writes.
     pub signatures: Vec<String>,
-    /// Each account's folders as core last reported them, or `None` before
-    /// the first report.
-    pub account_folders: Vec<Option<Vec<Folder>>>,
-    /// The account each of `folders` belongs to.
-    pub folder_account: Vec<usize>,
-    /// Folders shown again in the favorites above the accounts, in the
-    /// order they were added.
-    pub favorites: Vec<FolderId>,
     /// The reading pane's cursor, which picks text to copy.
     pub viewer: Viewer,
     /// The text last deleted or yanked, to put with `p`.
@@ -697,14 +687,18 @@ impl AppState {
     /// Shows an account's newly synced folder tree, keeping the selected
     /// folder.
     pub fn set_account_folders(&mut self, account: usize, folders: Vec<Folder>) -> Option<Effect> {
-        if self.account_folders.len() <= account {
-            self.account_folders.resize(account + 1, None);
+        if self.folder_pane.account_folders.len() <= account {
+            self.folder_pane.account_folders.resize(account + 1, None);
         }
-        let first = self.account_folders[account].replace(folders).is_none();
+        let first = self.folder_pane.account_folders[account]
+            .replace(folders)
+            .is_none();
         if first && let Some(address) = self.accounts.get(account) {
             // An account starts with its folders shown, in both sections.
-            self.expanded.insert(account_row(address));
-            self.expanded.insert(unread_row(&account_row(address)));
+            self.folder_pane.expanded.insert(account_row(address));
+            self.folder_pane
+                .expanded
+                .insert(unread_row(&account_row(address)));
         }
         self.rebuild_folders()
     }
@@ -717,14 +711,14 @@ impl AppState {
         let shown = self.load_shown();
         let (folders, owners) = self.folder_tree();
         let find = |id: &FolderId| folders.iter().position(|f| &f.id == id);
-        self.selected_folder = previous
+        self.folder_pane.selected = previous
             .as_ref()
             .and_then(|id| find(id).or_else(|| find(&row_target(id))))
             // Otherwise the first real folder, so there is mail to look at.
             .or_else(|| folders.iter().position(is_own_row))
             .unwrap_or(0);
-        self.folders = folders;
-        self.folder_account = owners;
+        self.folder_pane.folders = folders;
+        self.folder_pane.owners = owners;
         self.reveal_selected_folder();
         let current = self.load_shown();
         // Search results stay until the search is left.
@@ -747,7 +741,10 @@ impl AppState {
     /// The id of the selected row, which for a favorite or unread row is not
     /// the folder's.
     pub fn current_folder(&self) -> Option<&FolderId> {
-        self.folders.get(self.selected_folder).map(|f| &f.id)
+        self.folder_pane
+            .folders
+            .get(self.folder_pane.selected)
+            .map(|f| &f.id)
     }
 
     /// The folder whose messages are shown.
@@ -757,12 +754,12 @@ impl AppState {
 
     /// The account of the selected folder, and so of the messages shown.
     pub fn current_account(&self) -> usize {
-        self.account_of(self.selected_folder)
+        self.account_of(self.folder_pane.selected)
     }
 
     /// The account the folder at `index` belongs to.
     pub fn account_of(&self, index: usize) -> usize {
-        self.folder_account.get(index).copied().unwrap_or(0)
+        self.folder_pane.owners.get(index).copied().unwrap_or(0)
     }
 
     /// Has each account's core do `command` with the messages of `ids` it holds.
@@ -787,7 +784,8 @@ impl AppState {
 
     /// The account folder `id` is in.
     pub(crate) fn folder_home(&self, id: &FolderId) -> usize {
-        self.folders
+        self.folder_pane
+            .folders
             .iter()
             .position(|f| &f.id == id)
             .map_or(0, |index| self.account_of(index))
@@ -821,7 +819,7 @@ impl AppState {
         let (unread, unread_owners) = self.unread_rows();
         tree.extend(unread);
         owners.extend(unread_owners);
-        for (account, folders) in self.account_folders.iter().enumerate() {
+        for (account, folders) in self.folder_pane.account_folders.iter().enumerate() {
             let folders = folders.as_deref().unwrap_or_default();
             let Some(address) = self.accounts.get(account).filter(|_| several) else {
                 tree.extend_from_slice(folders);
@@ -915,6 +913,7 @@ impl AppState {
     pub fn messages_moved(&mut self, ids: &[MessageId], to: &FolderId) -> Option<Effect> {
         let s = if ids.len() == 1 { "" } else { "s" };
         let name = self
+            .folder_pane
             .folders
             .iter()
             .find(|f| &f.id == to)
@@ -1313,7 +1312,7 @@ impl AppState {
 
     fn open(&mut self) {
         match self.focus {
-            Pane::Folders if !self.folders.is_empty() => self.focus = Pane::Messages,
+            Pane::Folders if !self.folder_pane.folders.is_empty() => self.focus = Pane::Messages,
             Pane::Messages if !self.messages.is_empty() => self.focus = Pane::Reader,
             _ => {}
         }
@@ -1334,7 +1333,9 @@ impl AppState {
             Pane::Folders => {
                 // Move among the folders shown, past those folded away.
                 let visible = self.visible_folders();
-                let at = visible.iter().position(|&i| i == self.selected_folder)?;
+                let at = visible
+                    .iter()
+                    .position(|&i| i == self.folder_pane.selected)?;
                 let mut to = at;
                 step(&mut to, visible.len(), delta);
                 self.select_folder(visible[to])
@@ -1418,7 +1419,10 @@ mod tests {
 
     fn with_folders(ids: &[&str]) -> AppState {
         AppState {
-            folders: ids.iter().map(|id| folder(id)).collect(),
+            folder_pane: crate::tui::folder_pane::FolderPane {
+                folders: ids.iter().map(|id| folder(id)).collect(),
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
@@ -1646,13 +1650,13 @@ Dear Charles,"
         app.viewport = viewport(10, 0, 0);
 
         let effect = app.update(Action::PageDown);
-        assert_eq!(app.selected_folder, 10);
+        assert_eq!(app.folder_pane.selected, 10);
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("f10".to_owned()))));
 
         app.update(Action::HalfPageUp);
-        assert_eq!(app.selected_folder, 5);
+        assert_eq!(app.folder_pane.selected, 5);
         app.update(Action::PageUp);
-        assert_eq!(app.selected_folder, 0);
+        assert_eq!(app.folder_pane.selected, 0);
     }
 
     #[test]
@@ -1693,7 +1697,7 @@ Dear Charles,"
         app.update(Action::SelectNext);
         app.update(Action::SelectNext);
         assert_eq!(app.selected_message, 2);
-        assert_eq!(app.selected_folder, 0);
+        assert_eq!(app.folder_pane.selected, 0);
 
         app.update(Action::SelectPrev);
         assert_eq!(app.selected_message, 1);
@@ -1802,7 +1806,7 @@ Dear Charles,"
         let effect = app.set_folders(vec![folder("new"), folder("a"), folder("b")]);
 
         assert_eq!(effect, None);
-        assert_eq!(app.selected_folder, 2);
+        assert_eq!(app.folder_pane.selected, 2);
     }
 
     #[test]
@@ -1846,18 +1850,18 @@ Dear Charles,"
 
         let effect = app.update(Action::SelectNext);
 
-        assert_eq!(app.selected_folder, 1);
+        assert_eq!(app.folder_pane.selected, 1);
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
     }
 
     #[test]
     fn selecting_previous_folder_loads_it() {
         let mut app = with_folders(&["a", "b", "c"]);
-        app.selected_folder = 2;
+        app.folder_pane.selected = 2;
 
         let effect = app.update(Action::SelectPrev);
 
-        assert_eq!(app.selected_folder, 1);
+        assert_eq!(app.folder_pane.selected, 1);
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
     }
 
@@ -1866,11 +1870,11 @@ Dear Charles,"
         let mut app = with_folders(&["a", "b"]);
 
         assert_eq!(app.update(Action::SelectPrev), None);
-        assert_eq!(app.selected_folder, 0);
+        assert_eq!(app.folder_pane.selected, 0);
 
-        app.selected_folder = 1;
+        app.folder_pane.selected = 1;
         assert_eq!(app.update(Action::SelectNext), None);
-        assert_eq!(app.selected_folder, 1);
+        assert_eq!(app.folder_pane.selected, 1);
     }
 
     #[test]
@@ -2178,7 +2182,7 @@ Dear Charles,"
     fn shift_s_writes_the_signature_of_the_account_being_looked_at() {
         let mut app = two_accounts();
         // The rows are: account 0, a, account 1, b.
-        app.selected_folder = 3;
+        app.folder_pane.selected = 3;
 
         key(&mut app, KeyCode::Char('S'));
         for c in "Ada".chars() {
@@ -2203,7 +2207,7 @@ Dear Charles,"
         let mut app = two_accounts();
         app.signatures[1] = "Ada".to_owned();
 
-        app.selected_folder = 3;
+        app.folder_pane.selected = 3;
         app.update(Action::Compose);
         assert_eq!(
             app.screen.compose().unwrap().body.text(),
@@ -2213,7 +2217,7 @@ Ada"
         );
 
         app.screen.close_compose();
-        app.selected_folder = 1;
+        app.folder_pane.selected = 1;
         app.update(Action::Compose);
         assert_eq!(app.screen.compose().unwrap().body.text(), "");
     }
@@ -2222,7 +2226,7 @@ Ada"
     fn a_new_message_is_sent_from_the_account_picked_in_from() {
         let mut app = two_accounts();
         app.signatures[1] = "Ada".to_owned();
-        app.selected_folder = 1;
+        app.folder_pane.selected = 1;
         app.update(Action::Compose);
 
         for c in "grace@example.com".chars() {

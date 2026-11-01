@@ -13,6 +13,7 @@ pub mod editor;
 pub mod favorites;
 pub mod files;
 pub mod folder_edit;
+pub mod folder_pane;
 pub mod folders;
 pub mod groups;
 pub mod input;

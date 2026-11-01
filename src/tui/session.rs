@@ -42,7 +42,12 @@ impl Snapshot {
                 .map(|m| m.id.0.clone()),
             zoomed: app.zoomed,
             folders_hidden: app.folders_hidden,
-            expanded: app.expanded.iter().map(|id| id.0.clone()).collect(),
+            expanded: app
+                .folder_pane
+                .expanded
+                .iter()
+                .map(|id| id.0.clone())
+                .collect(),
             collapsed: app
                 .accounts
                 .iter()
@@ -50,10 +55,15 @@ impl Snapshot {
                     let row = account_row(address);
                     [unread_row(&row), row]
                 })
-                .filter(|id| !app.expanded.contains(id))
+                .filter(|id| !app.folder_pane.expanded.contains(id))
                 .map(|id| id.0)
                 .collect(),
-            favorites: app.favorites.iter().map(|id| id.0.clone()).collect(),
+            favorites: app
+                .folder_pane
+                .favorites
+                .iter()
+                .map(|id| id.0.clone())
+                .collect(),
             collapsed_groups: app.collapsed_groups.iter().copied().collect(),
         }
     }
@@ -80,15 +90,16 @@ impl AppState {
             Pane::Folders if snapshot.folders_hidden => Pane::Messages,
             focus => focus,
         };
-        self.expanded
+        self.folder_pane
+            .expanded
             .extend(snapshot.expanded.iter().cloned().map(FolderId));
-        self.favorites = snapshot.favorites.iter().cloned().map(FolderId).collect();
+        self.folder_pane.favorites = snapshot.favorites.iter().cloned().map(FolderId).collect();
         self.collapsed_groups = snapshot.collapsed_groups.iter().copied().collect();
         self.rebuild_folders();
         let effect = self.restore_folder(snapshot);
         // Accounts folded at quit stay folded, unless the folder is in one.
         for id in &snapshot.collapsed {
-            self.expanded.remove(&FolderId(id.clone()));
+            self.folder_pane.expanded.remove(&FolderId(id.clone()));
         }
         self.reveal_selected_folder();
         effect
@@ -96,7 +107,7 @@ impl AppState {
 
     fn restore_folder(&mut self, snapshot: &Snapshot) -> Option<Effect> {
         let id = FolderId(snapshot.folder.clone()?);
-        let index = self.folders.iter().position(|f| f.id == id)?;
+        let index = self.folder_pane.folders.iter().position(|f| f.id == id)?;
         self.select_folder(index)
     }
 
@@ -200,7 +211,7 @@ mod tests {
         });
 
         assert_eq!(app.visible_folders(), [0, 1, 2]);
-        assert_eq!(app.selected_folder, 1);
+        assert_eq!(app.folder_pane.selected, 1);
     }
 
     fn two_accounts() -> AppState {
@@ -219,23 +230,26 @@ mod tests {
         let visible = app.visible_folders();
         visible
             .iter()
-            .map(|&i| app.folders[i].id.0.clone())
+            .map(|&i| app.folder_pane.folders[i].id.0.clone())
             .collect()
     }
 
     #[test]
     fn folded_accounts_and_folders_stay_as_they_were() {
         let mut app = two_accounts();
-        app.expanded.insert(FolderId("a".to_owned()));
-        app.expanded.remove(&account_row("me@work.example"));
-        app.expanded
+        app.folder_pane.expanded.insert(FolderId("a".to_owned()));
+        app.folder_pane
+            .expanded
+            .remove(&account_row("me@work.example"));
+        app.folder_pane
+            .expanded
             .remove(&unread_row(&account_row("me@outlook.com")));
         let snapshot = Snapshot::of(&app);
 
         let mut restarted = two_accounts();
         restarted.restore(&snapshot);
 
-        assert_eq!(restarted.expanded, app.expanded);
+        assert_eq!(restarted.folder_pane.expanded, app.folder_pane.expanded);
         assert_eq!(shown(&restarted), shown(&app));
     }
 
@@ -249,8 +263,12 @@ mod tests {
             ..Default::default()
         });
 
-        assert!(app.expanded.contains(&account_row("me@work.example")));
-        assert_eq!(app.folders[app.selected_folder].id.0, "c");
+        assert!(
+            app.folder_pane
+                .expanded
+                .contains(&account_row("me@work.example"))
+        );
+        assert_eq!(app.folder_pane.folders[app.folder_pane.selected].id.0, "c");
     }
 
     #[test]
@@ -265,7 +283,7 @@ mod tests {
         });
 
         assert_eq!(effect, Some(Effect::LoadFolder(FolderId("b".to_owned()))));
-        assert_eq!(app.selected_folder, 0);
+        assert_eq!(app.folder_pane.selected, 0);
     }
 
     #[test]
@@ -279,7 +297,7 @@ mod tests {
 
         assert_eq!(app.restore(&snapshot), None);
         assert_eq!(app.select_message("gone"), None);
-        assert_eq!(app.selected_folder, 0);
+        assert_eq!(app.folder_pane.selected, 0);
     }
 
     #[test]

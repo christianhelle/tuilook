@@ -178,6 +178,7 @@ mod tests {
     fn the_unread_list_fetches_older_unread_mail_by_the_unread_count() {
         let mut app = devops(50, 80);
         let row = app
+            .folder_pane
             .folders
             .iter()
             .position(|f| f.id == unread_row(&FolderId("devops".to_owned())))

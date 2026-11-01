@@ -14,10 +14,12 @@ impl AppState {
     /// account each is from.
     pub(crate) fn favorite_rows(&self) -> (Vec<Folder>, Vec<usize>) {
         let found: Vec<(usize, &Folder)> = self
+            .folder_pane
             .favorites
             .iter()
             .filter_map(|id| {
-                self.account_folders
+                self.folder_pane
+                    .account_folders
                     .iter()
                     .enumerate()
                     .find_map(|(account, folders)| {
@@ -53,7 +55,8 @@ impl AppState {
 
     /// How many rows the favorites take at the top of `folders`.
     pub fn favorite_count(&self) -> usize {
-        self.folders
+        self.folder_pane
+            .folders
             .iter()
             .take_while(|f| is_favorite_row(f))
             .count()
@@ -66,13 +69,13 @@ impl AppState {
             return None;
         };
         let (id, name) = (folder.id.clone(), folder.name.clone());
-        match self.favorites.iter().position(|f| f == &id) {
+        match self.folder_pane.favorites.iter().position(|f| f == &id) {
             Some(index) => {
-                self.favorites.remove(index);
+                self.folder_pane.favorites.remove(index);
                 self.show_info(format!("Removed {name} from Favorites"));
             }
             None => {
-                self.favorites.push(id);
+                self.folder_pane.favorites.push(id);
                 self.show_info(format!("Added {name} to Favorites"));
             }
         }
@@ -123,12 +126,17 @@ mod tests {
     fn names(app: &AppState) -> Vec<&str> {
         app.visible_folders()
             .into_iter()
-            .map(|i| app.folders[i].name.as_str())
+            .map(|i| app.folder_pane.folders[i].name.as_str())
             .collect()
     }
 
     fn select(app: &mut AppState, id: &str) {
-        app.selected_folder = app.folders.iter().position(|f| f.id.0 == id).unwrap();
+        app.folder_pane.selected = app
+            .folder_pane
+            .folders
+            .iter()
+            .position(|f| f.id.0 == id)
+            .unwrap();
     }
 
     fn load(id: &str) -> Option<Effect> {
@@ -176,7 +184,7 @@ mod tests {
         app.focus = Pane::Messages;
         app.update(Action::ToggleFavorite);
 
-        assert!(app.favorites.is_empty());
+        assert!(app.folder_pane.favorites.is_empty());
     }
 
     #[test]
@@ -246,15 +254,13 @@ mod tests {
             app.current_folder(),
             Some(&FolderId("favorite:receipts".to_owned()))
         );
-        assert_eq!(app.folders[0].unread, 5);
+        assert_eq!(app.folder_pane.folders[0].unread, 5);
     }
 
     #[test]
     fn a_favorite_whose_folder_is_missing_waits_for_it() {
-        let mut app = AppState {
-            favorites: vec![FolderId("later".to_owned())],
-            ..Default::default()
-        };
+        let mut app = AppState::default();
+        app.folder_pane.favorites = vec![FolderId("later".to_owned())];
         app.set_folders(vec![folder("inbox", "Inbox", None, 0)]);
         assert_eq!(app.favorite_count(), 0);
 
