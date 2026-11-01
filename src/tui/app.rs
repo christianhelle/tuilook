@@ -25,7 +25,7 @@ use crate::tui::{
     keymap::Keymap,
     mover,
     rows::{account_row, is_own_row, row_target, unread_row},
-    screen::Screen,
+    screen::{Cursor, Screen},
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
@@ -351,6 +351,17 @@ impl AppState {
             }
         }
         rows.len().saturating_sub(1)
+    }
+
+    /// The cursor's shape: a dialog taking text or a search being typed
+    /// wants a bar, and otherwise it is up to the screen.
+    pub fn cursor(&self) -> Cursor {
+        let typing = self.dialog.as_ref().is_some_and(Dialog::takes_text) || self.typing_search();
+        if typing {
+            Cursor::Bar
+        } else {
+            self.screen.cursor()
+        }
     }
 
     /// The question asked, if one is.

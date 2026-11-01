@@ -1,8 +1,29 @@
 //! What fills the screen, and so takes the keys, under any dialog.
 
 use crate::tui::{
-    agenda::Agenda, appointment_form::AppointmentForm, compose::Compose, signature::SignatureEditor,
+    agenda::Agenda,
+    appointment_form::{AppointmentForm, Field as AppointmentField},
+    compose::{Compose, Field},
+    signature::SignatureEditor,
+    vim::VimMode,
 };
+
+/// The cursor's shape: a bar while typing, a block in vim's other modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cursor {
+    Default,
+    Bar,
+    Block,
+}
+
+/// A bar in insert mode, a block in vim's others.
+fn vim_cursor(mode: VimMode) -> Cursor {
+    if mode == VimMode::Insert {
+        Cursor::Bar
+    } else {
+        Cursor::Block
+    }
+}
 
 /// One screen at a time: which one is the whole of what the app needs to know
 /// to route a key or draw a frame.
@@ -24,6 +45,22 @@ pub enum Screen {
 }
 
 impl Screen {
+    /// The cursor this screen wants.
+    pub fn cursor(&self) -> Cursor {
+        match self {
+            Screen::Panes | Screen::Agenda { form: None, .. } => Cursor::Default,
+            Screen::Compose(compose) if compose.field != Field::Body => Cursor::Bar,
+            Screen::Compose(compose) => vim_cursor(compose.body.vim.mode),
+            Screen::Signature(editor) => vim_cursor(editor.body.vim.mode),
+            Screen::Agenda {
+                form: Some(form), ..
+            } if form.field != AppointmentField::Notes => Cursor::Bar,
+            Screen::Agenda {
+                form: Some(form), ..
+            } => vim_cursor(form.notes.vim.mode),
+        }
+    }
+
     /// The message being written, if one is.
     pub fn compose(&self) -> Option<&Compose> {
         match self {
@@ -118,5 +155,89 @@ impl Screen {
         if self.compose().is_some() {
             *self = Screen::Panes;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent};
+
+    use super::Cursor;
+    use crate::model::Action;
+    use crate::tui::{app::AppState, keymap::Keymap};
+
+    fn press(app: &mut AppState, code: KeyCode) {
+        app.on_key(KeyEvent::from(code), &mut Keymap::default());
+    }
+
+    #[test]
+    fn the_panes_and_the_agenda_keep_the_default_cursor() {
+        let mut app = AppState::default();
+        assert_eq!(app.cursor(), Cursor::Default);
+
+        app.update(Action::Calendar);
+
+        assert_eq!(app.cursor(), Cursor::Default);
+    }
+
+    #[test]
+    fn typing_a_search_shows_a_bar() {
+        let mut app = AppState::default();
+
+        app.update(Action::Search);
+
+        assert_eq!(app.cursor(), Cursor::Bar);
+    }
+
+    #[test]
+    fn the_headers_of_a_message_show_a_bar() {
+        let mut app = AppState::default();
+
+        app.update(Action::Compose);
+
+        assert_eq!(app.cursor(), Cursor::Bar);
+    }
+
+    #[test]
+    fn a_signature_shows_a_bar_while_inserting_and_a_block_otherwise() {
+        let mut app = AppState::default();
+        app.update(Action::EditSignature);
+
+        press(&mut app, KeyCode::Char('i'));
+        assert_eq!(app.cursor(), Cursor::Bar);
+
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.cursor(), Cursor::Block);
+    }
+
+    #[test]
+    fn a_new_appointments_subject_shows_a_bar() {
+        let mut app = AppState::default();
+        app.update(Action::Calendar);
+
+        press(&mut app, KeyCode::Char('c'));
+
+        assert_eq!(app.cursor(), Cursor::Bar);
+    }
+
+    #[test]
+    fn a_dialog_taking_text_shows_a_bar_over_the_panes() {
+        let app = AppState {
+            dialog: Some(crate::tui::dialog::Dialog::Files(
+                crate::tui::files::FilePicker::open(std::env::temp_dir()),
+            )),
+            ..Default::default()
+        };
+
+        assert_eq!(app.cursor(), Cursor::Bar);
+    }
+
+    #[test]
+    fn a_dialog_not_taking_text_leaves_the_screens_cursor() {
+        let mut app = AppState::default();
+        app.update(Action::Compose);
+        app.dialog = Some(crate::tui::dialog::Dialog::Help);
+
+        assert_eq!(app.cursor(), Cursor::Bar);
     }
 }

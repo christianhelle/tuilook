@@ -30,14 +30,11 @@ use tuilook::model::MailBackend;
 use tuilook::store::Store;
 use tuilook::tui::{
     app::{AppState, Mouse},
-    appointment_form::Field as AppointmentField,
-    compose::Field,
     demo,
-    dialog::Dialog,
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
+    screen::Cursor,
     session, ui,
-    vim::VimMode,
 };
 
 /// Delegated Graph scopes; contacts can be added later.
@@ -422,9 +419,9 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
             let effect = app.sync_if_due(now);
             mailboxes.apply(&mut app, effect)?;
             terminal.draw(|frame| ui::draw(frame, &app))?;
-            let shape = Cursor::of(&app);
+            let shape = app.cursor();
             if shape != cursor {
-                execute!(io::stdout(), shape.style())?;
+                execute!(io::stdout(), cursor_style(shape))?;
                 cursor = shape;
             }
             for (account, events) in events.iter_mut().enumerate() {
@@ -468,47 +465,18 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
         let _ = session::save(path, &session::Snapshot::of(&app));
     }
     if cursor != Cursor::Default {
-        let _ = execute!(io::stdout(), Cursor::Default.style());
+        let _ = execute!(io::stdout(), cursor_style(Cursor::Default));
     }
     ratatui::restore();
     result
 }
 
-/// The cursor's shape: a bar while typing, a block in vim's other modes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Cursor {
-    Default,
-    Bar,
-    Block,
-}
-
-impl Cursor {
-    fn of(app: &AppState) -> Self {
-        if app.dialog.as_ref().is_some_and(Dialog::takes_text) {
-            return Cursor::Bar;
-        }
-        match app.screen.compose() {
-            None if app.typing_search() => Cursor::Bar,
-            None => match (app.screen.signature(), app.screen.appointment()) {
-                (Some(editor), _) if editor.body.vim.mode == VimMode::Insert => Cursor::Bar,
-                (Some(_), _) => Cursor::Block,
-                (None, Some(form)) if form.field != AppointmentField::Notes => Cursor::Bar,
-                (None, Some(form)) if form.notes.vim.mode == VimMode::Insert => Cursor::Bar,
-                (None, Some(_)) => Cursor::Block,
-                (None, None) => Cursor::Default,
-            },
-            Some(compose) if compose.field != Field::Body => Cursor::Bar,
-            Some(compose) if compose.body.vim.mode == VimMode::Insert => Cursor::Bar,
-            Some(_) => Cursor::Block,
-        }
-    }
-
-    fn style(self) -> SetCursorStyle {
-        match self {
-            Cursor::Default => SetCursorStyle::DefaultUserShape,
-            Cursor::Bar => SetCursorStyle::SteadyBar,
-            Cursor::Block => SetCursorStyle::SteadyBlock,
-        }
+/// How the terminal draws `cursor`.
+fn cursor_style(cursor: Cursor) -> SetCursorStyle {
+    match cursor {
+        Cursor::Default => SetCursorStyle::DefaultUserShape,
+        Cursor::Bar => SetCursorStyle::SteadyBar,
+        Cursor::Block => SetCursorStyle::SteadyBlock,
     }
 }
 
