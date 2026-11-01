@@ -3,6 +3,7 @@
 mod attachments;
 mod body;
 mod calendar;
+mod changes;
 mod engine;
 pub mod fake;
 mod sync;
