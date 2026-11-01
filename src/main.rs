@@ -11,10 +11,7 @@ use jiff::Zoned;
 use ratatui::{
     crossterm::{
         cursor::SetCursorStyle,
-        event::{
-            self, DisableMouseCapture, EnableMouseCapture, Event as TermEvent, KeyEventKind,
-            MouseButton, MouseEventKind,
-        },
+        event::{self, DisableMouseCapture, EnableMouseCapture},
         execute,
     },
     layout::Rect,
@@ -29,10 +26,11 @@ use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
 use tuilook::model::MailBackend;
 use tuilook::store::Store;
 use tuilook::tui::{
-    app::{AppState, Mouse},
+    app::AppState,
     demo,
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
+    run_loop::{on_terminal_event, take_core_events},
     screen::Cursor,
     session, ui,
 };
@@ -424,11 +422,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
                 execute!(io::stdout(), cursor_style(shape))?;
                 cursor = shape;
             }
-            for (account, events) in events.iter_mut().enumerate() {
-                while let Ok(event) = events.try_recv() {
-                    mailboxes.on_event(&mut app, account, event)?;
-                }
-            }
+            take_core_events(&mut app, &mut mailboxes, &mut events)?;
             let ready = event::poll(Duration::from_millis(100))?;
             // The key and the drawing after it see the same time.
             app.clock = Some(Zoned::now());
@@ -437,25 +431,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
             }
             let size = terminal.size()?;
             let area = Rect::new(0, 0, size.width, size.height);
-            app.viewport = ui::viewport(area, &app);
-            let effect = match event::read()? {
-                // Windows also reports key releases.
-                TermEvent::Key(key) if key.kind == KeyEventKind::Press => {
-                    app.on_key(key, &mut keymap)
-                }
-                TermEvent::Mouse(mouse) => {
-                    let action = match mouse.kind {
-                        MouseEventKind::Down(MouseButton::Left) => Mouse::Click,
-                        MouseEventKind::ScrollUp => Mouse::ScrollUp,
-                        MouseEventKind::ScrollDown => Mouse::ScrollDown,
-                        _ => continue,
-                    };
-                    let hit = ui::hit(area, &app, mouse.column, mouse.row);
-                    app.on_mouse(action, hit)
-                }
-                _ => continue,
-            };
-            mailboxes.apply(&mut app, effect)?;
+            on_terminal_event(&mut app, &mut mailboxes, &mut keymap, area, event::read()?)?;
         }
         Ok(())
     })();
