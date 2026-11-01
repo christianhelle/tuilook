@@ -25,6 +25,7 @@ use crate::tui::{
     numbers,
     older::LOADING_OLDER,
     rows::Row,
+    screen::Screen,
     signature::SignatureEditor,
     vim::VimMode,
 };
@@ -98,11 +99,7 @@ fn panes(area: Rect, app: &AppState) -> Panes {
         status,
         ..Default::default()
     };
-    let takes_over = app.screen.compose().is_some()
-        || app.screen.signature().is_some()
-        || app.screen.agenda().is_some()
-        || app.screen.appointment().is_some();
-    if takes_over {
+    if !matches!(app.screen, Screen::Panes) {
         panes.compose = main;
         return panes;
     }
@@ -167,16 +164,14 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     if !reader.is_empty() {
         draw_reader(frame, app, reader);
     }
-    if let Some(message) = app.screen.compose() {
-        draw_compose(frame, message, compose);
-    }
-    if let Some(editor) = app.screen.signature() {
-        draw_signature(frame, app, editor, compose);
-    }
-    if app.screen.compose().is_none() && app.screen.signature().is_none() {
-        if let Some(form) = app.screen.appointment() {
-            draw_appointment(frame, form, compose);
-        } else if let Some(agenda) = app.screen.agenda() {
+    match &app.screen {
+        Screen::Panes => {}
+        Screen::Compose(message) => draw_compose(frame, message, compose),
+        Screen::Signature(editor) => draw_signature(frame, app, editor, compose),
+        Screen::Agenda {
+            form: Some(form), ..
+        } => draw_appointment(frame, form, compose),
+        Screen::Agenda { agenda, form: None } => {
             draw_agenda(frame, agenda, app.accounts.len(), compose);
         }
     }
@@ -189,12 +184,12 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
 
     match &app.dialog {
         Some(Dialog::Help) => {
-            let help: &[(&str, &str)] = match (app.screen.compose(), app.screen.signature()) {
-                (Some(_), _) => &COMPOSE_HELP,
-                (None, Some(_)) => &SIGNATURE_HELP,
-                (None, None) if app.screen.appointment().is_some() => &APPOINTMENT_HELP,
-                (None, None) if app.screen.agenda().is_some() => &AGENDA_HELP,
-                (None, None) => &HELP,
+            let help: &[(&str, &str)] = match &app.screen {
+                Screen::Panes => &HELP,
+                Screen::Compose(_) => &COMPOSE_HELP,
+                Screen::Signature(_) => &SIGNATURE_HELP,
+                Screen::Agenda { form: Some(_), .. } => &APPOINTMENT_HELP,
+                Screen::Agenda { form: None, .. } => &AGENDA_HELP,
             };
             draw_help(frame, help);
         }
@@ -566,14 +561,12 @@ fn draw_blocked(frame: &mut Frame, said: &str) {
 /// while a search is typed.
 fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     let mut spans = Vec::new();
-    let editing = match (
-        app.screen.compose(),
-        app.screen.signature(),
-        app.screen.appointment(),
-    ) {
-        (Some(compose), _, _) if compose.field == Field::Body => Some(&compose.body),
-        (None, Some(editor), _) => Some(&editor.body),
-        (None, None, Some(form)) if form.field == AppointmentField::Notes => Some(&form.notes),
+    let editing = match &app.screen {
+        Screen::Compose(compose) if compose.field == Field::Body => Some(&compose.body),
+        Screen::Signature(editor) => Some(&editor.body),
+        Screen::Agenda {
+            form: Some(form), ..
+        } if form.field == AppointmentField::Notes => Some(&form.notes),
         _ => None,
     };
     let picking = app.viewer.mode() != VimMode::Normal;
@@ -603,40 +596,45 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
             Span::styled(format!(" {error}"), Style::new().fg(Color::Red))
         }
         Some(Status::Info(info) | Status::Busy(info)) => Span::raw(format!(" {info}")),
-        None if app.screen.compose().is_some_and(|c| c.field == Field::From) => {
-            Span::raw(" ← → change sender · Ctrl-S send · Tab next field · Esc close · ? help")
-        }
-        None if app.screen.compose().is_some() => {
-            Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
-        }
-        None if app.screen.signature().is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
-        None if app.screen.appointment()
-            .is_some_and(|f| f.field == AppointmentField::AllDay) =>
-        {
-            Span::raw(" Space all day or not · Ctrl-S save · Tab next field · Esc close · ? help")
-        }
-        None if app.screen.appointment().is_some() => {
-            Span::raw(" Ctrl-S save · Tab next field · Esc close · ? help")
-        }
-        None if app.screen.agenda().is_some() => Span::raw(
-            " c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help",
-        ),
-        None if picking => Span::raw(" y copy · Esc cancel"),
-        // Saving is offered only once the selected mail's files are known.
-        None if app.focus == Pane::Reader && !app.attachments.is_empty() => Span::raw(
-            " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit · s save files",
-        ),
-        None if app.focus == Pane::Reader => {
-            Span::raw(" v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit")
-        }
-        None if !app.attachments.is_empty() => Span::raw(
-            " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit · s save files",
-        ),
-        None => Span::raw(
-            " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",
-        ),
+        None => Span::raw(key_hints(app, picking)),
     });
     (Line::from(spans), None)
+}
+
+/// The keys the status bar offers on the screen shown.
+fn key_hints(app: &AppState, picking: bool) -> &'static str {
+    match &app.screen {
+        Screen::Compose(compose) if compose.field == Field::From => {
+            " ← → change sender · Ctrl-S send · Tab next field · Esc close · ? help"
+        }
+        Screen::Compose(_) => " Ctrl-S send · Tab next field · Esc close · ? help",
+        Screen::Signature(_) => " Ctrl-S save · Esc close · ? help",
+        Screen::Agenda {
+            form: Some(form), ..
+        } if form.field == AppointmentField::AllDay => {
+            " Space all day or not · Ctrl-S save · Tab next field · Esc close · ? help"
+        }
+        Screen::Agenda { form: Some(_), .. } => {
+            " Ctrl-S save · Tab next field · Esc close · ? help"
+        }
+        Screen::Agenda { form: None, .. } => {
+            " c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help"
+        }
+        Screen::Panes if picking => " y copy · Esc cancel",
+        // Saving is offered only once the selected mail's files are known.
+        Screen::Panes if app.focus == Pane::Reader && !app.attachments.is_empty() => {
+            " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit · s save files"
+        }
+        Screen::Panes if app.focus == Pane::Reader => {
+            " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit"
+        }
+        Screen::Panes if !app.attachments.is_empty() => {
+            " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit · s save files"
+        }
+        Screen::Panes => {
+            " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit"
+        }
+    }
 }
 
 /// Where each part of the message being written goes.
@@ -1772,12 +1770,15 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
         reader,
         reader_lines: app.reader_rows_at(reader_width).iter().sum(),
         reader_width,
-        compose: match (app.screen.compose(), app.screen.signature()) {
-            (Some(compose), _) => usize::from(compose_areas(panes.compose, compose).body.height),
-            (None, Some(_)) => usize::from(signature_areas(panes.compose)[1].height),
-            (None, None) => app.screen.appointment().map_or(0, |form| {
-                usize::from(appointment_areas(panes.compose, form).notes.height)
-            }),
+        compose: match &app.screen {
+            Screen::Compose(compose) => {
+                usize::from(compose_areas(panes.compose, compose).body.height)
+            }
+            Screen::Signature(_) => usize::from(signature_areas(panes.compose)[1].height),
+            Screen::Agenda {
+                form: Some(form), ..
+            } => usize::from(appointment_areas(panes.compose, form).notes.height),
+            Screen::Panes | Screen::Agenda { form: None, .. } => 0,
         },
     }
 }
