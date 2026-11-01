@@ -12,6 +12,7 @@ use tuilook::tui::{
     demo,
     dialog::Dialog,
     files::{Entry, FilePicker},
+    filter_list::FilterList,
     groups::MessageRow,
     help, ui,
 };
@@ -406,8 +407,10 @@ fn ctrl_a_picks_a_file_to_attach() {
             entry("menu.pdf", false, 1_258_291),
             entry("notes.txt", false, 2_048),
         ],
-        filter: Default::default(),
-        selected: 2,
+        list: FilterList {
+            selected: 2,
+            ..Default::default()
+        },
         error: None,
     }));
 

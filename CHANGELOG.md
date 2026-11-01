@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The calendar's help lists `Home` and `End`, which it has always taken.
+- Spaces typed around a name in the file picker no longer hide what matches,
+  as in the move dialog.
 - Saving attached files always saves from the mail the picker was opened on,
   even when a sync removes that mail while you pick.
 - Mail you could not pin, flag or mark as read goes back to how it was at once,

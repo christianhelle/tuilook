@@ -244,10 +244,10 @@ fn draw_move_picker(frame: &mut Frame, mover: &MovePicker) {
     // Borders, the filter, the gap below it and the keys take 5 lines.
     let fits = usize::from(frame.area().height).saturating_sub(5);
     let visible = choices.len().clamp(1, MOVE_ROWS).min(fits.max(1));
-    let first = list_offset(mover.selected, visible);
+    let first = list_offset(mover.list.selected, visible);
     // Room for the filter and the cursor after it, inside the borders.
     let room = usize::from(PROMPT_WIDTH - 3).saturating_sub(FILTER_LABEL.len());
-    let (filter, column) = typed(&mover.filter, room);
+    let (filter, column) = typed(&mover.list.filter, room);
     let mut lines = vec![Line::raw(format!("{FILTER_LABEL}{filter}")), Line::raw("")];
     if choices.is_empty() {
         lines.push(Line::styled(
@@ -257,7 +257,7 @@ fn draw_move_picker(frame: &mut Frame, mover: &MovePicker) {
     }
     for (row, &index) in choices.iter().enumerate().skip(first).take(visible) {
         let (folder, depth) = &mover.folders[index];
-        let picked = row == mover.selected;
+        let picked = row == mover.list.selected;
         let text = format!(
             "{}{}{}",
             if picked { "> " } else { "  " },
@@ -358,14 +358,14 @@ fn draw_file_picker(frame: &mut Frame, picker: &FilePicker) {
     // Borders, the folder, the filter, the gap and the keys take 6 lines.
     let fits = usize::from(frame.area().height).saturating_sub(6).max(1);
     let visible = choices.len().clamp(1, MOVE_ROWS).min(fits);
-    let first = list_offset(picker.selected, visible);
+    let first = list_offset(picker.list.selected, visible);
     let inside = usize::from(FILES_WIDTH - 2);
     let dir = picker.dir.display().to_string();
     // A long folder keeps its end, which says most about where it is.
     let skip = dir.chars().count().saturating_sub(inside);
     let dir: String = dir.chars().skip(skip).collect();
     let room = inside.saturating_sub(1 + NAME_LABEL.len());
-    let (filter, column) = typed(&picker.filter, room);
+    let (filter, column) = typed(&picker.list.filter, room);
     let dim = Style::new().fg(Color::DarkGray);
     let mut lines = vec![
         Line::styled(dir, dim),
@@ -379,7 +379,7 @@ fn draw_file_picker(frame: &mut Frame, picker: &FilePicker) {
     }
     for (row, &index) in choices.iter().enumerate().skip(first).take(visible) {
         let entry = &picker.entries[index];
-        let picked = row == picker.selected;
+        let picked = row == picker.list.selected;
         let name = format!(
             "{}{}",
             if picked { "> " } else { "  " },

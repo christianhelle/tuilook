@@ -3,9 +3,9 @@
 
 use std::path::PathBuf;
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
-use crate::tui::input::TextInput;
+use crate::tui::filter_list::FilterList;
 
 /// Where to pick the first file to attach from: the documents folder, or
 /// else the home folder, or else the folder tuilook was started in.
@@ -61,10 +61,9 @@ pub struct FilePicker {
     pub dir: PathBuf,
     /// `..` when there is a folder above, then the folders, then the files.
     pub entries: Vec<Entry>,
-    /// Part of a name, to narrow the entries shown.
-    pub filter: TextInput,
-    /// The picked one of the entries shown.
-    pub selected: usize,
+    /// Part of a name, to narrow the entries shown, and the picked one of
+    /// them.
+    pub list: FilterList,
     /// Why the folder could not be read, if it could not.
     pub error: Option<String>,
 }
@@ -75,8 +74,7 @@ impl FilePicker {
         let mut picker = Self {
             dir,
             entries: vec![],
-            filter: TextInput::default(),
-            selected: 0,
+            list: FilterList::default(),
             error: None,
         };
         picker.read();
@@ -85,8 +83,7 @@ impl FilePicker {
 
     /// Reads the folder shown afresh, clearing the filter.
     fn read(&mut self) {
-        self.filter = TextInput::default();
-        self.selected = 0;
+        self.list = FilterList::default();
         self.error = None;
         self.entries = self.dir.parent().map(|_| Entry::up()).into_iter().collect();
         let mut found = match std::fs::read_dir(&self.dir) {
@@ -114,21 +111,17 @@ impl FilePicker {
     /// The entries whose name has the filter in it, as indexes into
     /// `entries`. `..` shows only while nothing is typed.
     pub fn choices(&self) -> Vec<usize> {
-        let filter = self.filter.text().to_lowercase();
         (0..self.entries.len())
             .filter(|&i| {
                 let name = &self.entries[i].name;
-                if filter.is_empty() {
-                    return true;
-                }
-                name != ".." && name.to_lowercase().contains(&filter)
+                self.list.is_unfiltered() || (name != ".." && self.list.matches(name))
             })
             .collect()
     }
 
     /// The entry picked, if any is shown.
     pub fn picked(&self) -> Option<&Entry> {
-        let index = *self.choices().get(self.selected)?;
+        let index = *self.choices().get(self.list.selected)?;
         Some(&self.entries[index])
     }
 
@@ -136,21 +129,11 @@ impl FilePicker {
     /// attaches a file, Backspace with nothing typed goes up and Esc gives
     /// up.
     pub fn key(&mut self, key: KeyEvent) -> Request {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => return Request::Close,
             KeyCode::Enter => return self.enter(),
-            KeyCode::Backspace if self.filter.text().is_empty() => self.up(),
-            KeyCode::Down | KeyCode::Tab => self.step(1),
-            KeyCode::Char('n') if ctrl => self.step(1),
-            KeyCode::Up | KeyCode::BackTab => self.step(-1),
-            KeyCode::Char('p') if ctrl => self.step(-1),
-            _ => {
-                let before = self.filter.text().to_owned();
-                if self.filter.key(key) && self.filter.text() != before {
-                    self.selected = 0;
-                }
-            }
+            KeyCode::Backspace if self.list.filter.text().is_empty() => self.up(),
+            _ => self.list.key(key, self.choices().len()),
         }
         Request::None
     }
@@ -184,15 +167,9 @@ impl FilePicker {
         if let Some(left) = left {
             let choices = self.choices();
             if let Some(at) = choices.iter().position(|&i| self.entries[i].name == left) {
-                self.selected = at;
+                self.list.selected = at;
             }
         }
-    }
-
-    /// Picks the entry `delta` rows away, stopping at the ends.
-    fn step(&mut self, delta: isize) {
-        let last = self.choices().len().saturating_sub(1);
-        self.selected = self.selected.saturating_add_signed(delta).min(last);
     }
 }
 
@@ -234,6 +211,17 @@ mod tests {
 
     fn typed(text: &str) -> Vec<KeyCode> {
         text.chars().map(KeyCode::Char).collect()
+    }
+
+    #[test]
+    fn spaces_typed_alone_leave_every_entry_shown() {
+        let dir = folder();
+        let mut picker = FilePicker::open(dir.path().to_path_buf());
+        let everything = shown(&picker);
+
+        press(&mut picker, &[KeyCode::Char(' ')]);
+
+        assert_eq!(shown(&picker), everything);
     }
 
     #[test]

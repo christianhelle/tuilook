@@ -3,12 +3,12 @@
 
 use crate::core::Command;
 use crate::model::{Folder, FolderId, MessageId, folder_depths, sort_folders};
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use crate::tui::{
     app::{AppState, Effect, Pane},
     dialog::Dialog,
-    input::TextInput,
+    filter_list::FilterList,
 };
 
 /// What a key asks for while picking where to move mail.
@@ -32,10 +32,9 @@ pub struct MovePicker {
     /// The account's folders in tree order, each with how deeply it is
     /// nested.
     pub folders: Vec<(Folder, usize)>,
-    /// Part of a folder's name, to narrow the folders shown.
-    pub filter: TextInput,
-    /// The picked one of the folders shown.
-    pub selected: usize,
+    /// Part of a folder's name, to narrow the folders shown, and the picked
+    /// one of them.
+    pub list: FilterList,
 }
 
 impl MovePicker {
@@ -58,23 +57,21 @@ impl MovePicker {
             account,
             ids,
             folders,
-            filter: TextInput::default(),
-            selected: 0,
+            list: FilterList::default(),
         }
     }
 
     /// The folders whose name has the filter in it, as indexes into
     /// `folders`.
     pub fn choices(&self) -> Vec<usize> {
-        let filter = self.filter.text().trim().to_lowercase();
         (0..self.folders.len())
-            .filter(|&i| self.folders[i].0.name.to_lowercase().contains(&filter))
+            .filter(|&i| self.list.matches(&self.folders[i].0.name))
             .collect()
     }
 
     /// The folder picked, if any is shown.
     pub fn picked(&self) -> Option<&Folder> {
-        let index = *self.choices().get(self.selected)?;
+        let index = *self.choices().get(self.list.selected)?;
         Some(&self.folders[index].0)
     }
 
@@ -89,7 +86,6 @@ impl MovePicker {
     /// Typing narrows the folders, ↑ ↓ pick one, Enter moves the mail there
     /// and Esc gives up.
     pub fn key(&mut self, key: KeyEvent) -> Request {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => return Request::Close,
             KeyCode::Enter => {
@@ -101,24 +97,9 @@ impl MovePicker {
                     };
                 }
             }
-            KeyCode::Down | KeyCode::Tab => self.step(1),
-            KeyCode::Char('n') if ctrl => self.step(1),
-            KeyCode::Up | KeyCode::BackTab => self.step(-1),
-            KeyCode::Char('p') if ctrl => self.step(-1),
-            _ => {
-                let before = self.filter.text().to_owned();
-                if self.filter.key(key) && self.filter.text() != before {
-                    self.selected = 0;
-                }
-            }
+            _ => self.list.key(key, self.choices().len()),
         }
         Request::None
-    }
-
-    /// Picks the folder `delta` rows away, stopping at the ends.
-    fn step(&mut self, delta: isize) {
-        let last = self.choices().len().saturating_sub(1);
-        self.selected = self.selected.saturating_add_signed(delta).min(last);
     }
 }
 
@@ -296,7 +277,7 @@ mod tests {
         type_keys(&mut mover, &chars("rc"));
         type_keys(&mut mover, &[KeyCode::Left, KeyCode::Char('e')]);
 
-        assert_eq!(mover.filter.text(), "rec");
+        assert_eq!(mover.list.filter.text(), "rec");
         assert_eq!(names(&mover), ["Receipts"]);
     }
 

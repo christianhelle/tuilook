@@ -12,6 +12,7 @@ pub mod dialog;
 pub mod editor;
 pub mod favorites;
 pub mod files;
+pub mod filter_list;
 pub mod folder_edit;
 pub mod folder_pane;
 pub mod folders;
