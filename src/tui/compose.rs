@@ -383,7 +383,7 @@ fn prefixed(prefix: &str, subject: &str) -> String {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::model::{FolderId, MessageId};
+    use crate::model::MessageId;
 
     use super::*;
 

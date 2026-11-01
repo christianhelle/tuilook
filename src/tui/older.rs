@@ -78,7 +78,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{Action, Folder, Message, MessageId};
+    use crate::model::{Action, Folder, Message};
 
     use super::*;
     use crate::tui::{app::Pane, rows::unread_row};

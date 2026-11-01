@@ -137,7 +137,6 @@ pub fn group_at(messages: &[Message], index: usize, now: &Zoned) -> Option<DateG
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{FolderId, MessageId};
 
     use super::*;
 

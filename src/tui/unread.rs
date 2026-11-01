@@ -262,7 +262,7 @@ mod tests {
     }
 
     fn message(id: &str, is_read: bool) -> crate::model::Message {
-        Message {
+        crate::model::Message {
             folder_id: FolderId("work-inbox".to_owned()),
             subject: id.to_owned(),
             is_read,

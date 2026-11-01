@@ -120,9 +120,7 @@ pub fn human_size(bytes: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{
-        Action, Attachment, AttachmentId, AttachmentKind, FolderId, Importance, Message, MessageId,
-    };
+    use crate::model::{Action, Attachment, AttachmentId, AttachmentKind, Message, MessageId};
     use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
     use crate::tui::{
