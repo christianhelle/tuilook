@@ -24,7 +24,9 @@ use crate::tui::{
 /// One account's cache, and the channel to the core that syncs it.
 pub struct Mailbox {
     pub store: Store,
-    pub commands: mpsc::Sender<Command>,
+    /// Never full, so the UI thread cannot stall behind a busy core and stop
+    /// taking the events that core is waiting to hand over.
+    pub commands: mpsc::UnboundedSender<Command>,
 }
 
 /// Every account's mailbox, in the order of the app's accounts.
@@ -185,7 +187,7 @@ impl Mailboxes {
                 Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
                 Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
                 Effect::LoadBody(id) => {
-                    commands.blocking_send(Command::LoadBody(id))?;
+                    commands.send(Command::LoadBody(id))?;
                     None
                 }
                 Effect::LoadOlder {
@@ -198,33 +200,33 @@ impl Mailboxes {
                         before,
                         unread_only,
                     };
-                    commands.blocking_send(older)?;
+                    commands.send(older)?;
                     None
                 }
                 Effect::DeleteFolder { folder, permanent } => {
-                    commands.blocking_send(Command::DeleteFolder { folder, permanent })?;
+                    commands.send(Command::DeleteFolder { folder, permanent })?;
                     None
                 }
                 Effect::CreateFolder { parent, name, .. } => {
-                    commands.blocking_send(Command::CreateFolder { parent, name })?;
+                    commands.send(Command::CreateFolder { parent, name })?;
                     None
                 }
                 Effect::RenameFolder { folder, name, .. } => {
-                    commands.blocking_send(Command::RenameFolder { folder, name })?;
+                    commands.send(Command::RenameFolder { folder, name })?;
                     None
                 }
                 Effect::Move { ids, to, .. } => {
-                    commands.blocking_send(Command::Move { ids, to })?;
+                    commands.send(Command::Move { ids, to })?;
                     None
                 }
                 Effect::MarkRead(id) => {
-                    commands.blocking_send(Command::MarkRead(id))?;
+                    commands.send(Command::MarkRead(id))?;
                     None
                 }
                 Effect::Sync => {
                     for mailbox in mailboxes {
-                        mailbox.commands.blocking_send(Command::SyncAll)?;
-                        mailbox.commands.blocking_send(Command::SyncCalendar)?;
+                        mailbox.commands.send(Command::SyncAll)?;
+                        mailbox.commands.send(Command::SyncCalendar)?;
                     }
                     None
                 }
@@ -237,11 +239,11 @@ impl Mailboxes {
                         attachments,
                         dir: downloads(),
                     };
-                    commands.blocking_send(save)?;
+                    commands.send(save)?;
                     None
                 }
                 Effect::Send(draft) => {
-                    commands.blocking_send(Command::Send(draft))?;
+                    commands.send(Command::Send(draft))?;
                     None
                 }
                 Effect::Search(query) => app.search_results(search_all(mailboxes, &query)?),
@@ -264,7 +266,7 @@ impl Mailboxes {
                     let (from, to) = calendar_window(jiff::Timestamp::now());
                     app.appointments_loaded(account, store.appointments_between(from, to)?);
                     if sync {
-                        commands.blocking_send(Command::SyncCalendar)?;
+                        commands.send(Command::SyncCalendar)?;
                     }
                     None
                 }
@@ -273,22 +275,22 @@ impl Mailboxes {
                         Some(id) => Command::UpdateAppointment { id, draft },
                         None => Command::CreateAppointment(draft),
                     };
-                    commands.blocking_send(save)?;
+                    commands.send(save)?;
                     None
                 }
                 Effect::DeleteAppointment { id, .. } => {
-                    commands.blocking_send(Command::DeleteAppointment(id))?;
+                    commands.send(Command::DeleteAppointment(id))?;
                     None
                 }
                 Effect::SyncCalendar(_) => {
-                    commands.blocking_send(Command::SyncCalendar)?;
+                    commands.send(Command::SyncCalendar)?;
                     None
                 }
                 Effect::SetPinned { ids, pinned } => {
                     // Search results may be in several accounts.
                     for (account, ids) in app.by_account(ids) {
                         let pin = Command::SetPinned { ids, pinned };
-                        mailboxes[account].commands.blocking_send(pin)?;
+                        mailboxes[account].commands.send(pin)?;
                     }
                     None
                 }
@@ -296,7 +298,7 @@ impl Mailboxes {
                     // Search results may be in several accounts.
                     for (account, ids) in app.by_account(ids) {
                         let flag = Command::SetFlagged { ids, flagged };
-                        mailboxes[account].commands.blocking_send(flag)?;
+                        mailboxes[account].commands.send(flag)?;
                     }
                     None
                 }
@@ -304,7 +306,7 @@ impl Mailboxes {
                     // Search results may be in several accounts.
                     for (account, ids) in app.by_account(ids) {
                         let delete = Command::Delete { ids, permanent };
-                        mailboxes[account].commands.blocking_send(delete)?;
+                        mailboxes[account].commands.send(delete)?;
                     }
                     None
                 }

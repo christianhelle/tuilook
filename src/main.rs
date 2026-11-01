@@ -376,7 +376,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
     let mut mailboxes = Vec::new();
     let mut events = Vec::new();
     for (address, backend, path) in accounts {
-        let (commands, command_rx) = mpsc::channel(32);
+        let (commands, command_rx) = mpsc::unbounded_channel();
         let (event_tx, event_rx) = mpsc::channel(32);
         runtime.spawn(run_engine(
             backend,

@@ -21,8 +21,8 @@ fn folder(id: &str) -> Folder {
     }
 }
 
-fn start(backend: FakeBackend) -> (mpsc::Sender<Command>, mpsc::Receiver<Event>) {
-    let (commands, command_rx) = mpsc::channel(8);
+fn start(backend: FakeBackend) -> (mpsc::UnboundedSender<Command>, mpsc::Receiver<Event>) {
+    let (commands, command_rx) = mpsc::unbounded_channel();
     let (event_tx, events) = mpsc::channel(8);
     let store = Store::open_in_memory().unwrap();
     tokio::spawn(run_engine(backend, store, command_rx, event_tx));
@@ -37,7 +37,7 @@ async fn sync_all_reports_the_folder_tree_then_each_folder() {
     };
     let (commands, mut events) = start(backend);
 
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
 
     assert_eq!(events.recv().await, Some(Event::FoldersSynced));
     assert_eq!(
@@ -59,7 +59,7 @@ async fn a_sync_that_cannot_reach_the_folders_still_finishes() {
     };
     let (commands, mut events) = start(backend);
 
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
 
     assert_eq!(
         events.recv().await,
@@ -81,7 +81,7 @@ async fn a_failing_folder_is_reported_and_the_rest_still_sync() {
     };
     let (commands, mut events) = start(backend);
 
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
 
     assert_eq!(events.recv().await, Some(Event::FoldersSynced));
     assert_eq!(events.recv().await, Some(Event::Error("boom".to_owned())));
@@ -123,10 +123,10 @@ async fn load_body_reports_the_body_text() {
         ..Default::default()
     };
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
 
-    commands.send(Command::LoadBody(id.clone())).await.unwrap();
+    commands.send(Command::LoadBody(id.clone())).unwrap();
 
     assert_eq!(
         events.recv().await,
@@ -164,12 +164,11 @@ async fn mark_read_tells_the_backend_and_reports_the_folder_changed() {
     };
     let read = backend.read.clone();
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
 
     commands
         .send(Command::MarkRead(MessageId("m1".to_owned())))
-        .await
         .unwrap();
 
     assert_eq!(
@@ -194,7 +193,6 @@ async fn delete_asks_the_backend_and_reports_what_went() {
             ids: ids(&["m1", "m2"]),
             permanent: true,
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -223,7 +221,6 @@ async fn a_message_that_will_not_delete_is_reported_and_the_rest_still_go() {
             ids: ids(&["m1", "m2"]),
             permanent: false,
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -257,14 +254,13 @@ async fn sending_reports_it_went_then_syncs_sent_items() {
     };
     let sent = backend.sent.clone();
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     for _ in 0..4 {
         events.recv().await;
     }
 
     commands
         .send(Command::Send(draft("ada@example.com")))
-        .await
         .unwrap();
 
     assert_eq!(events.recv().await, Some(Event::Sent));
@@ -281,7 +277,6 @@ async fn a_message_that_cannot_be_sent_says_why() {
 
     commands
         .send(Command::Send(draft("nobody@invalid")))
-        .await
         .unwrap();
 
     assert_eq!(
@@ -294,10 +289,7 @@ async fn a_message_that_cannot_be_sent_says_why() {
 async fn a_blocked_account_is_reported_as_blocked() {
     let (commands, mut events) = start(FakeBackend::default());
 
-    commands
-        .send(Command::Send(draft("me@blocked")))
-        .await
-        .unwrap();
+    commands.send(Command::Send(draft("me@blocked"))).unwrap();
 
     assert_eq!(
         events.recv().await,
@@ -351,17 +343,14 @@ async fn older_mail_comes_a_page_at_a_time_until_there_is_no_more() {
         ..Default::default()
     };
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
 
-    commands
-        .send(load_older(jiff::Timestamp::MAX))
-        .await
-        .unwrap();
+    commands.send(load_older(jiff::Timestamp::MAX)).unwrap();
     assert_eq!(events.recv().await, older_loaded(true));
 
     let day_2 = jiff::Timestamp::from_second(2 * 86_400).unwrap();
-    commands.send(load_older(day_2)).await.unwrap();
+    commands.send(load_older(day_2)).unwrap();
     assert_eq!(events.recv().await, older_loaded(false));
 }
 
@@ -377,18 +366,12 @@ async fn a_page_of_older_mail_already_cached_says_there_is_no_more() {
         ..Default::default()
     };
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
 
-    commands
-        .send(load_older(jiff::Timestamp::MAX))
-        .await
-        .unwrap();
+    commands.send(load_older(jiff::Timestamp::MAX)).unwrap();
     assert_eq!(events.recv().await, older_loaded(true));
-    commands
-        .send(load_older(jiff::Timestamp::MAX))
-        .await
-        .unwrap();
+    commands.send(load_older(jiff::Timestamp::MAX)).unwrap();
     assert_eq!(events.recv().await, older_loaded(false));
 }
 
@@ -406,7 +389,6 @@ async fn deleting_a_folder_reports_it_then_syncs_the_folder_tree() {
             folder: FolderId("a".to_owned()),
             permanent: true,
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -431,7 +413,6 @@ async fn creating_a_folder_reports_it_then_syncs_the_folder_tree() {
             parent: Some(FolderId("inbox".to_owned())),
             name: "Receipts".to_owned(),
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -457,7 +438,6 @@ async fn a_folder_that_cannot_be_created_says_why() {
             parent: None,
             name: "INBOX".to_owned(),
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -482,7 +462,6 @@ async fn renaming_a_folder_reports_it_then_syncs_the_folder_tree() {
             folder: FolderId("a".to_owned()),
             name: "Bills".to_owned(),
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -516,7 +495,7 @@ async fn moving_reports_what_went_then_syncs_the_folder_it_went_to() {
     };
     let moved = backend.moved.clone();
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
 
     commands
@@ -524,7 +503,6 @@ async fn moving_reports_what_went_then_syncs_the_folder_it_went_to() {
             ids: ids(&["m1"]),
             to: FolderId("b".to_owned()),
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -558,7 +536,6 @@ async fn a_message_that_will_not_move_is_reported_and_the_rest_still_go() {
             ids: ids(&["m1", "m2"]),
             to: FolderId("b".to_owned()),
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -584,7 +561,8 @@ async fn next(events: &mut mpsc::Receiver<Event>) -> Option<Event> {
 }
 
 /// A core whose folder `a` holds m1, which the server refuses to change.
-async fn with_a_message_that_will_not_change() -> (mpsc::Sender<Command>, mpsc::Receiver<Event>) {
+async fn with_a_message_that_will_not_change()
+-> (mpsc::UnboundedSender<Command>, mpsc::Receiver<Event>) {
     let backend = FakeBackend {
         folders: vec![folder("a")],
         messages: [(FolderId("a".to_owned()), vec![in_folder("m1", "a")])].into(),
@@ -592,7 +570,7 @@ async fn with_a_message_that_will_not_change() -> (mpsc::Sender<Command>, mpsc::
         ..Default::default()
     };
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
     (commands, events)
 }
@@ -606,7 +584,6 @@ async fn a_failed_pin_still_reports_the_folder_so_the_ui_shows_it_unpinned() {
             ids: ids(&["m1"]),
             pinned: true,
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -628,7 +605,6 @@ async fn a_failed_flag_still_reports_the_folder_so_the_ui_shows_it_unflagged() {
             ids: ids(&["m1"]),
             flagged: true,
         })
-        .await
         .unwrap();
 
     assert_eq!(
@@ -647,7 +623,6 @@ async fn a_failed_mark_read_still_reports_the_folder_so_the_ui_shows_it_unread()
 
     commands
         .send(Command::MarkRead(MessageId("m1".to_owned())))
-        .await
         .unwrap();
 
     assert_eq!(
@@ -669,20 +644,20 @@ async fn pinning_tells_the_backend_and_reports_the_folder_changed() {
     };
     let pinned = backend.pinned.clone();
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
 
     let pin = |pinned| Command::SetPinned {
         ids: ids(&["m1"]),
         pinned,
     };
-    commands.send(pin(true)).await.unwrap();
+    commands.send(pin(true)).unwrap();
 
     let changed = Some(Event::FolderSynced(FolderId("a".to_owned())));
     assert_eq!(events.recv().await, changed);
     assert!(pinned.lock().unwrap().contains(&MessageId("m1".to_owned())));
 
-    commands.send(pin(false)).await.unwrap();
+    commands.send(pin(false)).unwrap();
 
     assert_eq!(events.recv().await, changed);
     assert!(pinned.lock().unwrap().is_empty());
@@ -697,14 +672,14 @@ async fn flagging_tells_the_backend_and_reports_the_folder_changed() {
     };
     let flagged = backend.flagged.clone();
     let (commands, mut events) = start(backend);
-    commands.send(Command::SyncAll).await.unwrap();
+    commands.send(Command::SyncAll).unwrap();
     while events.recv().await != Some(Event::SyncFinished) {}
 
     let flag = |flagged| Command::SetFlagged {
         ids: ids(&["m1"]),
         flagged,
     };
-    commands.send(flag(true)).await.unwrap();
+    commands.send(flag(true)).unwrap();
 
     let changed = Some(Event::FolderSynced(FolderId("a".to_owned())));
     assert_eq!(events.recv().await, changed);
@@ -715,7 +690,7 @@ async fn flagging_tells_the_backend_and_reports_the_folder_changed() {
             .contains(&MessageId("m1".to_owned()))
     );
 
-    commands.send(flag(false)).await.unwrap();
+    commands.send(flag(false)).unwrap();
 
     assert_eq!(events.recv().await, changed);
     assert!(flagged.lock().unwrap().is_empty());
@@ -725,8 +700,8 @@ async fn flagging_tells_the_backend_and_reports_the_folder_changed() {
 fn start_on(
     backend: FakeBackend,
     path: &std::path::Path,
-) -> (mpsc::Sender<Command>, mpsc::Receiver<Event>) {
-    let (commands, command_rx) = mpsc::channel(8);
+) -> (mpsc::UnboundedSender<Command>, mpsc::Receiver<Event>) {
+    let (commands, command_rx) = mpsc::unbounded_channel();
     let (event_tx, events) = mpsc::channel(8);
     let store = Store::open(path).unwrap();
     tokio::spawn(run_engine(backend, store, command_rx, event_tx));
@@ -776,7 +751,7 @@ async fn syncing_the_calendar_caches_the_appointments_around_today() {
     };
     let (commands, mut events) = start_on(backend, &path);
 
-    commands.send(Command::SyncCalendar).await.unwrap();
+    commands.send(Command::SyncCalendar).unwrap();
 
     assert_eq!(events.recv().await, Some(Event::CalendarSynced));
     assert_eq!(cached_appointments(&path), [tomorrow]);
@@ -790,7 +765,7 @@ async fn a_calendar_that_cannot_sync_says_why() {
     };
     let (commands, mut events) = start(backend);
 
-    commands.send(Command::SyncCalendar).await.unwrap();
+    commands.send(Command::SyncCalendar).unwrap();
 
     assert_eq!(
         events.recv().await,
@@ -823,7 +798,6 @@ async fn a_saved_new_appointment_shows_once_the_calendar_syncs() {
         .send(Command::CreateAppointment(appointment_draft(
             "Planning", start,
         )))
-        .await
         .unwrap();
 
     assert_eq!(events.recv().await, Some(Event::AppointmentSaved));
@@ -852,7 +826,6 @@ async fn a_changed_appointment_shows_changed_once_the_calendar_syncs() {
             id: AppointmentId("a1".to_owned()),
             draft: appointment_draft("Moved", start + SignedDuration::from_hours(1)),
         })
-        .await
         .unwrap();
 
     assert_eq!(events.recv().await, Some(Event::AppointmentSaved));
@@ -877,7 +850,6 @@ async fn an_appointment_that_cannot_be_saved_says_why() {
             "Planning",
             now(),
         )))
-        .await
         .unwrap();
 
     assert_eq!(
@@ -897,12 +869,11 @@ async fn a_deleted_appointment_leaves_the_cache() {
         ..Default::default()
     };
     let (commands, mut events) = start_on(backend, &path);
-    commands.send(Command::SyncCalendar).await.unwrap();
+    commands.send(Command::SyncCalendar).unwrap();
     assert_eq!(events.recv().await, Some(Event::CalendarSynced));
 
     commands
         .send(Command::DeleteAppointment(deleted.id.clone()))
-        .await
         .unwrap();
 
     assert_eq!(
@@ -922,7 +893,6 @@ async fn an_appointment_that_cannot_be_deleted_says_why() {
 
     commands
         .send(Command::DeleteAppointment(AppointmentId("a1".to_owned())))
-        .await
         .unwrap();
 
     assert_eq!(
@@ -962,7 +932,7 @@ async fn saving_an_attachment_writes_it_beside_any_file_of_the_same_name() {
     let (commands, mut events) = start(backend);
 
     let report = attachment("a1", "report.pdf", AttachmentKind::File);
-    commands.send(save(vec![report], dir.path())).await.unwrap();
+    commands.send(save(vec![report], dir.path())).unwrap();
 
     let saved = dir.path().join("report (1).pdf");
     assert_eq!(
@@ -994,7 +964,7 @@ async fn saved_names_are_safe_attached_mail_is_eml_and_cloud_links_are_skipped()
         attachment("a2", "Minutes", AttachmentKind::Item),
         attachment("a3", "Budget.xlsx", AttachmentKind::Reference),
     ];
-    commands.send(save(attachments, dir.path())).await.unwrap();
+    commands.send(save(attachments, dir.path())).unwrap();
 
     assert_eq!(
         events.recv().await,

@@ -87,7 +87,7 @@ pub enum Command {
 pub async fn run_engine(
     backend: impl MailBackend,
     mut store: Store,
-    mut commands: mpsc::Receiver<Command>,
+    mut commands: mpsc::UnboundedReceiver<Command>,
     events: mpsc::Sender<Event>,
 ) {
     while let Some(command) = commands.recv().await {

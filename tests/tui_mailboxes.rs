@@ -72,7 +72,7 @@ impl Write for Clipboard {
 struct Setup {
     app: AppState,
     mailboxes: Mailboxes,
-    commands: Vec<mpsc::Receiver<Command>>,
+    commands: Vec<mpsc::UnboundedReceiver<Command>>,
     clipboard: Clipboard,
 }
 
@@ -84,7 +84,7 @@ fn setup(accounts: &[&[Message]]) -> Setup {
         let mut store = Store::open_in_memory().unwrap();
         store.upsert_folders(&[folder("inbox")]).unwrap();
         store.upsert_messages(messages).unwrap();
-        let (tx, rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::unbounded_channel();
         mailboxes.push(Mailbox {
             store,
             commands: tx,
@@ -113,15 +113,27 @@ fn search(app: &mut AppState, mailboxes: &mut Mailboxes, query: &str) {
 }
 
 /// The deletes `commands` were sent, leaving out the bodies loaded.
-fn deleted(commands: &mut mpsc::Receiver<Command>) -> Vec<Command> {
+fn deleted(commands: &mut mpsc::UnboundedReceiver<Command>) -> Vec<Command> {
     sent(commands)
         .into_iter()
         .filter(|c| matches!(c, Command::Delete { .. }))
         .collect()
 }
 
-fn sent(commands: &mut mpsc::Receiver<Command>) -> Vec<Command> {
+fn sent(commands: &mut mpsc::UnboundedReceiver<Command>) -> Vec<Command> {
     std::iter::from_fn(|| commands.try_recv().ok()).collect()
+}
+
+#[test]
+fn a_core_too_busy_to_take_commands_does_not_hold_up_the_ui() {
+    let mut s = setup(&[&[message("m1", "Hello")]]);
+
+    for _ in 0..100 {
+        let load = Some(Effect::LoadBody(MessageId("m1".to_owned())));
+        s.mailboxes.apply(&mut s.app, load).unwrap();
+    }
+
+    assert_eq!(sent(&mut s.commands[0]).len(), 100);
 }
 
 #[test]
@@ -178,7 +190,7 @@ fn a_folder_synced_while_results_are_shown_searches_again() {
     let mut core = Store::open(&path).unwrap();
     core.upsert_folders(&[folder("inbox")]).unwrap();
     core.upsert_messages(&[message("m1", "lunch")]).unwrap();
-    let (tx, _rx) = mpsc::channel(32);
+    let (tx, _rx) = mpsc::unbounded_channel();
     let mailbox = Mailbox {
         store: Store::open(&path).unwrap(),
         commands: tx,
@@ -264,7 +276,7 @@ fn shift_c_opens_the_calendar_from_the_cache_and_syncs_it() {
         jiff::Timestamp::now().round(jiff::Unit::Second).unwrap(),
     );
     cache_calendar(&path, std::slice::from_ref(&soon));
-    let (tx, mut rx) = mpsc::channel(32);
+    let (tx, mut rx) = mpsc::unbounded_channel();
     let mailbox = Mailbox {
         store: Store::open(&path).unwrap(),
         commands: tx,
@@ -286,7 +298,7 @@ fn shift_c_opens_the_calendar_from_the_cache_and_syncs_it() {
 fn a_synced_calendar_shows_in_the_open_agenda() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("cache.db");
-    let (tx, _rx) = mpsc::channel(32);
+    let (tx, _rx) = mpsc::unbounded_channel();
     let mailbox = Mailbox {
         store: Store::open(&path).unwrap(),
         commands: tx,
@@ -427,7 +439,7 @@ fn tab_in_the_agenda_shows_the_next_accounts_cached_calendar_and_syncs_it() {
         );
         cache_calendar(&path, std::slice::from_ref(&own));
         calendars.push(own);
-        let (tx, rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::unbounded_channel();
         mailboxes.push(Mailbox {
             store: Store::open(&path).unwrap(),
             commands: tx,
