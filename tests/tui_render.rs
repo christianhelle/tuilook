@@ -13,7 +13,7 @@ use tuilook::tui::{
     dialog::Dialog,
     files::{Entry, FilePicker},
     groups::MessageRow,
-    ui,
+    help, ui,
 };
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>, unread: u32) -> Folder {
@@ -334,7 +334,7 @@ fn question_mark_shows_the_keys() {
 fn the_help_is_wide_enough_for_its_longest_line() {
     let inside = usize::from(ui::HELP_WIDTH) - 2;
 
-    assert!(ui::help_line_width(&ui::HELP) <= inside);
+    assert!(ui::help_line_width(&help::HELP) <= inside);
 }
 
 fn press(app: &mut AppState, keys: &str) {
@@ -442,16 +442,16 @@ fn question_mark_while_writing_shows_the_writing_keys() {
 fn the_writing_help_fits_too() {
     let inside = usize::from(ui::HELP_WIDTH) - 2;
 
-    assert!(ui::help_line_width(&ui::COMPOSE_HELP) <= inside);
-    assert!(ui::help_line_width(&ui::SIGNATURE_HELP) <= inside);
+    assert!(ui::help_line_width(&help::COMPOSE_HELP) <= inside);
+    assert!(ui::help_line_width(&help::SIGNATURE_HELP) <= inside);
 }
 
 #[test]
 fn the_calendar_help_fits_too() {
     let inside = usize::from(ui::HELP_WIDTH) - 2;
 
-    assert!(ui::help_line_width(&ui::AGENDA_HELP) <= inside);
-    assert!(ui::help_line_width(&ui::APPOINTMENT_HELP) <= inside);
+    assert!(ui::help_line_width(&help::AGENDA_HELP) <= inside);
+    assert!(ui::help_line_width(&help::APPOINTMENT_HELP) <= inside);
 }
 
 #[test]

@@ -16,6 +16,7 @@ pub mod folder_edit;
 pub mod folder_pane;
 pub mod folders;
 pub mod groups;
+pub mod help;
 pub mod input;
 pub mod keymap;
 pub mod mailboxes;
