@@ -99,7 +99,7 @@ fn panes(area: Rect, app: &AppState) -> Panes {
         ..Default::default()
     };
     let takes_over = app.screen.compose().is_some()
-        || app.signature.is_some()
+        || app.screen.signature().is_some()
         || app.agenda.is_some()
         || app.appointment.is_some();
     if takes_over {
@@ -170,10 +170,10 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     if let Some(message) = app.screen.compose() {
         draw_compose(frame, message, compose);
     }
-    if let Some(editor) = &app.signature {
+    if let Some(editor) = app.screen.signature() {
         draw_signature(frame, app, editor, compose);
     }
-    if app.screen.compose().is_none() && app.signature.is_none() {
+    if app.screen.compose().is_none() && app.screen.signature().is_none() {
         if let Some(form) = &app.appointment {
             draw_appointment(frame, form, compose);
         } else if let Some(agenda) = &app.agenda {
@@ -189,7 +189,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
 
     match &app.dialog {
         Some(Dialog::Help) => {
-            let help: &[(&str, &str)] = match (app.screen.compose(), &app.signature) {
+            let help: &[(&str, &str)] = match (app.screen.compose(), app.screen.signature()) {
                 (Some(_), _) => &COMPOSE_HELP,
                 (None, Some(_)) => &SIGNATURE_HELP,
                 (None, None) if app.appointment.is_some() => &APPOINTMENT_HELP,
@@ -566,7 +566,11 @@ fn draw_blocked(frame: &mut Frame, said: &str) {
 /// while a search is typed.
 fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     let mut spans = Vec::new();
-    let editing = match (app.screen.compose(), &app.signature, &app.appointment) {
+    let editing = match (
+        app.screen.compose(),
+        app.screen.signature(),
+        &app.appointment,
+    ) {
         (Some(compose), _, _) if compose.field == Field::Body => Some(&compose.body),
         (None, Some(editor), _) => Some(&editor.body),
         (None, None, Some(form)) if form.field == AppointmentField::Notes => Some(&form.notes),
@@ -605,7 +609,7 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
         None if app.screen.compose().is_some() => {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
-        None if app.signature.is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
+        None if app.screen.signature().is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
         None if app
             .appointment
             .as_ref()
@@ -1770,7 +1774,7 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
         reader,
         reader_lines: app.reader_rows_at(reader_width).iter().sum(),
         reader_width,
-        compose: match (app.screen.compose(), &app.signature) {
+        compose: match (app.screen.compose(), app.screen.signature()) {
             (Some(compose), _) => usize::from(compose_areas(panes.compose, compose).body.height),
             (None, Some(_)) => usize::from(signature_areas(panes.compose)[1].height),
             (None, None) => app.appointment.as_ref().map_or(0, |form| {

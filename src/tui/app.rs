@@ -251,8 +251,6 @@ pub struct AppState {
     pub accounts: Vec<String>,
     /// Each account's signature, put below each new message it writes.
     pub signatures: Vec<String>,
-    /// An account's signature being written, which takes over the screen.
-    pub signature: Option<SignatureEditor>,
     /// Each account's folders as core last reported them, or `None` before
     /// the first report.
     pub account_folders: Vec<Option<Vec<Folder>>>,
@@ -415,7 +413,7 @@ impl AppState {
             }
             return None;
         }
-        if let Some(editor) = &mut self.signature {
+        if let Some(editor) = self.screen.signature_mut() {
             match editor.key(key, self.viewport.compose, &mut self.register) {
                 signature::Request::None => {}
                 signature::Request::Save(text) => {
@@ -424,11 +422,11 @@ impl AppState {
                         self.signatures.resize(account + 1, String::new());
                     }
                     self.signatures[account] = text.clone();
-                    self.signature = None;
+                    self.screen.close_signature();
                     self.show_info("Signature saved");
                     return Some(Effect::SaveSignature { account, text });
                 }
-                signature::Request::Close => self.signature = None,
+                signature::Request::Close => self.screen.close_signature(),
                 signature::Request::ConfirmDiscard => {
                     self.dialog = Some(Dialog::Confirm(Confirm::DiscardSignature));
                 }
@@ -535,7 +533,7 @@ impl AppState {
             }
             return None;
         }
-        if self.screen.compose().is_some() || self.signature.is_some() {
+        if self.screen.compose().is_some() || self.screen.signature().is_some() {
             return None;
         }
         let Hit { pane, item } = hit?;
@@ -649,7 +647,7 @@ impl AppState {
             Action::EditSignature => {
                 let account = self.current_account();
                 let signature = self.signatures.get(account).map_or("", String::as_str);
-                self.signature = Some(SignatureEditor::new(account, signature));
+                self.screen = Screen::Signature(Box::new(SignatureEditor::new(account, signature)));
             }
             Action::Reply | Action::ReplyAll | Action::Forward => {
                 if let Some(original) = self.selected() {
@@ -1020,7 +1018,7 @@ impl AppState {
                 None
             }
             Confirm::DiscardSignature => {
-                self.signature = None;
+                self.screen.close_signature();
                 None
             }
             Confirm::DeleteAppointment {
@@ -2180,7 +2178,7 @@ Dear Charles,"
                 text: "Ada".to_owned()
             })
         );
-        assert!(app.signature.is_none());
+        assert!(app.screen.signature().is_none());
         assert_eq!(app.account_for(&effect.unwrap()), 1);
         assert_eq!(app.status, Some(Status::Info("Signature saved".to_owned())));
     }
@@ -2246,7 +2244,7 @@ Ada"
         assert_eq!(app.confirm(), Some(&Confirm::DiscardSignature));
         key(&mut app, KeyCode::Char('y'));
 
-        assert!(app.signature.is_none());
+        assert!(app.screen.signature().is_none());
         assert_eq!(app.signatures[0], "", "nothing was saved");
     }
 

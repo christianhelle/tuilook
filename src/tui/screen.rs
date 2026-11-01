@@ -1,6 +1,6 @@
 //! What fills the screen, and so takes the keys, under any dialog.
 
-use crate::tui::compose::Compose;
+use crate::tui::{compose::Compose, signature::SignatureEditor};
 
 /// One screen at a time: which one is the whole of what the app needs to know
 /// to route a key or draw a frame.
@@ -11,6 +11,8 @@ pub enum Screen {
     Panes,
     /// A message being written.
     Compose(Box<Compose>),
+    /// An account's signature being written.
+    Signature(Box<SignatureEditor>),
 }
 
 impl Screen {
@@ -26,6 +28,28 @@ impl Screen {
         match self {
             Screen::Compose(compose) => Some(compose.as_mut()),
             _ => None,
+        }
+    }
+
+    /// The signature being written, if one is.
+    pub fn signature(&self) -> Option<&SignatureEditor> {
+        match self {
+            Screen::Signature(editor) => Some(editor.as_ref()),
+            _ => None,
+        }
+    }
+
+    pub fn signature_mut(&mut self) -> Option<&mut SignatureEditor> {
+        match self {
+            Screen::Signature(editor) => Some(editor.as_mut()),
+            _ => None,
+        }
+    }
+
+    /// Back to the panes, if a signature is being written.
+    pub fn close_signature(&mut self) {
+        if self.signature().is_some() {
+            *self = Screen::Panes;
         }
     }
 

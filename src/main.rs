@@ -489,7 +489,7 @@ impl Cursor {
         }
         match app.screen.compose() {
             None if app.typing_search() => Cursor::Bar,
-            None => match (&app.signature, &app.appointment) {
+            None => match (app.screen.signature(), &app.appointment) {
                 (Some(editor), _) if editor.body.vim.mode == VimMode::Insert => Cursor::Bar,
                 (Some(_), _) => Cursor::Block,
                 (None, Some(form)) if form.field != AppointmentField::Notes => Cursor::Bar,
