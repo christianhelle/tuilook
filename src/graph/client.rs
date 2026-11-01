@@ -22,6 +22,11 @@ pub enum GraphError {
         url: String,
         source: serde_json::Error,
     },
+    #[error("could not read {}: {source}", path.display())]
+    File {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+    },
     #[error("Graph returned {status}: {code}: {message}")]
     Status {
         status: StatusCode,

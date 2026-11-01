@@ -2,10 +2,12 @@ mod support;
 
 use serde_json::json;
 use tuilook::graph::GraphBackend;
-use tuilook::model::{Attachment, AttachmentId, AttachmentKind, MailBackend, MessageId};
+use tuilook::model::{
+    Attachment, AttachmentId, AttachmentKind, ComposeKind, Draft, MailBackend, MessageId,
+};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{method, path},
+    matchers::{body_json, method, path},
 };
 
 #[tokio::test]
@@ -86,4 +88,67 @@ async fn an_attachment_downloads_as_its_raw_bytes() {
         .unwrap();
 
     assert_eq!(bytes, [0, 159, 146, 150]);
+}
+
+/// A file called `name` holding `content`, in a folder kept while the test
+/// runs.
+fn file(name: &str, content: &[u8]) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join(name);
+    std::fs::write(&path, content).unwrap();
+    (dir, path)
+}
+
+fn new_message(attachments: Vec<std::path::PathBuf>) -> Draft {
+    Draft {
+        kind: ComposeKind::New,
+        to: vec!["ada@example.com".to_owned()],
+        cc: vec![],
+        subject: "Notes".to_owned(),
+        body: "Attached".to_owned(),
+        attachments,
+    }
+}
+
+async fn expect(server: &MockServer, verb: &str, at: &str, status: u16, times: u64) {
+    Mock::given(method(verb))
+        .and(path(at))
+        .respond_with(ResponseTemplate::new(status).set_body_json(json!({ "id": "d1" })))
+        .expect(times)
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn a_new_message_with_a_file_is_drafted_given_the_file_then_sent() {
+    let server = MockServer::start().await;
+    let (_dir, notes) = file("notes.txt", b"hello");
+    Mock::given(method("POST"))
+        .and(path("/me/messages"))
+        .and(body_json(json!({
+            "subject": "Notes",
+            "body": { "contentType": "Text", "content": "Attached" },
+            "toRecipients": [{ "emailAddress": { "address": "ada@example.com" } }],
+            "ccRecipients": [],
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "id": "d1" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/me/messages/d1/attachments"))
+        .and(body_json(json!({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": "notes.txt",
+            "contentBytes": "aGVsbG8=",
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "id": "a1" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    expect(&server, "POST", "/me/messages/d1/send", 202, 1).await;
+    expect(&server, "POST", "/me/sendMail", 202, 0).await;
+    let backend = GraphBackend::new(support::client(&server).0);
+
+    backend.send(&new_message(vec![notes])).await.unwrap();
 }

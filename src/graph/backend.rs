@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 use crate::auth::TokenSource;
 use crate::model::{
@@ -6,6 +9,7 @@ use crate::model::{
     BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
     MailBackend, Message, MessageChange, MessageId, OlderPage, WellKnown,
 };
+use base64::prelude::{BASE64_STANDARD, Engine as _};
 use jiff::{SignedDuration, Timestamp, Unit, civil, tz::TimeZone};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
@@ -509,7 +513,7 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
 
 impl<T: TokenSource> GraphBackend<T> {
     async fn send_draft(&self, draft: &Draft) -> Result<(), GraphError> {
-        let (original, create) = match &draft.kind {
+        let id = match &draft.kind {
             ComposeKind::New => {
                 let message = json!({
                     "subject": draft.subject,
@@ -517,16 +521,39 @@ impl<T: TokenSource> GraphBackend<T> {
                     "toRecipients": recipients(&draft.to),
                     "ccRecipients": recipients(&draft.cc),
                 });
-                let mail = json!({ "message": message, "saveToSentItems": true });
-                self.client
-                    .post_no_content("/me/sendMail", Some(&mail))
-                    .await?;
-                return Ok(());
+                if draft.attachments.is_empty() {
+                    let mail = json!({ "message": message, "saveToSentItems": true });
+                    self.client
+                        .post_no_content("/me/sendMail", Some(&mail))
+                        .await?;
+                    return Ok(());
+                }
+                // Files are added to a draft, which is then sent.
+                let created: dto::Id = self.client.post("/me/messages", &message).await?;
+                created.id
             }
-            ComposeKind::Reply(id) => (id, "createReply"),
-            ComposeKind::ReplyAll(id) => (id, "createReplyAll"),
-            ComposeKind::Forward(id) => (id, "createForward"),
+            ComposeKind::Reply(id) => self.answer(draft, id, "createReply").await?,
+            ComposeKind::ReplyAll(id) => self.answer(draft, id, "createReplyAll").await?,
+            ComposeKind::Forward(id) => self.answer(draft, id, "createForward").await?,
         };
+        let path = format!("/me/messages/{id}");
+        for file in &draft.attachments {
+            self.attach(&path, file).await?;
+        }
+        self.client
+            .post_no_content(&format!("{path}/send"), None)
+            .await?;
+        Ok(())
+    }
+
+    /// Drafts a reply to or forward of `original` as Graph's `create` does
+    /// it, filled in from `draft`, and returns the draft's id.
+    async fn answer(
+        &self,
+        draft: &Draft,
+        original: &MessageId,
+        create: &str,
+    ) -> Result<String, GraphError> {
         // Graph drafts the reply so the original is quoted and threaded the
         // way Outlook does it; tuilook puts the user's text above the quote.
         let path = format!("/me/messages/{}/{create}", original.0);
@@ -547,8 +574,27 @@ impl<T: TokenSource> GraphBackend<T> {
         });
         let path = format!("/me/messages/{}", created.id);
         self.client.patch(&path, &changes).await?;
-        self.client
-            .post_no_content(&format!("{path}/send"), None)
+        Ok(created.id)
+    }
+
+    /// Attaches `file` to the draft at `draft`.
+    async fn attach(&self, draft: &str, file: &Path) -> Result<(), GraphError> {
+        let unreadable = |e: std::io::Error| GraphError::File {
+            path: file.to_path_buf(),
+            source: e,
+        };
+        let content = std::fs::read(file).map_err(unreadable)?;
+        let name = file
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let attachment = json!({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": name,
+            "contentBytes": BASE64_STANDARD.encode(content),
+        });
+        let _: serde_json::Value = self
+            .client
+            .post(&format!("{draft}/attachments"), &attachment)
             .await?;
         Ok(())
     }
