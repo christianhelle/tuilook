@@ -127,7 +127,10 @@ pub async fn run_engine(
                 folder_changed(&backend, &mut store, done, &events).await
             }
             Command::Delete { ids, permanent } => {
-                delete(&backend, &mut store, &ids, permanent, &events).await
+                let removal = Removal::Delete { permanent };
+                remove_messages(&backend, &mut store, &ids, removal, &events)
+                    .await
+                    .map(|_| ())
             }
             Command::Move { ids, to } => {
                 move_messages(&backend, &mut store, &ids, to, &events).await
@@ -285,40 +288,78 @@ async fn folder_changed(
     }
 }
 
-/// Deletes each message, reporting the ones that went and why any did not.
-async fn delete(
+/// Mail leaving its folder, on the server and in the store.
+#[derive(Debug, Clone, Copy)]
+enum Removal<'a> {
+    Delete { permanent: bool },
+    // Graph gives a moved message a new id, so it leaves the store as well; a
+    // sync of the folder it went to brings it back.
+    Move { to: &'a FolderId },
+}
+
+impl Removal<'_> {
+    async fn make(self, backend: &impl MailBackend, id: &MessageId) -> Result<(), BackendError> {
+        match self {
+            Removal::Delete { permanent } => backend.delete(id, permanent).await,
+            Removal::Move { to } => backend.move_message(id, to).await,
+        }
+    }
+
+    fn done(self, ids: Vec<MessageId>) -> Event {
+        match self {
+            Removal::Delete { .. } => Event::MessagesDeleted(ids),
+            Removal::Move { to } => Event::MessagesMoved {
+                ids,
+                to: to.clone(),
+            },
+        }
+    }
+
+    /// Why the mail did not go, when `gone` of it did.
+    fn failed(self, gone: usize, failed: usize, first: &str) -> String {
+        let (verb, past) = match self {
+            Removal::Delete { .. } => ("delete", "deleted"),
+            Removal::Move { .. } => ("move", "moved"),
+        };
+        match gone {
+            0 => format!("could not {verb}: {first}"),
+            n => format!("{past} {n}, {failed} failed: {first}"),
+        }
+    }
+}
+
+/// Makes `removal` of each message, reporting the ones that went and why any
+/// did not. Returns how many went.
+async fn remove_messages(
     backend: &impl MailBackend,
     store: &mut Store,
     ids: &[MessageId],
-    permanent: bool,
+    removal: Removal<'_>,
     events: &mpsc::Sender<Event>,
-) -> Result<(), mpsc::error::SendError<Event>> {
-    let mut deleted = Vec::new();
+) -> Result<usize, mpsc::error::SendError<Event>> {
+    let mut gone = Vec::new();
     let mut failures = Vec::new();
     for id in ids {
-        match backend.delete(id, permanent).await {
-            Ok(()) => deleted.push(id.clone()),
+        match removal.make(backend, id).await {
+            Ok(()) => gone.push(id.clone()),
             Err(e) => failures.push(e.to_string()),
         }
     }
-    if let Err(e) = store.delete_messages(&deleted) {
+    if let Err(e) = store.delete_messages(&gone) {
         failures.push(e.to_string());
     }
-    if !deleted.is_empty() {
-        events.send(Event::MessagesDeleted(deleted.clone())).await?;
+    let count = gone.len();
+    if count > 0 {
+        events.send(removal.done(gone)).await?;
     }
     if let Some(first) = failures.first() {
-        let error = match deleted.len() {
-            0 => format!("could not delete: {first}"),
-            n => format!("deleted {n}, {} failed: {first}", failures.len()),
-        };
+        let error = removal.failed(count, failures.len(), first);
         events.send(Event::Error(error)).await?;
     }
-    Ok(())
+    Ok(count)
 }
 
-/// Moves each message, reporting the ones that went and why any did not,
-/// then syncs the folder they went to so they show there.
+/// Moves each message, then syncs the folder they went to so they show there.
 async fn move_messages(
     backend: &impl MailBackend,
     store: &mut Store,
@@ -326,33 +367,8 @@ async fn move_messages(
     to: FolderId,
     events: &mpsc::Sender<Event>,
 ) -> Result<(), mpsc::error::SendError<Event>> {
-    let mut moved = Vec::new();
-    let mut failures = Vec::new();
-    for id in ids {
-        match backend.move_message(id, &to).await {
-            Ok(()) => moved.push(id.clone()),
-            Err(e) => failures.push(e.to_string()),
-        }
-    }
-    // Graph gives a moved message a new id; the sync below brings it back.
-    if let Err(e) = store.delete_messages(&moved) {
-        failures.push(e.to_string());
-    }
-    if !moved.is_empty() {
-        let event = Event::MessagesMoved {
-            ids: moved.clone(),
-            to: to.clone(),
-        };
-        events.send(event).await?;
-    }
-    if let Some(first) = failures.first() {
-        let error = match moved.len() {
-            0 => format!("could not move: {first}"),
-            n => format!("moved {n}, {} failed: {first}", failures.len()),
-        };
-        events.send(Event::Error(error)).await?;
-    }
-    if moved.is_empty() {
+    let removal = Removal::Move { to: &to };
+    if remove_messages(backend, store, ids, removal, events).await? == 0 {
         return Ok(());
     }
     let event = match sync_messages(backend, store, &to).await {
