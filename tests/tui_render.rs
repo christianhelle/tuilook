@@ -4,8 +4,8 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
 };
 use tuilook::model::{
-    Action, Appointment, AppointmentId, Folder, FolderId, Importance, Message, MessageId,
-    WellKnown, sort_folders,
+    Action, Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Folder, FolderId,
+    Importance, Message, MessageId, WellKnown, sort_folders,
 };
 use tuilook::tui::{
     app::{AppState, Pane},
@@ -127,6 +127,32 @@ fn reading_pane_shows_the_loaded_body() {
         MessageId("m1".to_owned()),
         "Dear Charles,\n\nThe engine weaves algebraic patterns.\n\n[1]: https://example.com"
             .to_owned(),
+        vec![],
+    );
+
+    insta::assert_snapshot!(render(&app));
+}
+
+fn attachment(id: &str, name: &str, size: u64) -> Attachment {
+    Attachment {
+        id: AttachmentId(id.to_owned()),
+        name: name.to_owned(),
+        content_type: String::new(),
+        size,
+        kind: AttachmentKind::File,
+    }
+}
+
+#[test]
+fn reading_pane_lists_the_attached_files() {
+    let mut app = sample_app();
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "Dear Charles,".to_owned(),
+        vec![
+            attachment("a1", "report.pdf", 1_258_291),
+            attachment("a2", "notes.txt", 2_048),
+        ],
     );
 
     insta::assert_snapshot!(render(&app));
@@ -188,7 +214,7 @@ fn a_click_finds_the_folder_drawn_under_it_past_collapsed_ones() {
 fn a_scrolled_reading_pane_starts_further_down() {
     let mut app = sample_app();
     let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
-    app.body_loaded(MessageId("m1".to_owned()), body.join("\n"));
+    app.body_loaded(MessageId("m1".to_owned()), body.join("\n"), vec![]);
     app.reader_scroll = 5;
 
     insta::assert_snapshot!(render(&app));
@@ -198,7 +224,11 @@ fn a_scrolled_reading_pane_starts_further_down() {
 fn viewport_measures_what_each_pane_can_show() {
     let mut app = sample_app();
     let long_line = "word ".repeat(20); // 100 columns: four rows at 30 wide
-    app.body_loaded(MessageId("m1".to_owned()), format!("Hi\n{long_line}"));
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        format!("Hi\n{long_line}"),
+        vec![],
+    );
 
     let viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 90, 12), &app);
 
@@ -718,7 +748,11 @@ fn the_unread_section_lists_folders_with_unread_mail() {
 fn picked_text_in_the_reader_is_highlighted() {
     use ratatui::style::Modifier;
     let mut app = sample_app();
-    app.body_loaded(MessageId("m1".to_owned()), "Dear Charles,".to_owned());
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "Dear Charles,".to_owned(),
+        vec![],
+    );
     app.focus = Pane::Reader;
     press(&mut app, "vj");
     let mut terminal = Terminal::new(TestBackend::new(90, 12)).unwrap();
@@ -802,6 +836,7 @@ fn a_wrapped_line_in_the_reader_is_numbered_once() {
             "{long}
 Yours, Ada"
         ),
+        vec![],
     );
     app.focus = Pane::Reader;
     press(&mut app, "G");

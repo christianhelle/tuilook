@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::model::{
-    Action, AppointmentDraft, AppointmentId, ComposeKind, Draft, Folder, FolderId, Message,
-    MessageId, sort_messages,
+    Action, AppointmentDraft, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId,
+    Message, MessageId, sort_messages,
 };
 use jiff::{Timestamp, Zoned};
 use ratatui::{
@@ -16,6 +16,7 @@ use ratatui::{
 use crate::tui::{
     agenda::Agenda,
     appointment_form::AppointmentForm,
+    attachments::human_size,
     compose::{Compose, Request},
     dialog::Dialog,
     folder_edit,
@@ -256,6 +257,9 @@ pub struct AppState {
     pub collapsed_groups: BTreeSet<DateGroup>,
     /// The selected message's body, once core has loaded it.
     pub body: Option<String>,
+    /// The files attached to the selected message, once core has loaded
+    /// its body.
+    pub attachments: Vec<Attachment>,
     pub status: Option<Status>,
     /// When the status was shown, to know when it has gone stale.
     pub status_since: Option<Instant>,
@@ -321,8 +325,13 @@ impl AppState {
         let mut text = vec![
             format!("From: {} <{}>", shown(&m.from_name), shown(&m.from_addr)),
             format!("Subject: {}", shown(&m.subject)),
-            String::new(),
         ];
+        for (index, a) in self.attachments.iter().enumerate() {
+            let label = if index == 0 { "Attached:" } else { "" };
+            let size = human_size(a.size);
+            text.push(format!("{label:<10}{} ({size})", shown(&a.name)));
+        }
+        text.push(String::new());
         // The preview stands in until core has loaded the body.
         let body = self.body.as_deref().unwrap_or(&m.preview);
         text.extend(shown(body).lines().map(str::to_owned));
@@ -1118,7 +1127,12 @@ impl AppState {
 
     /// Shows a body core loaded, unless the user has moved on, and marks
     /// the message read if it was not.
-    pub fn body_loaded(&mut self, message: MessageId, text: String) -> Option<Effect> {
+    pub fn body_loaded(
+        &mut self,
+        message: MessageId,
+        text: String,
+        attachments: Vec<Attachment>,
+    ) -> Option<Effect> {
         if self.selected_group.is_some() {
             return None;
         }
@@ -1127,6 +1141,7 @@ impl AppState {
             return None;
         }
         self.body = Some(text);
+        self.attachments = attachments;
         if shown.is_read {
             return None;
         }
@@ -1263,6 +1278,7 @@ impl AppState {
     /// Drops the old body and asks for the newly selected one.
     fn selection_changed(&mut self) -> Option<Effect> {
         self.body = None;
+        self.attachments.clear();
         self.reader_scroll = 0;
         self.viewer = Viewer::default();
         self.selected().map(|m| Effect::LoadBody(m.id.clone()))
@@ -1707,7 +1723,7 @@ Dear Charles,"
     #[test]
     fn moving_to_another_message_requests_its_body() {
         let mut app = in_message_list(&["m1", "m2"]);
-        app.body_loaded(MessageId("m1".to_owned()), "first".to_owned());
+        app.body_loaded(MessageId("m1".to_owned()), "first".to_owned(), vec![]);
 
         assert_eq!(app.update(Action::SelectNext), load_body("m2"));
         assert_eq!(app.body, None);
@@ -1727,10 +1743,10 @@ Dear Charles,"
         let mut app = in_message_list(&["m1", "m2"]);
         app.update(Action::SelectNext);
 
-        app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned());
+        app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned(), vec![]);
         assert_eq!(app.body, None);
 
-        app.body_loaded(MessageId("m2".to_owned()), "fresh".to_owned());
+        app.body_loaded(MessageId("m2".to_owned()), "fresh".to_owned(), vec![]);
         assert_eq!(app.body.as_deref(), Some("fresh"));
     }
 
@@ -1739,11 +1755,11 @@ Dear Charles,"
         let mut app = in_message_list(&["m1", "m2"]);
         let m1 = MessageId("m1".to_owned());
 
-        let effect = app.body_loaded(m1.clone(), "body".to_owned());
+        let effect = app.body_loaded(m1.clone(), "body".to_owned(), vec![]);
 
         assert_eq!(effect, Some(Effect::MarkRead(m1.clone())));
         assert!(app.messages[0].is_read);
-        assert_eq!(app.body_loaded(m1, "again".to_owned()), None);
+        assert_eq!(app.body_loaded(m1, "again".to_owned(), vec![]), None);
     }
 
     #[test]
@@ -1752,7 +1768,7 @@ Dear Charles,"
         app.update(Action::SelectNext);
 
         assert_eq!(
-            app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned()),
+            app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned(), vec![]),
             None
         );
         assert!(!app.messages[0].is_read);
@@ -1783,7 +1799,7 @@ Dear Charles,"
     fn refreshed_messages_keep_the_selected_message_and_its_body() {
         let mut app = in_message_list(&["m1", "m2"]);
         app.update(Action::SelectNext);
-        app.body_loaded(MessageId("m2".to_owned()), "body".to_owned());
+        app.body_loaded(MessageId("m2".to_owned()), "body".to_owned(), vec![]);
 
         let effect = app.refresh_messages(vec![message("m0"), message("m1"), message("m2")]);
 
