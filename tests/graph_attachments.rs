@@ -237,3 +237,28 @@ async fn a_file_that_will_not_attach_takes_its_draft_away_unsent() {
 
     assert!(sent.is_err());
 }
+
+#[tokio::test]
+async fn a_reply_carries_its_files_in_the_draft_graph_made() {
+    let server = MockServer::start().await;
+    let (_dir, notes) = file("notes.txt", b"hello");
+    Mock::given(method("POST"))
+        .and(path("/me/messages/m1/createReply"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "id": "d1",
+            "body": { "contentType": "text", "content": "> quoted" },
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    expect(&server, "PATCH", "/me/messages/d1", 200, 1).await;
+    expect(&server, "POST", "/me/messages/d1/attachments", 201, 1).await;
+    expect(&server, "POST", "/me/messages/d1/send", 202, 1).await;
+    let backend = GraphBackend::new(support::client(&server).0);
+    let reply = Draft {
+        kind: ComposeKind::Reply(MessageId("m1".to_owned())),
+        ..new_message(vec![notes])
+    };
+
+    backend.send(&reply).await.unwrap();
+}
