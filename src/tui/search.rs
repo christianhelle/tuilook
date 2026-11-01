@@ -274,7 +274,7 @@ mod tests {
         app.focus = Pane::Messages;
         app.update(Action::SelectNext);
         app.update(Action::Reply);
-        assert_eq!(app.compose.map(|c| c.account), Some(1));
+        assert_eq!(app.screen.compose().map(|c| c.account), Some(1));
     }
 
     #[test]

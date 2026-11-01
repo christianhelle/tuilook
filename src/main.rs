@@ -487,7 +487,7 @@ impl Cursor {
         if app.dialog.as_ref().is_some_and(Dialog::takes_text) {
             return Cursor::Bar;
         }
-        match &app.compose {
+        match app.screen.compose() {
             None if app.typing_search() => Cursor::Bar,
             None => match (&app.signature, &app.appointment) {
                 (Some(editor), _) if editor.body.vim.mode == VimMode::Insert => Cursor::Bar,

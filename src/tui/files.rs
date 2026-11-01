@@ -325,7 +325,7 @@ mod tests {
         }
 
         assert_eq!(app.dialog, None);
-        let compose = app.compose.as_ref().unwrap();
+        let compose = app.screen.compose().unwrap();
         assert_eq!(compose.attachments, [dir.path().join("b.txt")]);
 
         // The next file is picked from where the last one was.

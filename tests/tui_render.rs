@@ -384,7 +384,7 @@ fn a_new_message_takes_over_the_screen() {
 fn attached_files_show_under_the_subject() {
     let mut app = sample_app();
     press(&mut app, "cada@example.com⇥⇥Lunch⇥");
-    let compose = app.compose.as_mut().unwrap();
+    let compose = app.screen.compose_mut().unwrap();
     compose.attach(std::path::PathBuf::from("menu.pdf"));
     compose.attach(std::path::PathBuf::from("map.png"));
 

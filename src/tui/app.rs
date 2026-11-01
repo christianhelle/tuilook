@@ -27,6 +27,7 @@ use crate::tui::{
     keymap::Keymap,
     mover,
     rows::{account_row, is_own_row, row_target, unread_row},
+    screen::Screen,
     search::Search,
     signature::{self, SignatureEditor},
     ui::shown,
@@ -243,8 +244,8 @@ pub struct AppState {
     pub dialog: Option<Dialog>,
     /// Which account sent recent messages, and when, to notice a burst.
     pub sent: Vec<(usize, Instant)>,
-    /// A message being written, which takes over the screen.
-    pub compose: Option<Compose>,
+    /// What fills the screen, under any dialog.
+    pub screen: Screen,
     /// The signed-in addresses. With more than one, each account heads its
     /// own folders in the folder pane.
     pub accounts: Vec<String>,
@@ -389,7 +390,7 @@ impl AppState {
         if let Some(dialog) = self.dialog.take() {
             return self.dialog_key(dialog, key);
         }
-        if let Some(compose) = &mut self.compose {
+        if let Some(compose) = self.screen.compose_mut() {
             match compose.key(key, self.viewport.compose, &mut self.register) {
                 Request::None => {}
                 Request::Send(draft) => {
@@ -403,7 +404,7 @@ impl AppState {
                     self.show_busy("Sending…");
                     return Some(Effect::core(account, Command::Send(draft)));
                 }
-                Request::Close => self.compose = None,
+                Request::Close => self.screen.close_compose(),
                 Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
                 Request::Help => self.dialog = Some(Dialog::Help),
                 Request::Attach => {
@@ -513,7 +514,7 @@ impl AppState {
                     files::Request::Close => {}
                     files::Request::Pick(file) => {
                         self.attach_dir = Some(picker.dir);
-                        if let Some(compose) = &mut self.compose {
+                        if let Some(compose) = self.screen.compose_mut() {
                             compose.attach(file);
                         }
                     }
@@ -534,7 +535,7 @@ impl AppState {
             }
             return None;
         }
-        if self.compose.is_some() || self.signature.is_some() {
+        if self.screen.compose().is_some() || self.signature.is_some() {
             return None;
         }
         let Hit { pane, item } = hit?;
@@ -853,7 +854,7 @@ impl AppState {
                 (address.clone(), signature)
             })
             .collect();
-        self.compose = Some(compose.with_senders(senders, account));
+        self.screen = Screen::Compose(Box::new(compose.with_senders(senders, account)));
     }
 
     /// Shows the current folder's messages after a sync, keeping the
@@ -988,7 +989,7 @@ impl AppState {
 
     fn cancelled(&mut self, confirm: Confirm) {
         if let Confirm::SendAnyway { .. } = confirm {
-            if let Some(compose) = &mut self.compose {
+            if let Some(compose) = self.screen.compose_mut() {
                 compose.sending = false;
             }
             self.show_info("Not sent; the message is still open");
@@ -1015,7 +1016,7 @@ impl AppState {
                 ))
             }
             Confirm::Discard => {
-                self.compose = None;
+                self.screen.close_compose();
                 None
             }
             Confirm::DiscardSignature => {
@@ -1035,7 +1036,7 @@ impl AppState {
                 None
             }
             Confirm::SendAnyway { draft, .. } => {
-                let account = self.compose.as_ref()?.account;
+                let account = self.screen.compose()?.account;
                 self.show_busy("Sending…");
                 Some(Effect::core(account, Command::Send(draft)))
             }
@@ -1045,11 +1046,11 @@ impl AppState {
     /// Closes the message core sent, and syncs again shortly: Outlook files
     /// a sent message a few seconds after taking it.
     pub fn mail_sent(&mut self, now: Instant) {
-        let account = self.compose.as_ref().map_or(0, |c| c.account);
+        let account = self.screen.compose().map_or(0, |c| c.account);
         self.sent
             .retain(|(_, at)| now.saturating_duration_since(*at) < PACE_WINDOW);
         self.sent.push((account, now));
-        self.compose = None;
+        self.screen.close_compose();
         self.show_info("Sent");
         self.sync.due_by(now + AFTER_SENDING);
     }
@@ -1092,7 +1093,7 @@ impl AppState {
 
     /// Keeps the message open so it can be fixed and sent again.
     pub fn send_failed(&mut self, error: &str) {
-        if let Some(compose) = &mut self.compose {
+        if let Some(compose) = self.screen.compose_mut() {
             compose.sending = false;
         }
         self.show_error(format!("could not send: {error}"));
@@ -1101,7 +1102,7 @@ impl AppState {
     /// Explains that the account may not send for now. The message stays
     /// open, unsent, to send once the account is unblocked.
     pub fn send_blocked(&mut self, said: String) {
-        if let Some(compose) = &mut self.compose {
+        if let Some(compose) = self.screen.compose_mut() {
             compose.sending = false;
         }
         self.show_error("Outlook.com has blocked sending from this account".to_owned());
@@ -1547,7 +1548,7 @@ Dear Charles,"
         app.on_key(KeyEvent::from(KeyCode::Esc), &mut Keymap::default());
         type_keys(&mut app, "p");
 
-        let body = app.compose.as_ref().map(|c| c.body.text());
+        let body = app.screen.compose().map(|c| c.body.text());
         assert_eq!(
             body.as_deref(),
             Some(
@@ -2192,16 +2193,16 @@ Dear Charles,"
         app.selected_folder = 3;
         app.update(Action::Compose);
         assert_eq!(
-            app.compose.as_ref().unwrap().body.text(),
+            app.screen.compose().unwrap().body.text(),
             "
 
 Ada"
         );
 
-        app.compose = None;
+        app.screen.close_compose();
         app.selected_folder = 1;
         app.update(Action::Compose);
-        assert_eq!(app.compose.as_ref().unwrap().body.text(), "");
+        assert_eq!(app.screen.compose().unwrap().body.text(), "");
     }
 
     #[test]
@@ -2219,7 +2220,7 @@ Ada"
         let effect = ctrl_s(&mut app).unwrap();
 
         assert_eq!(
-            app.compose.as_ref().unwrap().from(),
+            app.screen.compose().unwrap().from(),
             Some("me@work.example")
         );
         let Effect::Core {
@@ -2274,7 +2275,7 @@ Ada"
             alt_gr(&mut app, c);
         }
 
-        let compose = app.compose.as_ref().unwrap();
+        let compose = app.screen.compose().unwrap();
         assert_eq!(compose.to.text(), "ada@example.com");
         assert_eq!(compose.body.text(), "{€}|\\");
     }
@@ -2286,7 +2287,7 @@ Ada"
         app.update(Action::Reply);
         app.update(Action::Forward);
 
-        assert!(app.compose.is_none());
+        assert!(app.screen.compose().is_none());
     }
 
     #[test]
@@ -2300,7 +2301,7 @@ Ada"
             app.status,
             Some(Status::Error("Add someone to send it to".to_owned()))
         );
-        assert!(app.compose.is_some());
+        assert!(app.screen.compose().is_some());
     }
 
     #[test]
@@ -2314,11 +2315,11 @@ Ada"
             app.status,
             Some(Status::Error("could not send: offline".to_owned()))
         );
-        assert!(app.compose.as_ref().is_some_and(|c| !c.sending));
+        assert!(app.screen.compose().is_some_and(|c| !c.sending));
 
         ctrl_s(&mut app);
         app.mail_sent(Instant::now());
-        assert!(app.compose.is_none());
+        assert!(app.screen.compose().is_none());
         assert_eq!(app.status, Some(Status::Info("Sent".to_owned())));
     }
 
@@ -2378,7 +2379,7 @@ Ada"
 
         assert_eq!(key(&mut app, KeyCode::Esc), None);
 
-        let compose = app.compose.as_ref().unwrap();
+        let compose = app.screen.compose().unwrap();
         assert!(!compose.sending);
         assert_eq!(compose.body.text(), "x");
     }
@@ -2406,11 +2407,11 @@ Ada"
         app.send_blocked("ErrorMessageSubmissionBlocked: blocked".to_owned());
 
         assert!(matches!(app.dialog, Some(Dialog::Blocked(_))));
-        assert!(app.compose.as_ref().is_some_and(|c| !c.sending));
+        assert!(app.screen.compose().is_some_and(|c| !c.sending));
         assert_eq!(key(&mut app, KeyCode::Char('y')), None);
         assert_eq!(app.dialog, None, "any key closes it");
         assert_eq!(
-            app.compose.as_ref().map(|c| c.body.text()),
+            app.screen.compose().map(|c| c.body.text()),
             Some("x".to_owned()),
             "the key only closed the dialog"
         );
@@ -2426,11 +2427,14 @@ Ada"
         key(&mut app, KeyCode::Esc);
         assert_eq!(app.confirm(), Some(&Confirm::Discard));
         key(&mut app, KeyCode::Char('n'));
-        assert!(app.compose.is_some(), "any other key keeps writing");
+        assert!(
+            app.screen.compose().is_some(),
+            "any other key keeps writing"
+        );
 
         key(&mut app, KeyCode::Esc);
         key(&mut app, KeyCode::Char('y'));
-        assert!(app.compose.is_none());
+        assert!(app.screen.compose().is_none());
     }
 
     fn hit(pane: Pane, item: Option<usize>) -> Option<Hit> {
@@ -2872,7 +2876,7 @@ Ada"
         app.update(Action::Reply);
         app.update(Action::Delete);
 
-        assert!(app.compose.is_none());
+        assert!(app.screen.compose().is_none());
         assert_eq!(app.confirm(), None);
     }
 

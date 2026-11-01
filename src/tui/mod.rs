@@ -22,6 +22,7 @@ pub mod mover;
 pub mod numbers;
 pub mod older;
 pub mod rows;
+pub mod screen;
 pub mod search;
 pub mod session;
 pub mod signature;

@@ -469,7 +469,7 @@ mod tests {
 
         app.update(Action::Compose);
 
-        let compose = app.compose.as_ref().unwrap();
+        let compose = app.screen.compose().unwrap();
         assert_eq!(compose.account, 1);
         assert_eq!(compose.from(), Some("me@work.example"));
     }
