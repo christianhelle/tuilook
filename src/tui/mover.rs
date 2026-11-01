@@ -1,6 +1,7 @@
 //! Moving mail: picking the folder to move the marked or selected messages
 //! to, narrowed by typing part of its name.
 
+use crate::core::Command;
 use crate::model::{Folder, FolderId, MessageId, folder_depths, sort_folders};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -163,11 +164,7 @@ impl AppState {
             Request::Move { account, ids, to } => {
                 let s = if ids.len() == 1 { "" } else { "s" };
                 self.show_busy(format!("Moving {} message{s} to {}…", ids.len(), to.name));
-                Some(Effect::Move {
-                    account,
-                    ids,
-                    to: to.id,
-                })
+                Some(Effect::core(account, Command::Move { ids, to: to.id }))
             }
         }
     }
@@ -271,11 +268,13 @@ mod tests {
 
         assert_eq!(
             effect,
-            Some(Effect::Move {
-                account: 0,
-                ids: vec![MessageId("m1".to_owned()), MessageId("m2".to_owned())],
-                to: FolderId("Archive".to_owned()),
-            })
+            Some(Effect::core(
+                0,
+                Command::Move {
+                    ids: vec![MessageId("m1".to_owned()), MessageId("m2".to_owned())],
+                    to: FolderId("Archive".to_owned()),
+                }
+            ))
         );
         assert_eq!(app.dialog, None);
     }

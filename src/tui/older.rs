@@ -2,6 +2,7 @@
 //! list is scrolled to its end, or shows nothing, while the folder's counts
 //! say there is more.
 
+use crate::core::Command;
 use crate::model::FolderId;
 use jiff::Timestamp;
 
@@ -52,11 +53,14 @@ impl AppState {
             .map_or_else(Timestamp::now, |m| m.received_at);
         self.loading_older = Some(key);
         self.show_busy(LOADING_OLDER);
-        Some(Effect::LoadOlder {
-            folder,
-            before,
-            unread_only,
-        })
+        Some(Effect::core(
+            self.folder_home(&folder),
+            Command::LoadOlder {
+                folder,
+                before,
+                unread_only,
+            },
+        ))
     }
 
     /// Core fetched a page of older mail; with `more`, the next page can be
@@ -108,11 +112,14 @@ mod tests {
     }
 
     fn older(before: Timestamp, unread_only: bool) -> Option<Effect> {
-        Some(Effect::LoadOlder {
-            folder: FolderId("devops".to_owned()),
-            before,
-            unread_only,
-        })
+        Some(Effect::core(
+            0,
+            Command::LoadOlder {
+                folder: FolderId("devops".to_owned()),
+                before,
+                unread_only,
+            },
+        ))
     }
 
     #[test]
@@ -124,8 +131,11 @@ mod tests {
 
         assert!(matches!(
             effect,
-            Some(Effect::LoadOlder {
-                unread_only: false,
+            Some(Effect::Core {
+                command: Command::LoadOlder {
+                    unread_only: false,
+                    ..
+                },
                 ..
             })
         ));
@@ -179,8 +189,11 @@ mod tests {
 
         assert!(matches!(
             effect,
-            Some(Effect::LoadOlder {
-                unread_only: true,
+            Some(Effect::Core {
+                command: Command::LoadOlder {
+                    unread_only: true,
+                    ..
+                },
                 ..
             })
         ));

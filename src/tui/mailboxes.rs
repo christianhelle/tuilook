@@ -190,35 +190,6 @@ impl Mailboxes {
                 }
                 Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
                 Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
-                Effect::LoadOlder {
-                    folder,
-                    before,
-                    unread_only,
-                } => {
-                    let older = Command::LoadOlder {
-                        folder,
-                        before,
-                        unread_only,
-                    };
-                    commands.send(older)?;
-                    None
-                }
-                Effect::DeleteFolder { folder, permanent } => {
-                    commands.send(Command::DeleteFolder { folder, permanent })?;
-                    None
-                }
-                Effect::CreateFolder { parent, name, .. } => {
-                    commands.send(Command::CreateFolder { parent, name })?;
-                    None
-                }
-                Effect::RenameFolder { folder, name, .. } => {
-                    commands.send(Command::RenameFolder { folder, name })?;
-                    None
-                }
-                Effect::Move { ids, to, .. } => {
-                    commands.send(Command::Move { ids, to })?;
-                    None
-                }
                 Effect::Sync => {
                     for mailbox in mailboxes {
                         mailbox.commands.send(Command::SyncAll)?;

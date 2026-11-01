@@ -1,5 +1,6 @@
 //! Making and renaming folders: the name being typed for one.
 
+use crate::core::Command;
 use crate::model::{Folder, FolderId};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
@@ -166,11 +167,10 @@ impl AppState {
                 name,
             } => {
                 self.show_busy(format!("Creating {name}…"));
-                Some(Effect::CreateFolder {
+                Some(Effect::core(
                     account,
-                    parent,
-                    name,
-                })
+                    Command::CreateFolder { parent, name },
+                ))
             }
             Request::Rename {
                 account,
@@ -179,11 +179,10 @@ impl AppState {
                 name,
             } => {
                 self.show_busy(format!("Renaming {old}…"));
-                Some(Effect::RenameFolder {
+                Some(Effect::core(
                     account,
-                    folder,
-                    name,
-                })
+                    Command::RenameFolder { folder, name },
+                ))
             }
         }
     }
@@ -264,11 +263,13 @@ mod tests {
 
         assert_eq!(
             effect,
-            Some(Effect::CreateFolder {
-                account: 0,
-                parent: Some(FolderId("Receipts".to_owned())),
-                name: "2026".to_owned(),
-            })
+            Some(Effect::core(
+                0,
+                Command::CreateFolder {
+                    parent: Some(FolderId("Receipts".to_owned())),
+                    name: "2026".to_owned(),
+                }
+            ))
         );
         assert_eq!(app.dialog, None);
     }
@@ -283,11 +284,13 @@ mod tests {
 
         assert_eq!(
             effect,
-            Some(Effect::CreateFolder {
-                account: 0,
-                parent: None,
-                name: "Travel".to_owned(),
-            })
+            Some(Effect::core(
+                0,
+                Command::CreateFolder {
+                    parent: None,
+                    name: "Travel".to_owned(),
+                }
+            ))
         );
     }
 
@@ -332,11 +335,13 @@ mod tests {
 
         assert_eq!(
             effect,
-            Some(Effect::RenameFolder {
-                account: 0,
-                folder: FolderId("Receipts".to_owned()),
-                name: "Bills".to_owned(),
-            })
+            Some(Effect::core(
+                0,
+                Command::RenameFolder {
+                    folder: FolderId("Receipts".to_owned()),
+                    name: "Bills".to_owned(),
+                }
+            ))
         );
     }
 

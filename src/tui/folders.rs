@@ -156,6 +156,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::Command;
     use crate::model::{Action, Folder};
 
     use super::*;
@@ -222,10 +223,13 @@ mod tests {
         );
         assert_eq!(
             key(&mut app, 'y'),
-            Some(Effect::DeleteFolder {
-                folder: FolderId("archive".to_owned()),
-                permanent: false,
-            })
+            Some(Effect::core(
+                0,
+                Command::DeleteFolder {
+                    folder: FolderId("archive".to_owned()),
+                    permanent: false,
+                }
+            ))
         );
     }
 

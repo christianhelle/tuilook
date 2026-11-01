@@ -9,7 +9,7 @@ use crate::model::{
     Action, AppointmentDraft, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId,
     Message, MessageId, sort_messages,
 };
-use jiff::{Timestamp, Zoned};
+use jiff::Zoned;
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     widgets::{Paragraph, Wrap},
@@ -45,12 +45,6 @@ pub enum Effect {
     LoadFolder(FolderId),
     /// Show only the unread messages of a folder.
     LoadUnread(FolderId),
-    /// Fetch a page of a folder's mail from before what sync reaches.
-    LoadOlder {
-        folder: FolderId,
-        before: Timestamp,
-        unread_only: bool,
-    },
     /// Pin messages to the top of their folders, or unpin them.
     SetPinned {
         ids: Vec<MessageId>,
@@ -64,29 +58,6 @@ pub enum Effect {
     Delete {
         ids: Vec<MessageId>,
         permanent: bool,
-    },
-    /// Delete a folder: to Deleted Items, or for good when `permanent`.
-    DeleteFolder {
-        folder: FolderId,
-        permanent: bool,
-    },
-    /// Make a folder in `account`, inside `parent` or at the top level.
-    CreateFolder {
-        account: usize,
-        parent: Option<FolderId>,
-        name: String,
-    },
-    /// Give a folder of `account` a new name.
-    RenameFolder {
-        account: usize,
-        folder: FolderId,
-        name: String,
-    },
-    /// Move messages of `account` into folder `to`.
-    Move {
-        account: usize,
-        ids: Vec<MessageId>,
-        to: FolderId,
     },
     /// Sync every folder.
     Sync,
@@ -805,6 +776,14 @@ impl AppState {
         self.folder_account.get(index).copied().unwrap_or(0)
     }
 
+    /// The account folder `id` is in.
+    pub(crate) fn folder_home(&self, id: &FolderId) -> usize {
+        self.folders
+            .iter()
+            .position(|f| &f.id == id)
+            .map_or(0, |index| self.account_of(index))
+    }
+
     /// Has the core of the account holding message `id` load its body.
     pub(crate) fn load_body(&self, id: MessageId) -> Effect {
         Effect::core(self.message_account(&id), Command::LoadBody(id))
@@ -814,14 +793,7 @@ impl AppState {
     /// account instead.
     pub fn account_for(&self, effect: &Effect) -> usize {
         match effect {
-            Effect::LoadFolder(id)
-            | Effect::LoadUnread(id)
-            | Effect::LoadOlder { folder: id, .. }
-            | Effect::DeleteFolder { folder: id, .. } => self
-                .folders
-                .iter()
-                .position(|f| &f.id == id)
-                .map_or(0, |index| self.account_of(index)),
+            Effect::LoadFolder(id) | Effect::LoadUnread(id) => self.folder_home(id),
             Effect::Core { account, .. } => *account,
             Effect::SaveAttachments { message: id, .. } => self.message_account(id),
             Effect::Delete { .. }
@@ -832,9 +804,6 @@ impl AppState {
             | Effect::Copy(_) => self.current_account(),
             Effect::Send(_) => self.compose.as_ref().map_or(0, |c| c.account),
             Effect::SaveSignature { account, .. }
-            | Effect::CreateFolder { account, .. }
-            | Effect::RenameFolder { account, .. }
-            | Effect::Move { account, .. }
             | Effect::LoadAgenda { account, .. }
             | Effect::SaveAppointment { account, .. }
             | Effect::DeleteAppointment { account, .. }
@@ -1052,7 +1021,11 @@ impl AppState {
                 permanent,
             } => {
                 self.show_busy(format!("Deleting {name}…"));
-                Some(Effect::DeleteFolder { folder, permanent })
+                let account = self.folder_home(&folder);
+                Some(Effect::core(
+                    account,
+                    Command::DeleteFolder { folder, permanent },
+                ))
             }
             Confirm::Discard => {
                 self.compose = None;
