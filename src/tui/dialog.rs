@@ -1,6 +1,8 @@
 //! The dialog shown over the panes, which takes every key until it closes.
 
-use crate::tui::{app::Confirm, folder_edit::NamePrompt, mover::MovePicker};
+use crate::tui::{
+    app::Confirm, attachments::AttachmentPicker, folder_edit::NamePrompt, mover::MovePicker,
+};
 
 /// At most one dialog is open at a time. A dialog owns its state and answers
 /// each key with a request of its own, which the app acts on; it never
@@ -18,6 +20,8 @@ pub enum Dialog {
     Name(NamePrompt),
     /// The folder being picked to move mail to.
     Move(MovePicker),
+    /// The attached files being picked to save.
+    Attachments(AttachmentPicker),
 }
 
 impl Dialog {

@@ -70,6 +70,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('A') => Action::AddTopFolder,
         KeyCode::F(2) => Action::RenameFolder,
         KeyCode::Char('m') => Action::Move,
+        KeyCode::Char('s') => Action::SaveAttachments,
         KeyCode::Char('p') => Action::TogglePin,
         KeyCode::Char('F') | KeyCode::Insert => Action::ToggleFlag,
         _ => return None,

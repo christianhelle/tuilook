@@ -878,6 +878,22 @@ fn moving_mail_picks_a_folder() {
     insta::assert_snapshot!(render(&app));
 }
 
+#[test]
+fn saving_several_attachments_picks_which() {
+    let mut app = sample_app();
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "Dear Charles,".to_owned(),
+        vec![
+            attachment("a1", "report.pdf", 1_258_291),
+            attachment("a2", "notes.txt", 2_048),
+        ],
+    );
+    app.update(Action::SaveAttachments);
+
+    insta::assert_snapshot!(render(&app));
+}
+
 fn appointment(id: &str, subject: &str, start: &str, minutes: i64) -> Appointment {
     let start: jiff::Timestamp = start.parse().unwrap();
     Appointment {

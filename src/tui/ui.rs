@@ -13,6 +13,7 @@ use crate::tui::{
     agenda::{Agenda, Row as AgendaRow},
     app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
     appointment_form::{AppointmentForm, Field as AppointmentField},
+    attachments::{AttachmentPicker, human_size},
     compose::{Compose, Field},
     dialog::Dialog,
     editor::{Editor, Pos},
@@ -200,6 +201,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Dialog::Confirm(confirm)) => draw_confirm(frame, confirm),
         Some(Dialog::Name(prompt)) => draw_name_prompt(frame, prompt),
         Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
+        Some(Dialog::Attachments(picker)) => draw_attachment_picker(frame, picker),
         None => {}
     }
 }
@@ -302,6 +304,57 @@ fn draw_move_picker(frame: &mut Frame, mover: &MovePicker) {
     let label = u16::try_from(FILTER_LABEL.len()).unwrap_or(u16::MAX);
     let x = area.x.saturating_add(1 + label).saturating_add(column);
     frame.set_cursor_position((x.min(area.right().saturating_sub(2)), area.y + 1));
+}
+
+/// The attached files to pick from to save.
+fn draw_attachment_picker(frame: &mut Frame, picker: &AttachmentPicker) {
+    // Borders and the keys take 3 lines.
+    let fits = usize::from(frame.area().height).saturating_sub(3).max(1);
+    let visible = picker.attachments.len().clamp(1, MOVE_ROWS).min(fits);
+    let first = list_offset(picker.selected, visible);
+    let mut lines = Vec::new();
+    for (row, a) in picker
+        .attachments
+        .iter()
+        .enumerate()
+        .skip(first)
+        .take(visible)
+    {
+        let picked = row == picker.selected;
+        let text = format!(
+            "{}{} ({})",
+            if picked { "> " } else { "  " },
+            shown(&a.name),
+            human_size(a.size)
+        );
+        let style = if picked {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::new()
+        };
+        lines.push(Line::styled(text, style));
+    }
+    lines.push(Line::from(vec![
+        Span::styled("Enter", Style::new().fg(Color::Yellow)),
+        Span::raw(" save   "),
+        Span::styled("a", Style::new().fg(Color::Yellow)),
+        Span::raw(" save all   "),
+        Span::styled("Esc", Style::new().fg(Color::Cyan)),
+        Span::raw(" cancel"),
+    ]));
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(PROMPT_WIDTH), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title(" Save to Downloads ")
+                .border_style(Style::new().fg(Color::Yellow)),
+        ),
+        area,
+    );
 }
 
 /// What the move dialog's filter is labelled with.

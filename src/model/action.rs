@@ -66,6 +66,9 @@ pub enum Action {
     /// Answer the sender and everyone else on the selected message.
     ReplyAll,
     Forward,
+    /// Save the selected message's attached files, asking which when
+    /// there are several.
+    SaveAttachments,
     /// Search every cached folder.
     Search,
     /// Show the calendar of the account being looked at.

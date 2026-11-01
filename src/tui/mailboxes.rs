@@ -215,6 +215,18 @@ impl Mailboxes {
                     }
                     None
                 }
+                Effect::SaveAttachments {
+                    message,
+                    attachments,
+                } => {
+                    let save = Command::SaveAttachments {
+                        message,
+                        attachments,
+                        dir: downloads(),
+                    };
+                    commands.blocking_send(save)?;
+                    None
+                }
                 Effect::Send(draft) => {
                     commands.blocking_send(Command::Send(draft))?;
                     None
@@ -308,4 +320,14 @@ fn search_all(mailboxes: &[Mailbox], query: &str) -> Result<Vec<(usize, Message)
     found.sort_by_key(|(_, m)| std::cmp::Reverse(m.received_at));
     found.truncate(SEARCH_LIMIT);
     Ok(found)
+}
+
+/// The user's downloads folder, or else their home folder, or else the
+/// folder tuilook was started in.
+fn downloads() -> PathBuf {
+    let dirs = directories::UserDirs::new();
+    dirs.as_ref()
+        .and_then(|d| d.download_dir().map(Path::to_path_buf))
+        .or_else(|| dirs.as_ref().map(|d| d.home_dir().to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."))
 }

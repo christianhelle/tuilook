@@ -16,7 +16,7 @@ use ratatui::{
 use crate::tui::{
     agenda::Agenda,
     appointment_form::AppointmentForm,
-    attachments::human_size,
+    attachments::{self, human_size},
     compose::{Compose, Request},
     dialog::Dialog,
     folder_edit,
@@ -85,6 +85,11 @@ pub enum Effect {
     },
     /// Sync every folder.
     Sync,
+    /// Save `attachments` of `message` to the downloads folder.
+    SaveAttachments {
+        message: MessageId,
+        attachments: Vec<Attachment>,
+    },
     Send(Draft),
     /// Search every account's cached mail.
     Search(String),
@@ -530,6 +535,13 @@ impl AppState {
                 }
                 self.move_requested(request)
             }
+            Dialog::Attachments(mut picker) => {
+                let request = picker.key(key);
+                if request == attachments::Request::None {
+                    self.dialog = Some(Dialog::Attachments(picker));
+                }
+                self.save_requested(request)
+            }
         }
     }
 
@@ -640,6 +652,7 @@ impl AppState {
             Action::RenameFolder if self.focus == Pane::Folders => self.ask_new_name(),
             Action::AddFolder | Action::AddTopFolder | Action::RenameFolder => {}
             Action::Move => self.ask_where_to_move(),
+            Action::SaveAttachments => return self.ask_which_to_save(),
             Action::Refresh if self.sync.running => {
                 self.sync.forced = true;
                 self.show_busy("Syncing…");
@@ -772,7 +785,9 @@ impl AppState {
                 .iter()
                 .position(|f| &f.id == id)
                 .map_or(0, |index| self.account_of(index)),
-            Effect::LoadBody(id) | Effect::MarkRead(id) => self.message_account(id),
+            Effect::LoadBody(id)
+            | Effect::MarkRead(id)
+            | Effect::SaveAttachments { message: id, .. } => self.message_account(id),
             Effect::Delete { .. }
             | Effect::SetPinned { .. }
             | Effect::SetFlagged { .. }
