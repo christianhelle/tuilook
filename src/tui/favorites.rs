@@ -1,58 +1,11 @@
 //! Favorites: folders picked to be shown again above the accounts.
 
-use crate::model::Folder;
-
 use crate::tui::{
     app::{AppState, Effect},
-    rows::{Row, favorite_row},
+    rows::Row,
 };
 
 impl AppState {
-    /// The favorites' rows, with the account each is in. A favorite whose
-    /// folder is not there, such as before its account has synced, is left
-    /// out but kept. A name favorited from several accounts says which
-    /// account each is from.
-    pub(crate) fn favorite_rows(&self) -> (Vec<Folder>, Vec<usize>) {
-        let found: Vec<(usize, &Folder)> = self
-            .folder_pane
-            .favorites
-            .iter()
-            .filter_map(|id| {
-                self.folder_pane
-                    .account_folders
-                    .iter()
-                    .enumerate()
-                    .find_map(|(account, folders)| {
-                        let folder = folders.as_deref()?.iter().find(|f| &f.id == id)?;
-                        Some((account, folder))
-                    })
-            })
-            .collect();
-        let clashes = |account: usize, name: &str| {
-            found
-                .iter()
-                .any(|&(other, f)| other != account && f.name.eq_ignore_ascii_case(name))
-        };
-        found
-            .iter()
-            .map(|&(account, folder)| {
-                let name = match self.accounts.get(account) {
-                    Some(address) if clashes(account, &folder.name) => {
-                        format!("{} - {address}", folder.name)
-                    }
-                    _ => folder.name.clone(),
-                };
-                let row = Folder {
-                    id: favorite_row(&folder.id),
-                    parent_id: None,
-                    name,
-                    ..folder.clone()
-                };
-                (row, account)
-            })
-            .unzip()
-    }
-
     /// `*` in the folder pane: adds the selected folder to the favorites,
     /// or takes it out if it is in them already.
     pub(crate) fn toggle_favorite(&mut self) -> Option<Effect> {
@@ -76,6 +29,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
+    use crate::model::Folder;
     use crate::model::{Action, FolderId};
 
     use super::*;

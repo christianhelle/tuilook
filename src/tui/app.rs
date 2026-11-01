@@ -25,7 +25,7 @@ use crate::tui::{
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
     mover,
-    rows::{account_row, is_own_row, row_target, unread_row},
+    rows::row_target,
     screen::{Cursor, Screen},
     search::Search,
     signature::{self, SignatureEditor},
@@ -687,19 +687,8 @@ impl AppState {
     /// Shows an account's newly synced folder tree, keeping the selected
     /// folder.
     pub fn set_account_folders(&mut self, account: usize, folders: Vec<Folder>) -> Option<Effect> {
-        if self.folder_pane.account_folders.len() <= account {
-            self.folder_pane.account_folders.resize(account + 1, None);
-        }
-        let first = self.folder_pane.account_folders[account]
-            .replace(folders)
-            .is_none();
-        if first && let Some(address) = self.accounts.get(account) {
-            // An account starts with its folders shown, in both sections.
-            self.folder_pane.expanded.insert(account_row(address));
-            self.folder_pane
-                .expanded
-                .insert(unread_row(&account_row(address)));
-        }
+        let address = self.accounts.get(account).map(String::as_str);
+        self.folder_pane.report(account, folders, address);
         self.rebuild_folders()
     }
 
@@ -707,19 +696,8 @@ impl AppState {
     /// unread section and the favorites, keeping the selected row, or
     /// failing that the folder it showed.
     pub(crate) fn rebuild_folders(&mut self) -> Option<Effect> {
-        let previous = self.folder_pane.current_folder().cloned();
         let shown = self.load_shown();
-        let (folders, owners) = self.folder_tree();
-        let find = |id: &FolderId| folders.iter().position(|f| &f.id == id);
-        self.folder_pane.selected = previous
-            .as_ref()
-            .and_then(|id| find(id).or_else(|| find(&row_target(id))))
-            // Otherwise the first real folder, so there is mail to look at.
-            .or_else(|| folders.iter().position(is_own_row))
-            .unwrap_or(0);
-        self.folder_pane.folders = folders;
-        self.folder_pane.owners = owners;
-        self.folder_pane.reveal_selected_folder();
+        self.folder_pane.lay_out(&self.accounts);
         let current = self.load_shown();
         // Search results stay until the search is left.
         (current != shown && self.results_query().is_none())
@@ -785,45 +763,6 @@ impl AppState {
             }
             Effect::SaveSignature { account, .. } | Effect::LoadAgenda { account, .. } => *account,
         }
-    }
-
-    /// Every account's folders as one tree, with the account each is in.
-    /// With several accounts, each heads a row of its own above its folders.
-    /// The favorites come first, then the unread section.
-    fn folder_tree(&self) -> (Vec<Folder>, Vec<usize>) {
-        let several = self.accounts.len() > 1;
-        let (mut tree, mut owners) = self.favorite_rows();
-        let (unread, unread_owners) = self.unread_rows();
-        tree.extend(unread);
-        owners.extend(unread_owners);
-        for (account, folders) in self.folder_pane.account_folders.iter().enumerate() {
-            let folders = folders.as_deref().unwrap_or_default();
-            let Some(address) = self.accounts.get(account).filter(|_| several) else {
-                tree.extend_from_slice(folders);
-                owners.resize(tree.len(), account);
-                continue;
-            };
-            let row = account_row(address);
-            tree.push(Folder {
-                id: row.clone(),
-                parent_id: None,
-                name: address.clone(),
-                well_known: None,
-                unread: 0,
-                total: 0,
-            });
-            // The account's top folders are those whose parent it does not list.
-            let ids: HashSet<&FolderId> = folders.iter().map(|f| &f.id).collect();
-            tree.extend(folders.iter().map(|folder| {
-                let mut folder = folder.clone();
-                if !folder.parent_id.as_ref().is_some_and(|p| ids.contains(p)) {
-                    folder.parent_id = Some(row.clone());
-                }
-                folder
-            }));
-            owners.resize(tree.len(), account);
-        }
-        (tree, owners)
     }
 
     /// Opens a message to write from the account being looked at, or for

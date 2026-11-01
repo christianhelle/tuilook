@@ -1,106 +1,11 @@
 //! The unread section: the accounts' folders again, but only those with
 //! unread mail, each showing only its unread messages.
 
-use std::collections::HashSet;
+use crate::model::MessageId;
 
-use crate::model::{Folder, FolderId, MessageId, WellKnown};
-
-use crate::tui::{
-    app::AppState,
-    rows::{account_row, is_unread_row, row_target, unread_row},
-};
+use crate::tui::app::AppState;
 
 impl AppState {
-    /// The unread section's rows, with the account each is in. A folder is
-    /// there while it, or a folder inside it, has unread mail; junk and
-    /// deleted mail, and folders inside those, are left out. The selected
-    /// row stays until it is left, so reading the last unread message does
-    /// not pull the selection away.
-    pub(crate) fn unread_rows(&self) -> (Vec<Folder>, Vec<usize>) {
-        let several = self.accounts.len() > 1;
-        let kept = self
-            .folder_pane
-            .folders
-            .get(self.folder_pane.selected)
-            .filter(|f| is_unread_row(f))
-            .map(|f| row_target(&f.id));
-        let mut rows = Vec::new();
-        let mut owners = Vec::new();
-        for (account, folders) in self.folder_pane.account_folders.iter().enumerate() {
-            let folders = folders.as_deref().unwrap_or_default();
-            let ids: HashSet<&FolderId> = folders.iter().map(|f| &f.id).collect();
-            // A parent comes before its subfolders, so one pass finds them all.
-            let mut skipped: HashSet<&FolderId> = HashSet::new();
-            for folder in folders {
-                let junk = matches!(
-                    folder.well_known,
-                    Some(WellKnown::JunkEmail | WellKnown::DeletedItems)
-                );
-                if junk
-                    || folder
-                        .parent_id
-                        .as_ref()
-                        .is_some_and(|p| skipped.contains(p))
-                {
-                    skipped.insert(&folder.id);
-                }
-            }
-            // Each folder to show, and every folder above it.
-            let mut wanted: HashSet<&FolderId> = HashSet::new();
-            for folder in folders {
-                let kept = kept.as_ref() == Some(&folder.id);
-                if !kept && (folder.unread == 0 || skipped.contains(&folder.id)) {
-                    continue;
-                }
-                let mut at = Some(folder);
-                while let Some(folder) = at.filter(|f| wanted.insert(&f.id)) {
-                    at = folder
-                        .parent_id
-                        .as_ref()
-                        .and_then(|p| folders.iter().find(|f| &f.id == p));
-                }
-            }
-            let address = self.accounts.get(account).filter(|_| several);
-            let heading = address.map(|address| account_row(address));
-            let heading_kept = heading.is_some() && kept == heading;
-            if wanted.is_empty() && !heading_kept {
-                continue;
-            }
-            let top = match (&heading, address) {
-                (Some(heading), Some(address)) => {
-                    rows.push(Folder {
-                        id: unread_row(heading),
-                        parent_id: None,
-                        name: address.clone(),
-                        well_known: None,
-                        unread: 0,
-                        total: 0,
-                    });
-                    Some(unread_row(heading))
-                }
-                _ => None,
-            };
-            rows.extend(
-                folders
-                    .iter()
-                    .filter(|f| wanted.contains(&f.id))
-                    .map(|folder| {
-                        let parent = match &folder.parent_id {
-                            Some(p) if ids.contains(p) => Some(unread_row(p)),
-                            _ => top.clone(),
-                        };
-                        Folder {
-                            id: unread_row(&folder.id),
-                            parent_id: parent,
-                            ..folder.clone()
-                        }
-                    }),
-            );
-            owners.resize(rows.len(), account);
-        }
-        (rows, owners)
-    }
-
     /// The read messages the unread list keeps when it is loaded again after
     /// a sync: every one it shows, so going back to mail just read still
     /// works. After F5 only the one being read stays. Picking the folder
@@ -117,6 +22,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Folder, FolderId, WellKnown};
     use crate::tui::app::Effect;
 
     fn folder(id: &str, name: &str, parent: Option<&str>, unread: u32) -> Folder {
