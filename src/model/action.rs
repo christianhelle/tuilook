@@ -1,4 +1,4 @@
-use crate::model::{AppointmentId, FolderId, MessageId};
+use crate::model::{AppointmentId, Attachment, FolderId, MessageId};
 
 /// Something the user asked for. The UI applies it to its own state and
 /// forwards anything that needs IO to core.
@@ -82,6 +82,7 @@ pub enum Event {
     BodyLoaded {
         message: MessageId,
         text: String,
+        attachments: Vec<Attachment>,
     },
     /// A page of a folder's older mail is in the store; `more` says whether
     /// there is older mail still to fetch.

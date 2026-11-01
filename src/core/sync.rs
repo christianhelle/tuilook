@@ -1,4 +1,4 @@
-use crate::model::{BackendError, FolderId, MailBackend, MessageId};
+use crate::model::{Attachment, BackendError, FolderId, MailBackend, MessageId};
 use crate::store::{Store, StoreError};
 
 #[derive(Debug, thiserror::Error)]
@@ -48,19 +48,26 @@ pub async fn sync_messages(
     Ok(())
 }
 
-/// The text of a message body, fetched once and then served from the store.
+/// The text of a message body and the files attached to it, fetched once
+/// and then served from the store.
 pub async fn load_body(
     backend: &impl MailBackend,
     store: &mut Store,
     message: &MessageId,
-) -> Result<String, SyncError> {
-    let body = match store.body(message)? {
-        Some(body) => body,
+) -> Result<(String, Vec<Attachment>), SyncError> {
+    let (body, attachments) = match store.body(message)? {
+        Some(body) => (body, store.attachments(message)?),
         None => {
             let body = backend.fetch_body(message).await?;
+            let attachments = if store.has_attachments(message)? {
+                backend.attachments(message).await?
+            } else {
+                vec![]
+            };
+            store.put_attachments(message, &attachments)?;
             store.put_body(message, &body)?;
-            body
+            (body, attachments)
         }
     };
-    Ok(crate::core::body_text(&body))
+    Ok((crate::core::body_text(&body), attachments))
 }

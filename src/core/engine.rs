@@ -87,7 +87,11 @@ pub async fn run_engine(
             },
             Command::LoadBody(message) => {
                 let event = match load_body(&backend, &mut store, &message).await {
-                    Ok(text) => Event::BodyLoaded { message, text },
+                    Ok((text, attachments)) => Event::BodyLoaded {
+                        message,
+                        text,
+                        attachments,
+                    },
                     Err(e) => Event::Error(e.to_string()),
                 };
                 events.send(event).await

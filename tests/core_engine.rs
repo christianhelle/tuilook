@@ -131,7 +131,8 @@ async fn load_body_reports_the_body_text() {
         events.recv().await,
         Some(Event::BodyLoaded {
             message: id,
-            text: "Hi".to_owned()
+            text: "Hi".to_owned(),
+            attachments: vec![],
         })
     );
 }

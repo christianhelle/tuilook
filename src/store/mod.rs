@@ -367,6 +367,20 @@ impl Store {
         Ok(())
     }
 
+    /// Whether the cached `message` has files attached; false if it is not
+    /// cached.
+    pub fn has_attachments(&self, message: &MessageId) -> Result<bool> {
+        let has = self
+            .conn
+            .query_row(
+                "SELECT has_attachments FROM messages WHERE id = ?1",
+                [&message.0],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(has.unwrap_or(false))
+    }
+
     /// The files kept as attached to `message`, in order.
     pub fn attachments(&self, message: &MessageId) -> Result<Vec<Attachment>> {
         let mut stmt = self.conn.prepare(
