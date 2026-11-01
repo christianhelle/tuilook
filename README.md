@@ -447,6 +447,8 @@ up a folder. Attached files are listed under the subject; `Tab` to them, then
 `←` `→` pick one and `d` takes it off. Files can be up to 150 MB. A forward
 keeps the original's attachments.
 
+![The file picker for attaching a file to a new message](images/attach-files.jpg)
+
 ### Signatures
 
 Press `S` to write a signature for the account you are looking at. Each
