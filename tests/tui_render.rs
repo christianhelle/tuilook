@@ -161,6 +161,19 @@ fn reading_pane_lists_the_attached_files() {
 }
 
 #[test]
+fn the_focused_reader_says_how_to_save_the_attached_files() {
+    let mut app = sample_app();
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "Dear Charles,".to_owned(),
+        vec![attachment("a1", "report.pdf", 1_258_291)],
+    );
+    app.focus = Pane::Reader;
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn status_bar_shows_the_last_error() {
     let mut app = sample_app();
     app.show_error("Graph returned 503 Service Unavailable".to_owned());
