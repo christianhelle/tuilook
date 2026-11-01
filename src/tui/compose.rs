@@ -389,19 +389,11 @@ mod tests {
 
     fn original() -> Message {
         Message {
-            id: MessageId("m1".to_owned()),
-            folder_id: FolderId("inbox".to_owned()),
-            conversation_id: String::new(),
             subject: "Engine".to_owned(),
             from_name: "Ada".to_owned(),
             from_addr: "ada@example.com".to_owned(),
-            received_at: jiff::Timestamp::UNIX_EPOCH,
             is_read: true,
-            flagged: false,
-            pinned: false,
-            importance: Default::default(),
-            has_attachments: false,
-            preview: String::new(),
+            ..crate::core::fake::message("m1")
         }
     }
 

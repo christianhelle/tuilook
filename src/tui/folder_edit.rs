@@ -199,12 +199,9 @@ mod tests {
 
     fn folder(id: &str, parent: Option<&str>) -> Folder {
         Folder {
-            id: FolderId(id.to_owned()),
             parent_id: parent.map(|p| FolderId(p.to_owned())),
-            name: id.to_owned(),
             well_known: (id == "Inbox").then_some(WellKnown::Inbox),
-            unread: 0,
-            total: 0,
+            ..crate::core::fake::folder(id)
         }
     }
 

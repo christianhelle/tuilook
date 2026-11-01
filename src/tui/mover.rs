@@ -183,30 +183,17 @@ mod tests {
 
     fn folder(id: &str, parent: Option<&str>) -> Folder {
         Folder {
-            id: FolderId(id.to_owned()),
             parent_id: parent.map(|p| FolderId(p.to_owned())),
-            name: id.to_owned(),
-            well_known: None,
-            unread: 0,
-            total: 0,
+            ..crate::core::fake::folder(id)
         }
     }
 
     fn message(id: &str) -> Message {
         Message {
-            id: MessageId(id.to_owned()),
             folder_id: FolderId("Inbox".to_owned()),
-            conversation_id: String::new(),
             subject: id.to_owned(),
-            from_name: String::new(),
-            from_addr: String::new(),
-            received_at: jiff::Timestamp::UNIX_EPOCH,
             is_read: true,
-            flagged: false,
-            pinned: false,
-            importance: Default::default(),
-            has_attachments: false,
-            preview: String::new(),
+            ..crate::core::fake::message(id)
         }
     }
 

@@ -25,12 +25,12 @@ fn graph_folder(id: &str, name: &str, parent: &str, children: u32) -> serde_json
 
 fn folder(id: &str, name: &str, parent: Option<&str>, well_known: Option<WellKnown>) -> Folder {
     Folder {
-        id: FolderId(id.to_owned()),
         parent_id: parent.map(|p| FolderId(p.to_owned())),
         name: name.to_owned(),
         well_known,
         unread: 2,
         total: 9,
+        ..tuilook::core::fake::folder(id)
     }
 }
 

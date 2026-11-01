@@ -6,12 +6,9 @@ use tuilook::store::Store;
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>) -> Folder {
     Folder {
-        id: FolderId(id.to_owned()),
-        parent_id: None,
         name: name.to_owned(),
         well_known,
-        unread: 0,
-        total: 0,
+        ..tuilook::core::fake::folder(id)
     }
 }
 
@@ -52,7 +49,6 @@ fn upserting_an_existing_folder_updates_it() {
 
 fn message(id: &str, folder_id: &str, received_at: &str) -> Message {
     Message {
-        id: MessageId(id.to_owned()),
         folder_id: FolderId(folder_id.to_owned()),
         conversation_id: "conv-1".to_owned(),
         subject: format!("Subject {id}"),
@@ -61,10 +57,10 @@ fn message(id: &str, folder_id: &str, received_at: &str) -> Message {
         received_at: received_at.parse().unwrap(),
         is_read: true,
         flagged: true,
-        pinned: false,
         importance: Importance::High,
         has_attachments: true,
         preview: "Hello there".to_owned(),
+        ..tuilook::core::fake::message(id)
     }
 }
 

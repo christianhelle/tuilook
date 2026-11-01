@@ -85,30 +85,19 @@ mod tests {
 
     fn folder(id: &str, unread: u32, total: u32) -> Folder {
         Folder {
-            id: FolderId(id.to_owned()),
-            parent_id: None,
-            name: id.to_owned(),
-            well_known: None,
             unread,
             total,
+            ..crate::core::fake::folder(id)
         }
     }
 
     fn message(id: &str, day: i64, is_read: bool) -> Message {
         Message {
-            id: MessageId(id.to_owned()),
             folder_id: FolderId("devops".to_owned()),
-            conversation_id: String::new(),
             subject: id.to_owned(),
-            from_name: String::new(),
-            from_addr: String::new(),
             received_at: Timestamp::from_second(day * 86_400).unwrap(),
             is_read,
-            flagged: false,
-            pinned: false,
-            importance: Default::default(),
-            has_attachments: false,
-            preview: String::new(),
+            ..crate::core::fake::message(id)
         }
     }
 

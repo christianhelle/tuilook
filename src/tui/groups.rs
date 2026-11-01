@@ -153,19 +153,8 @@ mod tests {
 
     fn message(id: &str, day: &str) -> Message {
         Message {
-            id: MessageId(id.to_owned()),
-            folder_id: FolderId("inbox".to_owned()),
-            conversation_id: String::new(),
-            subject: String::new(),
-            from_name: String::new(),
-            from_addr: String::new(),
             received_at: format!("{day}T09:00:00Z").parse().unwrap(),
-            is_read: false,
-            flagged: false,
-            pinned: false,
-            importance: Default::default(),
-            has_attachments: false,
-            preview: String::new(),
+            ..crate::core::fake::message(id)
         }
     }
 

@@ -33,8 +33,6 @@ fn graph_message(id: &str, subject: &str) -> Value {
 
 fn message(id: &str, subject: &str) -> Message {
     Message {
-        id: MessageId(id.to_owned()),
-        folder_id: FolderId("inbox".to_owned()),
         conversation_id: "conv-1".to_owned(),
         subject: subject.to_owned(),
         from_name: "Ada Lovelace".to_owned(),
@@ -42,10 +40,10 @@ fn message(id: &str, subject: &str) -> Message {
         received_at: "2026-10-24T08:15:00Z".parse().unwrap(),
         is_read: true,
         flagged: true,
-        pinned: false,
         importance: Importance::High,
         has_attachments: true,
         preview: "Attached are my notes".to_owned(),
+        ..tuilook::core::fake::message(id)
     }
 }
 

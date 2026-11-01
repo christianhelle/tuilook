@@ -1,25 +1,13 @@
 use tuilook::core::{fake::FakeBackend, load_body, sync_folders, sync_messages};
 use tuilook::model::{
-    Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder, FolderId, Importance,
-    Message, MessageId,
+    Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder, FolderId, Message, MessageId,
 };
 use tuilook::store::Store;
 
 fn message(id: &str) -> Message {
     Message {
-        id: MessageId(id.to_owned()),
         folder_id: FolderId("f1".to_owned()),
-        conversation_id: String::new(),
-        subject: String::new(),
-        from_name: String::new(),
-        from_addr: String::new(),
-        received_at: jiff::Timestamp::UNIX_EPOCH,
-        is_read: false,
-        flagged: false,
-        pinned: false,
-        importance: Importance::Normal,
-        has_attachments: false,
-        preview: String::new(),
+        ..tuilook::core::fake::message(id)
     }
 }
 
@@ -35,12 +23,9 @@ async fn synced(backend: &FakeBackend) -> Store {
 fn backend_with_body(content: &str) -> FakeBackend {
     FakeBackend {
         folders: vec![Folder {
-            id: FolderId("f1".to_owned()),
-            parent_id: None,
             name: "Inbox".to_owned(),
-            well_known: None,
-            unread: 0,
             total: 1,
+            ..tuilook::core::fake::folder("f1")
         }],
         messages: [(FolderId("f1".to_owned()), vec![message("m1")])].into(),
         bodies: [(

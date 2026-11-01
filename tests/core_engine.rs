@@ -11,14 +11,7 @@ use tuilook::model::{
 use tuilook::store::Store;
 
 fn folder(id: &str) -> Folder {
-    Folder {
-        id: FolderId(id.to_owned()),
-        parent_id: None,
-        name: id.to_owned(),
-        well_known: None,
-        unread: 0,
-        total: 0,
-    }
+    tuilook::core::fake::folder(id)
 }
 
 fn start(backend: FakeBackend) -> (mpsc::UnboundedSender<Command>, mpsc::Receiver<Event>) {
@@ -143,19 +136,8 @@ async fn mark_read_tells_the_backend_and_reports_the_folder_changed() {
     let mut inbox = folder("a");
     inbox.unread = 1;
     let message = Message {
-        id: MessageId("m1".to_owned()),
         folder_id: FolderId("a".to_owned()),
-        conversation_id: String::new(),
-        subject: String::new(),
-        from_name: String::new(),
-        from_addr: String::new(),
-        received_at: jiff::Timestamp::UNIX_EPOCH,
-        is_read: false,
-        flagged: false,
-        pinned: false,
-        importance: Importance::Normal,
-        has_attachments: false,
-        preview: String::new(),
+        ..tuilook::core::fake::message("m1")
     };
     let backend = FakeBackend {
         folders: vec![inbox],
@@ -299,19 +281,9 @@ async fn a_blocked_account_is_reported_as_blocked() {
 
 fn old(id: &str, day: i64) -> Message {
     Message {
-        id: MessageId(id.to_owned()),
         folder_id: FolderId("a".to_owned()),
-        conversation_id: String::new(),
-        subject: String::new(),
-        from_name: String::new(),
-        from_addr: String::new(),
         received_at: jiff::Timestamp::from_second(day * 86_400).unwrap(),
-        is_read: false,
-        flagged: false,
-        pinned: false,
-        importance: Importance::Normal,
-        has_attachments: false,
-        preview: String::new(),
+        ..tuilook::core::fake::message(id)
     }
 }
 

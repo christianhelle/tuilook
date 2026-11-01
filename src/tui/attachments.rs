@@ -145,19 +145,9 @@ mod tests {
     fn reading(attachments: &[&str]) -> AppState {
         let mut app = AppState::default();
         app.set_messages(vec![Message {
-            id: MessageId("m1".to_owned()),
-            folder_id: FolderId("inbox".to_owned()),
-            conversation_id: String::new(),
-            subject: String::new(),
-            from_name: String::new(),
-            from_addr: String::new(),
-            received_at: jiff::Timestamp::UNIX_EPOCH,
             is_read: true,
-            flagged: false,
-            pinned: false,
-            importance: Importance::Normal,
             has_attachments: !attachments.is_empty(),
-            preview: String::new(),
+            ..crate::core::fake::message("m1")
         }]);
         let attachments = attachments.iter().map(|id| attachment(id)).collect();
         app.body_loaded(MessageId("m1".to_owned()), String::new(), attachments);

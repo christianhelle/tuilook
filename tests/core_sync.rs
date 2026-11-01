@@ -1,18 +1,16 @@
 use tuilook::core::{fake::FakeBackend, sync_folders, sync_messages};
 use tuilook::model::{
-    BackendError, DeltaPage, Folder, FolderId, Importance, Message, MessageChange, MessageId,
-    WellKnown,
+    BackendError, DeltaPage, Folder, FolderId, Message, MessageChange, MessageId, WellKnown,
 };
 use tuilook::store::Store;
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>) -> Folder {
     Folder {
-        id: FolderId(id.to_owned()),
-        parent_id: None,
         name: name.to_owned(),
         well_known,
         unread: 1,
         total: 2,
+        ..tuilook::core::fake::folder(id)
     }
 }
 
@@ -40,19 +38,12 @@ async fn syncing_folders_stores_the_backend_folder_tree() {
 
 fn message(id: &str, received_at: &str) -> Message {
     Message {
-        id: MessageId(id.to_owned()),
         folder_id: FolderId("f1".to_owned()),
-        conversation_id: String::new(),
         subject: format!("Subject {id}"),
         from_name: "Ada".to_owned(),
         from_addr: "ada@example.com".to_owned(),
         received_at: received_at.parse().unwrap(),
-        is_read: false,
-        flagged: false,
-        pinned: false,
-        importance: Importance::Normal,
-        has_attachments: false,
-        preview: String::new(),
+        ..tuilook::core::fake::message(id)
     }
 }
 

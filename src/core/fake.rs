@@ -9,8 +9,39 @@ use jiff::Timestamp;
 
 use crate::model::{
     Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, BackendError, Body,
-    DeltaPage, Draft, Folder, FolderId, MailBackend, Message, MessageId, OlderPage,
+    DeltaPage, Draft, Folder, FolderId, Importance, MailBackend, Message, MessageId, OlderPage,
 };
+
+/// A folder with no parent, called `id`, and no mail, to start a test from.
+pub fn folder(id: &str) -> Folder {
+    Folder {
+        id: FolderId(id.to_owned()),
+        parent_id: None,
+        name: id.to_owned(),
+        well_known: None,
+        unread: 0,
+        total: 0,
+    }
+}
+
+/// An empty unread message in `inbox`, to start a test from.
+pub fn message(id: &str) -> Message {
+    Message {
+        id: MessageId(id.to_owned()),
+        folder_id: FolderId("inbox".to_owned()),
+        conversation_id: String::new(),
+        subject: String::new(),
+        from_name: String::new(),
+        from_addr: String::new(),
+        received_at: Timestamp::UNIX_EPOCH,
+        is_read: false,
+        flagged: false,
+        pinned: false,
+        importance: Importance::Normal,
+        has_attachments: false,
+        preview: String::new(),
+    }
+}
 
 /// Older messages the fake hands out at a time.
 pub const OLDER_PAGE: usize = 2;

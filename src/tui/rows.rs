@@ -107,12 +107,9 @@ mod tests {
 
     fn folder(id: &str, unread: u32) -> Folder {
         Folder {
-            id: FolderId(id.to_owned()),
-            parent_id: None,
-            name: id.to_owned(),
-            well_known: None,
             unread,
             total: unread,
+            ..crate::core::fake::folder(id)
         }
     }
 

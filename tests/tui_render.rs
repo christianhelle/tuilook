@@ -5,7 +5,7 @@ use ratatui::{
 };
 use tuilook::model::{
     Action, Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Folder, FolderId,
-    Importance, Message, MessageId, WellKnown, sort_folders,
+    Message, MessageId, WellKnown, sort_folders,
 };
 use tuilook::tui::{
     app::{AppState, Pane},
@@ -18,30 +18,21 @@ use tuilook::tui::{
 
 fn folder(id: &str, name: &str, well_known: Option<WellKnown>, unread: u32) -> Folder {
     Folder {
-        id: FolderId(id.to_owned()),
-        parent_id: None,
         name: name.to_owned(),
         well_known,
         unread,
         total: 10,
+        ..tuilook::core::fake::folder(id)
     }
 }
 
 fn message(id: &str, from: &str, subject: &str, preview: &str) -> Message {
     Message {
-        id: MessageId(id.to_owned()),
-        folder_id: FolderId("inbox".to_owned()),
-        conversation_id: String::new(),
         subject: subject.to_owned(),
         from_name: from.to_owned(),
         from_addr: format!("{}@example.com", from.to_lowercase()),
-        received_at: jiff::Timestamp::UNIX_EPOCH,
-        is_read: false,
-        flagged: false,
-        pinned: false,
-        importance: Importance::Normal,
-        has_attachments: false,
         preview: preview.to_owned(),
+        ..tuilook::core::fake::message(id)
     }
 }
 
