@@ -2489,7 +2489,7 @@ Ada"
         let mut app = in_message_list(&["m0", "m1"]);
         app.update(Action::Calendar);
 
-        app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(1)));
+        app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
 
         assert_eq!(app.selected_message, 0);
     }
