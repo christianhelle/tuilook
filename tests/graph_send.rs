@@ -15,6 +15,7 @@ fn draft(kind: ComposeKind) -> Draft {
         cc: vec![],
         subject: "RE: Engine".to_owned(),
         body: "Agreed.\nSee you <then> & there".to_owned(),
+        attachments: vec![],
     }
 }
 
@@ -45,6 +46,7 @@ async fn a_new_message_is_sent_as_plain_text_and_kept_in_sent_items() {
             cc: vec!["grace@example.com".to_owned()],
             subject: "Hello".to_owned(),
             body: "Hi there".to_owned(),
+            attachments: vec![],
         })
         .await
         .unwrap();
@@ -180,6 +182,7 @@ fn new_message() -> Draft {
         cc: vec![],
         subject: "Hello".to_owned(),
         body: "Hi".to_owned(),
+        attachments: vec![],
     }
 }
 

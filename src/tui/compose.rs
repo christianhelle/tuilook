@@ -105,6 +105,7 @@ impl Compose {
                 cc: vec![],
                 subject: String::new(),
                 body: String::new(),
+                attachments: vec![],
             },
         };
         if field == Field::Body {
@@ -187,6 +188,7 @@ impl Compose {
             cc: parse_addresses(self.cc.text()),
             subject: self.subject.text().to_owned(),
             body: self.body.text(),
+            attachments: vec![],
         }
     }
 
@@ -557,6 +559,7 @@ Grace",
                 cc: vec![],
                 subject: "RE: Engine".to_owned(),
                 body: "Agreed".to_owned(),
+                attachments: vec![],
             })
         );
         assert!(compose.sending);

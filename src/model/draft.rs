@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::model::MessageId;
 
 /// What a new message answers, if anything.
@@ -19,6 +21,8 @@ pub struct Draft {
     pub subject: String,
     /// Plain text. A reply or forward gets the original quoted below it.
     pub body: String,
+    /// Files to attach.
+    pub attachments: Vec<PathBuf>,
 }
 
 /// Splits a list of addresses typed by hand, separated by commas or semicolons.

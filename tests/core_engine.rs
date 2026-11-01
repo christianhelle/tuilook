@@ -243,6 +243,7 @@ fn draft(to: &str) -> Draft {
         cc: vec![],
         subject: "Hello".to_owned(),
         body: "Hi".to_owned(),
+        attachments: vec![],
     }
 }
 

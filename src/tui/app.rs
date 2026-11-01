@@ -2134,6 +2134,7 @@ Dear Charles,"
                 cc: vec![],
                 subject: "RE: m1".to_owned(),
                 body: "Thanks".to_owned(),
+                attachments: vec![],
             }))
         );
         assert_eq!(app.selected_message, 1, "j and k were typed, not moved");
