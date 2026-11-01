@@ -1215,7 +1215,7 @@ fn draw_confirm_discard(frame: &mut Frame, title: &str, question: &str) {
 }
 
 /// What each key does while writing a message, shown with `?` in normal mode.
-pub const COMPOSE_HELP: [(&str, &str); 12] = [
+pub const COMPOSE_HELP: [(&str, &str); 13] = [
     ("Tab / Shift-Tab", "Next field / previous field"),
     ("Enter  ↑ ↓", "Move between From, To, Cc and Subject"),
     ("← →  in From", "Change the account it is sent from"),
@@ -1224,6 +1224,7 @@ pub const COMPOSE_HELP: [(&str, &str); 12] = [
     ("Esc", "Back to normal mode"),
     ("h j k l w b e 0 $ gg G", "Move in the body"),
     ("dd cw x p u Ctrl-R v V", "Edit vim style"),
+    ("Ctrl-A", "Attach a file (Tab to it, d takes it off)"),
     ("Ctrl-S", "Send"),
     (
         "Esc in normal mode",
@@ -1315,8 +1316,8 @@ pub const HELP: [(&str, &str); 22] = [
     ("d", "Move marked, selected or folder to Deleted Items"),
     ("D", "Delete marked, selected or folder for good"),
     (
-        "m  p  F Insert",
-        "Move, pin or flag the marked or selected mail",
+        "m  p  F Insert  s",
+        "Move, pin or flag mail; save its files",
     ),
     ("a  A  F2", "New subfolder, new top folder, rename folder"),
     (
