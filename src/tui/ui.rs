@@ -620,16 +620,15 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
             " c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help",
         ),
         None if picking => Span::raw(" y copy · Esc cancel"),
-        // Saving is offered only once the selected mail's files are known,
-        // in place of keys less needed then, so the bar still fits.
-        None if app.focus == Pane::Reader && !app.attachments.is_empty() => {
-            Span::raw(" v V pick · yy copy · s save files · ← → next/prev mail · r reply · ? help")
-        }
+        // Saving is offered only once the selected mail's files are known.
+        None if app.focus == Pane::Reader && !app.attachments.is_empty() => Span::raw(
+            " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit · s save files",
+        ),
         None if app.focus == Pane::Reader => {
             Span::raw(" v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit")
         }
         None if !app.attachments.is_empty() => Span::raw(
-            " ? help · s save files · Tab switch pane · Enter open · c write · r reply · q quit",
+            " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit · s save files",
         ),
         None => Span::raw(
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit",

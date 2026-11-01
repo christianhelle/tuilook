@@ -161,16 +161,26 @@ fn reading_pane_lists_the_attached_files() {
 }
 
 #[test]
-fn the_focused_reader_says_how_to_save_the_attached_files() {
+fn the_help_bar_ends_saying_how_to_save_the_attached_files() {
     let mut app = sample_app();
     app.body_loaded(
         MessageId("m1".to_owned()),
         "Dear Charles,".to_owned(),
         vec![attachment("a1", "report.pdf", 1_258_291)],
     );
-    app.focus = Pane::Reader;
+    // The hint comes last, so it takes a terminal this wide to show it.
+    let mut terminal = Terminal::new(TestBackend::new(120, 12)).unwrap();
+    let mut help_bar = |app: &AppState| {
+        terminal.draw(|frame| ui::draw(frame, app)).unwrap();
+        let screen = terminal.backend().to_string();
+        screen.lines().last().unwrap_or_default().to_owned()
+    };
 
-    insta::assert_snapshot!(render(&app));
+    let in_the_messages = help_bar(&app);
+    app.focus = Pane::Reader;
+    let in_the_reader = help_bar(&app);
+
+    insta::assert_snapshot!(format!("{in_the_messages}\n{in_the_reader}"));
 }
 
 #[test]
