@@ -1,5 +1,5 @@
 use tuilook::model::{
-    Appointment, AppointmentId, Body, BodyType, Folder, FolderId, Importance, Message,
+    Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder, FolderId, Importance, Message,
     MessageChange, MessageId, WellKnown,
 };
 use tuilook::store::Store;
@@ -180,6 +180,8 @@ fn opening_a_cache_blanked_by_partial_changes_drops_them_and_resyncs() {
         .unwrap();
     // Or a calendar.
     conn.execute("DROP TABLE appointments", []).unwrap();
+    // Or attachments.
+    conn.execute("DROP TABLE attachments", []).unwrap();
     drop(conn);
 
     let store = Store::open(&path).unwrap();
@@ -321,6 +323,39 @@ fn a_fetched_body_is_cached_until_its_message_is_deleted() {
 
     store.delete_messages(std::slice::from_ref(&m.id)).unwrap();
     assert_eq!(store.body(&m.id).unwrap(), None);
+}
+
+#[test]
+fn attachments_are_cached_until_their_message_is_deleted() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .upsert_folders(&[folder("inbox", "Inbox", None)])
+        .unwrap();
+    let m = message("m1", "inbox", "2026-01-01T09:00:00Z");
+    store.upsert_messages(std::slice::from_ref(&m)).unwrap();
+    let attachments = [
+        Attachment {
+            id: AttachmentId("a1".to_owned()),
+            name: "report.pdf".to_owned(),
+            content_type: "application/pdf".to_owned(),
+            size: 1_200_000,
+            kind: AttachmentKind::File,
+        },
+        Attachment {
+            id: AttachmentId("a2".to_owned()),
+            name: "Minutes".to_owned(),
+            content_type: String::new(),
+            size: 4_000,
+            kind: AttachmentKind::Item,
+        },
+    ];
+    assert!(store.attachments(&m.id).unwrap().is_empty());
+
+    store.put_attachments(&m.id, &attachments).unwrap();
+    assert_eq!(store.attachments(&m.id).unwrap(), attachments);
+
+    store.delete_messages(std::slice::from_ref(&m.id)).unwrap();
+    assert!(store.attachments(&m.id).unwrap().is_empty());
 }
 
 #[test]

@@ -3,7 +3,7 @@
 use std::{collections::HashSet, sync::LazyLock};
 
 use crate::model::{
-    Appointment, AppointmentId, Body, BodyType, Folder, FolderId, Importance, Message,
+    Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder, FolderId, Importance, Message,
     MessageChange, MessageId, WellKnown, sort_folders,
 };
 use jiff::Timestamp;
@@ -17,6 +17,7 @@ static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(include_str!("migrations/003_resync_blanked_messages.sql")),
         M::up(include_str!("migrations/004_pinned.sql")),
         M::up(include_str!("migrations/005_appointments.sql")),
+        M::up(include_str!("migrations/006_attachments.sql")),
     ])
 });
 
@@ -324,6 +325,67 @@ impl Store {
             )
             .optional()?;
         Ok(body)
+    }
+
+    /// Keeps `attachments` as the files attached to `message`, in order,
+    /// in place of any kept before.
+    pub fn put_attachments(
+        &mut self,
+        message: &MessageId,
+        attachments: &[Attachment],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM attachments WHERE message_id = ?1", [&message.0])?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO attachments
+                     (message_id, id, position, name, content_type, size, kind)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            )?;
+            for (position, a) in attachments.iter().enumerate() {
+                let kind = match a.kind {
+                    AttachmentKind::File => "file",
+                    AttachmentKind::Item => "item",
+                    AttachmentKind::Reference => "reference",
+                };
+                stmt.execute((
+                    &message.0,
+                    &a.id.0,
+                    position as i64,
+                    &a.name,
+                    &a.content_type,
+                    // SQLite integers are signed; no attachment comes near.
+                    i64::try_from(a.size).unwrap_or(i64::MAX),
+                    kind,
+                ))?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The files kept as attached to `message`, in order.
+    pub fn attachments(&self, message: &MessageId) -> Result<Vec<Attachment>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, content_type, size, kind FROM attachments
+             WHERE message_id = ?1 ORDER BY position",
+        )?;
+        let attachments = stmt
+            .query_map([&message.0], |row| {
+                Ok(Attachment {
+                    id: AttachmentId(row.get(0)?),
+                    name: row.get(1)?,
+                    content_type: row.get(2)?,
+                    size: row.get::<_, i64>(3)?.try_into().unwrap_or(0),
+                    kind: match row.get::<_, String>(4)?.as_str() {
+                        "item" => AttachmentKind::Item,
+                        "reference" => AttachmentKind::Reference,
+                        _ => AttachmentKind::File,
+                    },
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(attachments)
     }
 
     /// Messages in one folder, pinned then newest first.
