@@ -446,6 +446,7 @@ impl AppState {
                 Request::Close => self.compose = None,
                 Request::ConfirmDiscard => self.dialog = Some(Dialog::Confirm(Confirm::Discard)),
                 Request::Help => self.dialog = Some(Dialog::Help),
+                Request::Attach => {}
                 Request::Invalid(why) => self.show_error(why),
             }
             return None;

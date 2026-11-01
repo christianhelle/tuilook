@@ -1,5 +1,7 @@
 //! Writing a message: the header fields, and a body edited vim style.
 
+use std::path::PathBuf;
+
 use crate::model::{ComposeKind, Draft, Message, parse_addresses};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -17,6 +19,8 @@ pub enum Field {
     To,
     Cc,
     Subject,
+    /// The files attached, there to pick from once there are any.
+    Attachments,
     Body,
 }
 
@@ -26,7 +30,8 @@ impl Field {
             Field::From => Field::To,
             Field::To => Field::Cc,
             Field::Cc => Field::Subject,
-            Field::Subject => Field::Body,
+            Field::Subject => Field::Attachments,
+            Field::Attachments => Field::Body,
             Field::Body => Field::From,
         }
     }
@@ -37,7 +42,8 @@ impl Field {
             Field::To => Field::From,
             Field::Cc => Field::To,
             Field::Subject => Field::Cc,
-            Field::Body => Field::Subject,
+            Field::Attachments => Field::Subject,
+            Field::Body => Field::Attachments,
         }
     }
 }
@@ -52,6 +58,8 @@ pub enum Request {
     /// Close the message once the user agrees to lose what they wrote.
     ConfirmDiscard,
     Help,
+    /// Pick a file to attach.
+    Attach,
     /// The message cannot be sent as it is, for this reason.
     Invalid(String),
 }
@@ -64,6 +72,10 @@ pub struct Compose {
     pub cc: TextInput,
     pub subject: TextInput,
     pub body: Editor,
+    /// The files to attach, in the order they were added.
+    pub attachments: Vec<PathBuf>,
+    /// The attached file picked, to take off.
+    pub picked_attachment: usize,
     pub field: Field,
     /// Whether the message has gone to core to send, so keys wait.
     pub sending: bool,
@@ -95,6 +107,8 @@ impl Compose {
             cc: TextInput::default(),
             subject: TextInput::from(subject.as_str()),
             body: Editor::default(),
+            attachments: vec![],
+            picked_attachment: 0,
             field,
             sending: false,
             account: 0,
@@ -166,16 +180,33 @@ impl Compose {
         self.from().is_some() && self.kind == ComposeKind::New
     }
 
+    /// Adds `file` to the files attached, once.
+    pub fn attach(&mut self, file: PathBuf) {
+        if !self.attachments.contains(&file) {
+            self.attachments.push(file);
+        }
+    }
+
+    /// Whether `field` has nothing to do: From with one account to send
+    /// from, or the attached files while there are none.
+    fn skips(&self, field: Field) -> bool {
+        match field {
+            Field::From => !self.can_switch_sender(),
+            Field::Attachments => self.attachments.is_empty(),
+            _ => false,
+        }
+    }
+
     fn next_field(&mut self) {
         self.field = self.field.next();
-        if self.field == Field::From && !self.can_switch_sender() {
+        while self.skips(self.field) {
             self.field = self.field.next();
         }
     }
 
     fn prev_field(&mut self) {
         self.field = self.field.prev();
-        if self.field == Field::From && !self.can_switch_sender() {
+        while self.skips(self.field) {
             self.field = self.field.prev();
         }
     }
@@ -188,7 +219,7 @@ impl Compose {
             cc: parse_addresses(self.cc.text()),
             subject: self.subject.text().to_owned(),
             body: self.body.text(),
-            attachments: vec![],
+            attachments: self.attachments.clone(),
         }
     }
 
@@ -206,6 +237,7 @@ impl Compose {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Char('s') if ctrl => return self.send(),
+            KeyCode::Char('a') if ctrl => return Request::Attach,
             KeyCode::Tab => self.next_field(),
             KeyCode::BackTab => self.prev_field(),
             _ if self.field == Field::Body => return self.body_key(key, page, register),
@@ -230,6 +262,7 @@ impl Compose {
             Field::Cc => &mut self.cc,
             Field::Subject => &mut self.subject,
             Field::From => return self.sender_key(key),
+            Field::Attachments => return self.attachments_key(key),
             Field::Body => unreachable!("the body has its own keys"),
         };
         match key.code {
@@ -250,6 +283,33 @@ impl Compose {
             KeyCode::Up => self.prev_field(),
             KeyCode::Right | KeyCode::Char(' ') => self.switch_sender(1),
             KeyCode::Left => self.switch_sender(self.senders.len() - 1),
+            _ => {}
+        }
+        Request::None
+    }
+
+    fn attachments_key(&mut self, key: KeyEvent) -> Request {
+        let last = self.attachments.len().saturating_sub(1);
+        match key.code {
+            KeyCode::Esc => return self.close(),
+            KeyCode::Enter | KeyCode::Down => self.next_field(),
+            KeyCode::Up => self.prev_field(),
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.picked_attachment = (self.picked_attachment + 1).min(last);
+            }
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.picked_attachment = self.picked_attachment.saturating_sub(1);
+            }
+            KeyCode::Char('d') | KeyCode::Delete | KeyCode::Backspace => {
+                if self.picked_attachment < self.attachments.len() {
+                    self.attachments.remove(self.picked_attachment);
+                }
+                let last = self.attachments.len().saturating_sub(1);
+                self.picked_attachment = self.picked_attachment.min(last);
+                if self.attachments.is_empty() {
+                    self.next_field();
+                }
+            }
             _ => {}
         }
         Request::None
@@ -321,6 +381,8 @@ fn prefixed(prefix: &str, subject: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use crate::model::{FolderId, MessageId};
 
     use super::*;
@@ -635,5 +697,58 @@ Grace"
         let mut compose = Compose::new(reply(), Some(&original()));
 
         assert_eq!(typing(&mut compose, "⎋?"), Request::Help);
+    }
+
+    fn ctrl_a(compose: &mut Compose) -> Request {
+        let ctrl_a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
+        compose.key(ctrl_a, 10, &mut Register::default())
+    }
+
+    #[test]
+    fn ctrl_a_asks_for_a_file_to_attach_from_any_field() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+
+        assert_eq!(ctrl_a(&mut compose), Request::Attach);
+        typing(&mut compose, "⎋⇥");
+        assert_eq!(ctrl_a(&mut compose), Request::Attach);
+    }
+
+    #[test]
+    fn an_attached_file_goes_with_the_message_and_counts_as_written() {
+        let mut compose = Compose::new(ComposeKind::New, None);
+
+        compose.attach(PathBuf::from("notes.txt"));
+
+        assert_eq!(compose.draft().attachments, [PathBuf::from("notes.txt")]);
+        assert_eq!(press(&mut compose, KeyCode::Esc), Request::ConfirmDiscard);
+    }
+
+    #[test]
+    fn tab_stops_at_the_attached_files_only_once_there_are_some() {
+        let mut compose = Compose::new(ComposeKind::New, None);
+        typing(&mut compose, "⇥⇥⇥");
+        assert_eq!(compose.field, Field::Body);
+
+        compose.attach(PathBuf::from("notes.txt"));
+        compose.field = Field::Subject;
+        typing(&mut compose, "⇥");
+        assert_eq!(compose.field, Field::Attachments);
+        typing(&mut compose, "⇥");
+        assert_eq!(compose.field, Field::Body);
+    }
+
+    #[test]
+    fn d_on_the_attached_files_takes_off_the_picked_one() {
+        let mut compose = Compose::new(ComposeKind::New, None);
+        compose.attach(PathBuf::from("a.txt"));
+        compose.attach(PathBuf::from("b.txt"));
+        compose.field = Field::Attachments;
+
+        typing(&mut compose, "→d");
+        assert_eq!(compose.draft().attachments, [PathBuf::from("a.txt")]);
+
+        typing(&mut compose, "d");
+        assert!(compose.draft().attachments.is_empty());
+        assert_eq!(compose.field, Field::Body, "nothing is left to pick");
     }
 }
