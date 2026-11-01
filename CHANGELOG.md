@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Attachments: the files attached to a message are listed under its subject.
+  `s` saves them to your Downloads folder, asking which when there are
+  several, without overwriting files already there. While writing, `Ctrl-A`
+  picks a file to attach in a file picker; `Tab` to the attached files and `d`
+  takes one off. Files of up to 150 MB can be sent.
+
 ## [0.1.3] - 2026-10-31
 
 ### Added
