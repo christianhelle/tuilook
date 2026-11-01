@@ -1,6 +1,6 @@
 use tuilook::model::{
-    Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder, FolderId, Importance, Message,
-    MessageChange, MessageId, WellKnown,
+    Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder,
+    FolderId, Importance, Message, MessageChange, MessageId, WellKnown,
 };
 use tuilook::store::Store;
 

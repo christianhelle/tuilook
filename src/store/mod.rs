@@ -3,8 +3,8 @@
 use std::{collections::HashSet, sync::LazyLock};
 
 use crate::model::{
-    Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder, FolderId, Importance, Message,
-    MessageChange, MessageId, WellKnown, sort_folders,
+    Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder,
+    FolderId, Importance, Message, MessageChange, MessageId, WellKnown, sort_folders,
 };
 use jiff::Timestamp;
 use rusqlite::{Connection, OptionalExtension, Row, types::Type};
@@ -335,7 +335,10 @@ impl Store {
         attachments: &[Attachment],
     ) -> Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM attachments WHERE message_id = ?1", [&message.0])?;
+        tx.execute(
+            "DELETE FROM attachments WHERE message_id = ?1",
+            [&message.0],
+        )?;
         {
             let mut stmt = tx.prepare(
                 "INSERT INTO attachments
