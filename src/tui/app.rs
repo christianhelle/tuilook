@@ -16,8 +16,6 @@ use ratatui::{
 };
 
 use crate::tui::{
-    agenda::Agenda,
-    appointment_form::AppointmentForm,
     attachments::{self, human_size},
     compose::{Compose, Request},
     dialog::Dialog,
@@ -274,11 +272,6 @@ pub struct AppState {
     /// When it is, read once a frame so a key and the drawing after it put
     /// mail in the same date groups. Unset, it is read whenever asked.
     pub clock: Option<Zoned>,
-    /// An account's calendar, which takes over the screen.
-    pub agenda: Option<Agenda>,
-    /// An appointment being written or changed, which takes over the
-    /// agenda.
-    pub appointment: Option<AppointmentForm>,
 }
 
 impl AppState {
@@ -434,10 +427,10 @@ impl AppState {
             }
             return None;
         }
-        if self.appointment.is_some() {
+        if self.screen.appointment().is_some() {
             return self.appointment_key(key);
         }
-        if self.agenda.is_some() {
+        if self.screen.agenda().is_some() {
             return self.agenda_key(key);
         }
         if self.typing_search() {
@@ -1030,7 +1023,7 @@ impl AppState {
                 Some(Effect::core(account, Command::DeleteAppointment(id)))
             }
             Confirm::DiscardAppointment => {
-                self.appointment = None;
+                self.screen.close_appointment();
                 None
             }
             Confirm::SendAnyway { draft, .. } => {

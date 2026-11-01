@@ -100,8 +100,8 @@ fn panes(area: Rect, app: &AppState) -> Panes {
     };
     let takes_over = app.screen.compose().is_some()
         || app.screen.signature().is_some()
-        || app.agenda.is_some()
-        || app.appointment.is_some();
+        || app.screen.agenda().is_some()
+        || app.screen.appointment().is_some();
     if takes_over {
         panes.compose = main;
         return panes;
@@ -174,9 +174,9 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         draw_signature(frame, app, editor, compose);
     }
     if app.screen.compose().is_none() && app.screen.signature().is_none() {
-        if let Some(form) = &app.appointment {
+        if let Some(form) = app.screen.appointment() {
             draw_appointment(frame, form, compose);
-        } else if let Some(agenda) = &app.agenda {
+        } else if let Some(agenda) = app.screen.agenda() {
             draw_agenda(frame, agenda, app.accounts.len(), compose);
         }
     }
@@ -192,8 +192,8 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
             let help: &[(&str, &str)] = match (app.screen.compose(), app.screen.signature()) {
                 (Some(_), _) => &COMPOSE_HELP,
                 (None, Some(_)) => &SIGNATURE_HELP,
-                (None, None) if app.appointment.is_some() => &APPOINTMENT_HELP,
-                (None, None) if app.agenda.is_some() => &AGENDA_HELP,
+                (None, None) if app.screen.appointment().is_some() => &APPOINTMENT_HELP,
+                (None, None) if app.screen.agenda().is_some() => &AGENDA_HELP,
                 (None, None) => &HELP,
             };
             draw_help(frame, help);
@@ -569,7 +569,7 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     let editing = match (
         app.screen.compose(),
         app.screen.signature(),
-        &app.appointment,
+        app.screen.appointment(),
     ) {
         (Some(compose), _, _) if compose.field == Field::Body => Some(&compose.body),
         (None, Some(editor), _) => Some(&editor.body),
@@ -610,17 +610,15 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
             Span::raw(" Ctrl-S send · Tab next field · Esc close · ? help")
         }
         None if app.screen.signature().is_some() => Span::raw(" Ctrl-S save · Esc close · ? help"),
-        None if app
-            .appointment
-            .as_ref()
+        None if app.screen.appointment()
             .is_some_and(|f| f.field == AppointmentField::AllDay) =>
         {
             Span::raw(" Space all day or not · Ctrl-S save · Tab next field · Esc close · ? help")
         }
-        None if app.appointment.is_some() => {
+        None if app.screen.appointment().is_some() => {
             Span::raw(" Ctrl-S save · Tab next field · Esc close · ? help")
         }
-        None if app.agenda.is_some() => Span::raw(
+        None if app.screen.agenda().is_some() => Span::raw(
             " c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help",
         ),
         None if picking => Span::raw(" y copy · Esc cancel"),
@@ -1777,7 +1775,7 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
         compose: match (app.screen.compose(), app.screen.signature()) {
             (Some(compose), _) => usize::from(compose_areas(panes.compose, compose).body.height),
             (None, Some(_)) => usize::from(signature_areas(panes.compose)[1].height),
-            (None, None) => app.appointment.as_ref().map_or(0, |form| {
+            (None, None) => app.screen.appointment().map_or(0, |form| {
                 usize::from(appointment_areas(panes.compose, form).notes.height)
             }),
         },

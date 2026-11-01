@@ -279,7 +279,7 @@ fn shift_c_opens_the_calendar_from_the_cache_and_syncs_it() {
     let effect = app.on_key(shift_c(), &mut Keymap::default());
     mailboxes.apply(&mut app, effect).unwrap();
 
-    assert_eq!(app.agenda.as_ref().unwrap().appointments(), [soon]);
+    assert_eq!(app.screen.agenda().unwrap().appointments(), [soon]);
     assert_eq!(sent(&mut rx), [Command::SyncCalendar]);
 }
 
@@ -296,7 +296,7 @@ fn a_synced_calendar_shows_in_the_open_agenda() {
     let mut app = AppState::default();
     let effect = app.on_key(shift_c(), &mut Keymap::default());
     mailboxes.apply(&mut app, effect).unwrap();
-    assert!(app.agenda.as_ref().unwrap().appointments().is_empty());
+    assert!(app.screen.agenda().unwrap().appointments().is_empty());
 
     let soon = appointment(
         "soon",
@@ -307,7 +307,7 @@ fn a_synced_calendar_shows_in_the_open_agenda() {
         .on_event(&mut app, 0, Event::CalendarSynced)
         .unwrap();
 
-    assert_eq!(app.agenda.as_ref().unwrap().appointments(), [soon]);
+    assert_eq!(app.screen.agenda().unwrap().appointments(), [soon]);
 }
 
 fn draft(subject: &str) -> AppointmentDraft {
@@ -376,7 +376,7 @@ fn an_unrelated_error_leaves_the_appointment_saving() {
         .on_event(&mut s.app, 0, Event::Error("a sync failed".to_owned()))
         .unwrap();
 
-    assert!(s.app.appointment.as_ref().unwrap().saving);
+    assert!(s.app.screen.appointment().unwrap().saving);
 }
 
 #[test]
@@ -393,7 +393,7 @@ fn a_failed_save_lets_the_appointment_be_saved_again() {
     let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
     let effect = s.app.on_key(ctrl_s, &mut Keymap::default());
     s.mailboxes.apply(&mut s.app, effect).unwrap();
-    assert!(s.app.appointment.as_ref().unwrap().saving);
+    assert!(s.app.screen.appointment().unwrap().saving);
 
     s.mailboxes
         .on_event(
@@ -403,7 +403,7 @@ fn a_failed_save_lets_the_appointment_be_saved_again() {
         )
         .unwrap();
 
-    assert!(!s.app.appointment.as_ref().unwrap().saving);
+    assert!(!s.app.screen.appointment().unwrap().saving);
     assert_eq!(
         s.app.status,
         Some(Status::Error(
@@ -445,7 +445,7 @@ fn tab_in_the_agenda_shows_the_next_accounts_cached_calendar_and_syncs_it() {
     let effect = app.on_key(KeyEvent::from(KeyCode::Tab), &mut Keymap::default());
     mailboxes.apply(&mut app, effect).unwrap();
 
-    let agenda = app.agenda.as_ref().unwrap();
+    let agenda = app.screen.agenda().unwrap();
     assert_eq!(agenda.address, "me@work.example");
     assert_eq!(agenda.appointments(), std::slice::from_ref(&calendars[1]));
     assert!(sent(&mut commands[0]).is_empty());

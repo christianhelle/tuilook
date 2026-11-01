@@ -9,6 +9,7 @@ use crate::tui::{
     app::{AppState, Confirm, Effect, Status},
     appointment_form::{self, AppointmentForm},
     dialog::Dialog,
+    screen::Screen,
 };
 use ratatui::crossterm::event::KeyEvent;
 
@@ -27,12 +28,15 @@ impl AppState {
     fn open_calendar_of(&mut self, account: usize) -> Option<Effect> {
         let address = self.accounts.get(account).cloned().unwrap_or_default();
         let now = self.now();
-        self.agenda = Some(Agenda::new(
-            account,
-            address,
-            now.time_zone().clone(),
-            now.date(),
-        ));
+        self.screen = Screen::Agenda {
+            agenda: Box::new(Agenda::new(
+                account,
+                address,
+                now.time_zone().clone(),
+                now.date(),
+            )),
+            form: None,
+        };
         Some(Effect::LoadAgenda {
             account,
             sync: true,
@@ -41,11 +45,11 @@ impl AppState {
 
     /// A key for the open agenda.
     pub(crate) fn agenda_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let agenda = self.agenda.as_mut()?;
+        let agenda = self.screen.agenda_mut()?;
         let account = agenda.account;
         match agenda.key(key) {
             agenda::Request::None => {}
-            agenda::Request::Close => self.agenda = None,
+            agenda::Request::Close => self.screen.close_agenda(),
             agenda::Request::Help => self.dialog = Some(Dialog::Help),
             agenda::Request::NextAccount => return self.switch_calendar(account, 1),
             agenda::Request::PrevAccount => {
@@ -64,11 +68,11 @@ impl AppState {
                     .filter(|day| *day >= today)
                     .unwrap_or(today);
                 let form = AppointmentForm::new(day, agenda.time_zone().clone());
-                self.appointment = Some(form);
+                self.screen.open_appointment(form);
             }
             agenda::Request::Edit(appointment) => {
                 let form = AppointmentForm::editing(&appointment, agenda.time_zone().clone());
-                self.appointment = Some(form);
+                self.screen.open_appointment(form);
             }
             agenda::Request::Delete(appointment) => {
                 self.dialog = Some(Dialog::Confirm(Confirm::DeleteAppointment {
@@ -93,8 +97,8 @@ impl AppState {
 
     /// A key for the appointment being written or changed.
     pub(crate) fn appointment_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let form = self.appointment.as_mut()?;
-        let account = self.agenda.as_ref().map_or(0, |a| a.account);
+        let account = self.screen.agenda()?.account;
+        let form = self.screen.appointment_mut()?;
         match form.key(key, self.viewport.compose, &mut self.register) {
             appointment_form::Request::None => {}
             appointment_form::Request::Save { id, draft } => {
@@ -105,7 +109,7 @@ impl AppState {
                 };
                 return Some(Effect::core(account, command));
             }
-            appointment_form::Request::Close => self.appointment = None,
+            appointment_form::Request::Close => self.screen.close_appointment(),
             appointment_form::Request::ConfirmDiscard => {
                 self.dialog = Some(Dialog::Confirm(Confirm::DiscardAppointment));
             }
@@ -117,13 +121,13 @@ impl AppState {
 
     /// Closes the appointment core saved, back to the agenda.
     pub fn appointment_saved(&mut self) {
-        self.appointment = None;
+        self.screen.close_appointment();
         self.show_info("Saved");
     }
 
     /// Lets the appointment being saved be saved again: core could not.
     pub fn appointment_not_saved(&mut self) {
-        if let Some(form) = &mut self.appointment {
+        if let Some(form) = self.screen.appointment_mut() {
             form.saving = false;
         }
     }
@@ -138,7 +142,7 @@ impl AppState {
     /// Shows `appointments`, `account`'s from the cache, if its agenda is
     /// open.
     pub fn appointments_loaded(&mut self, account: usize, appointments: Vec<Appointment>) {
-        if let Some(agenda) = self.agenda.as_mut().filter(|a| a.account == account) {
+        if let Some(agenda) = self.screen.agenda_mut().filter(|a| a.account == account) {
             agenda.set_appointments(appointments);
         }
     }
@@ -150,8 +154,8 @@ impl AppState {
         if self.status == Some(Status::Busy(SYNCING.to_owned())) {
             self.show_info("Up to date");
         }
-        self.agenda
-            .as_ref()
+        self.screen
+            .agenda()
             .filter(|a| a.account == account)
             .map(|_| Effect::LoadAgenda {
                 account,
@@ -222,7 +226,7 @@ mod tests {
 
         press(&mut app, KeyCode::Char('c'));
 
-        let form = app.appointment.as_ref().unwrap();
+        let form = app.screen.appointment().unwrap();
         assert_eq!(form.editing, None);
         assert_eq!(form.date.text(), "2026-11-03");
         assert_eq!(form.field, Field::Subject);
@@ -254,7 +258,7 @@ mod tests {
 
         press(&mut app, KeyCode::Char('e'));
 
-        let form = app.appointment.as_ref().unwrap();
+        let form = app.screen.appointment().unwrap();
         assert_eq!(form.editing, Some(AppointmentId("tomorrow".to_owned())));
         assert_eq!(form.subject.text(), "tomorrow");
     }
@@ -267,8 +271,8 @@ mod tests {
 
         app.appointment_saved();
 
-        assert!(app.appointment.is_none());
-        assert!(app.agenda.is_some());
+        assert!(app.screen.appointment().is_none());
+        assert!(app.screen.agenda().is_some());
         assert_eq!(app.status, Some(Status::Info("Saved".to_owned())));
     }
 
@@ -280,7 +284,16 @@ mod tests {
 
         app.appointment_not_saved();
 
-        assert!(!app.appointment.as_ref().unwrap().saving);
+        assert!(!app.screen.appointment().unwrap().saving);
+    }
+
+    #[test]
+    fn a_message_sent_after_moving_on_leaves_the_agenda_open() {
+        let mut app = in_agenda();
+
+        app.mail_sent(std::time::Instant::now());
+
+        assert!(app.screen.agenda().is_some());
     }
 
     #[test]
@@ -293,8 +306,8 @@ mod tests {
         assert_eq!(app.confirm(), Some(&Confirm::DiscardAppointment));
         press(&mut app, KeyCode::Char('y'));
 
-        assert!(app.appointment.is_none());
-        assert!(app.agenda.is_some());
+        assert!(app.screen.appointment().is_none());
+        assert!(app.screen.agenda().is_some());
     }
 
     #[test]
@@ -322,7 +335,7 @@ mod tests {
         app.accounts = ["me@outlook.com", "me@work.example", "me@uni.example"]
             .map(str::to_owned)
             .to_vec();
-        app.agenda = None;
+        app.screen.close_agenda();
         app.update(Action::Calendar);
         app
     }
@@ -339,7 +352,7 @@ mod tests {
             })
         );
 
-        let agenda = app.agenda.as_ref().unwrap();
+        let agenda = app.screen.agenda().unwrap();
         assert_eq!(
             (agenda.account, agenda.address.as_str()),
             (1, "me@work.example")
@@ -352,9 +365,9 @@ mod tests {
 
         press(&mut app, KeyCode::BackTab);
 
-        assert_eq!(app.agenda.as_ref().unwrap().account, 2);
+        assert_eq!(app.screen.agenda().unwrap().account, 2);
         press(&mut app, KeyCode::Tab);
-        assert_eq!(app.agenda.as_ref().unwrap().account, 0);
+        assert_eq!(app.screen.agenda().unwrap().account, 0);
     }
 
     #[test]
@@ -363,7 +376,7 @@ mod tests {
 
         assert_eq!(press(&mut app, KeyCode::Tab), None);
 
-        let agenda = app.agenda.as_ref().unwrap();
+        let agenda = app.screen.agenda().unwrap();
         assert_eq!(agenda.account, 0);
         assert_eq!(agenda.appointments().len(), 1);
     }
