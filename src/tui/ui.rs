@@ -583,7 +583,7 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
         let badge = Style::new().fg(Color::Black).bg(color);
         spans.push(Span::styled(format!(" {} ", mode.label()), badge));
     }
-    if let Some(search) = app.search.as_ref().filter(|s| s.editing) {
+    if let Some(search) = app.search.as_ref().filter(|_| app.typing_search()) {
         spans.push(Span::styled(" /", Style::new().fg(Color::Cyan)));
         let used = Line::from(spans.clone()).width();
         let (query, column) = typed(&search.query, usize::from(width).saturating_sub(used));

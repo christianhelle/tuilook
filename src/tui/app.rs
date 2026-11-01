@@ -537,7 +537,7 @@ impl AppState {
             }
             return None;
         }
-        if self.screen.compose().is_some() || self.screen.signature().is_some() {
+        if !matches!(self.screen, Screen::Panes) {
             return None;
         }
         let Hit { pane, item } = hit?;
@@ -2481,6 +2481,16 @@ Ada"
         );
 
         assert_eq!(app.dialog, None);
+        assert_eq!(app.selected_message, 0);
+    }
+
+    #[test]
+    fn the_mouse_waits_while_the_agenda_is_open() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.update(Action::Calendar);
+
+        app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(1)));
+
         assert_eq!(app.selected_message, 0);
     }
 

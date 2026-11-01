@@ -9,6 +9,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use crate::tui::{
     app::{AppState, Effect, Pane},
     input::TextInput,
+    screen::Screen,
 };
 
 /// The most results a search shows.
@@ -87,7 +88,7 @@ impl AppState {
 
     /// Whether keys go to the search query.
     pub fn typing_search(&self) -> bool {
-        self.search.as_ref().is_some_and(|s| s.editing)
+        matches!(self.screen, Screen::Panes) && self.search.as_ref().is_some_and(|s| s.editing)
     }
 
     /// The account a message shown is in: a result's own, or else the
