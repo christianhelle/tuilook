@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(app.account_for(&load("inbox").unwrap()), 0);
         assert_eq!(app.account_for(&load("work-inbox").unwrap()), 1);
         assert_eq!(
-            app.account_for(&Effect::LoadBody(crate::model::MessageId("m".to_owned()))),
+            app.message_account(&crate::model::MessageId("m".to_owned())),
             1
         );
     }

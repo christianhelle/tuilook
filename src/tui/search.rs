@@ -270,8 +270,7 @@ mod tests {
         let mut app = searched();
         let r2 = MessageId("r2".to_owned());
 
-        assert_eq!(app.account_for(&Effect::LoadBody(r2.clone())), 1);
-        assert_eq!(app.account_for(&Effect::MarkRead(r2)), 1);
+        assert_eq!(app.message_account(&r2), 1);
         app.focus = Pane::Messages;
         app.update(Action::SelectNext);
         app.update(Action::Reply);

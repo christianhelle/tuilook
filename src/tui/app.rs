@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::core::Command;
 use crate::model::{
     Action, AppointmentDraft, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId,
     Message, MessageId, sort_messages,
@@ -36,18 +37,20 @@ use crate::tui::{
 /// IO the event loop must perform after an update.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
+    /// Have `account`'s core do `command`.
+    Core {
+        account: usize,
+        command: Command,
+    },
     LoadFolder(FolderId),
     /// Show only the unread messages of a folder.
     LoadUnread(FolderId),
-    LoadBody(MessageId),
     /// Fetch a page of a folder's mail from before what sync reaches.
     LoadOlder {
         folder: FolderId,
         before: Timestamp,
         unread_only: bool,
     },
-    /// Mark a message read, as the reading pane shows it.
-    MarkRead(MessageId),
     /// Pin messages to the top of their folders, or unpin them.
     SetPinned {
         ids: Vec<MessageId>,
@@ -121,6 +124,12 @@ pub enum Effect {
         account: usize,
         id: AppointmentId,
     },
+}
+
+impl Effect {
+    pub fn core(account: usize, command: Command) -> Self {
+        Effect::Core { account, command }
+    }
 }
 
 /// A question the user must answer before anything else happens.
@@ -796,6 +805,11 @@ impl AppState {
         self.folder_account.get(index).copied().unwrap_or(0)
     }
 
+    /// Has the core of the account holding message `id` load its body.
+    pub(crate) fn load_body(&self, id: MessageId) -> Effect {
+        Effect::core(self.message_account(&id), Command::LoadBody(id))
+    }
+
     /// The account whose core must perform `effect`. A sync goes to every
     /// account instead.
     pub fn account_for(&self, effect: &Effect) -> usize {
@@ -808,9 +822,8 @@ impl AppState {
                 .iter()
                 .position(|f| &f.id == id)
                 .map_or(0, |index| self.account_of(index)),
-            Effect::LoadBody(id)
-            | Effect::MarkRead(id)
-            | Effect::SaveAttachments { message: id, .. } => self.message_account(id),
+            Effect::Core { account, .. } => *account,
+            Effect::SaveAttachments { message: id, .. } => self.message_account(id),
             Effect::Delete { .. }
             | Effect::SetPinned { .. }
             | Effect::SetFlagged { .. }
@@ -1184,7 +1197,8 @@ impl AppState {
             return None;
         }
         shown.is_read = true;
-        Some(Effect::MarkRead(message))
+        let account = self.message_account(&message);
+        Some(Effect::core(account, Command::MarkRead(message)))
     }
 
     /// The selected message; none while a date header is selected.
@@ -1319,7 +1333,7 @@ impl AppState {
         self.attachments.clear();
         self.reader_scroll = 0;
         self.viewer = Viewer::default();
-        self.selected().map(|m| Effect::LoadBody(m.id.clone()))
+        self.selected().map(|m| self.load_body(m.id.clone()))
     }
 
     fn open(&mut self) {
@@ -1738,7 +1752,7 @@ Dear Charles,"
     }
 
     fn load_body(id: &str) -> Option<Effect> {
-        Some(Effect::LoadBody(MessageId(id.to_owned())))
+        Some(Effect::core(0, Command::LoadBody(MessageId(id.to_owned()))))
     }
 
     #[test]
@@ -1778,7 +1792,7 @@ Dear Charles,"
 
         let effect = app.body_loaded(m1.clone(), "body".to_owned(), vec![]);
 
-        assert_eq!(effect, Some(Effect::MarkRead(m1.clone())));
+        assert_eq!(effect, Some(Effect::core(0, Command::MarkRead(m1.clone()))));
         assert!(app.messages[0].is_read);
         assert_eq!(app.body_loaded(m1, "again".to_owned(), vec![]), None);
     }

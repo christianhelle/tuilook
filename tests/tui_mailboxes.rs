@@ -111,7 +111,10 @@ fn a_core_too_busy_to_take_commands_does_not_hold_up_the_ui() {
     let mut s = setup(&[&[message("m1", "Hello")]]);
 
     for _ in 0..100 {
-        let load = Some(Effect::LoadBody(MessageId("m1".to_owned())));
+        let load = Some(Effect::core(
+            0,
+            Command::LoadBody(MessageId("m1".to_owned())),
+        ));
         s.mailboxes.apply(&mut s.app, load).unwrap();
     }
 

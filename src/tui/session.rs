@@ -113,12 +113,13 @@ impl AppState {
         }
         self.selected_message = index;
         self.selected_group = folded;
-        folded.is_none().then_some(Effect::LoadBody(id))
+        folded.is_none().then(|| self.load_body(id))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::core::Command;
     use crate::model::{Folder, Message};
 
     use super::*;
@@ -159,7 +160,13 @@ mod tests {
         app.set_messages(vec![message("m1"), message("m2")]);
         let effect = app.select_message("m2");
 
-        assert_eq!(effect, Some(Effect::LoadBody(MessageId("m2".to_owned()))));
+        assert_eq!(
+            effect,
+            Some(Effect::core(
+                0,
+                Command::LoadBody(MessageId("m2".to_owned()))
+            ))
+        );
         assert_eq!(Snapshot::of(&app), snapshot);
     }
 

@@ -184,12 +184,12 @@ impl Mailboxes {
         while let Some(next) = effect.or_else(|| app.older_wanted()) {
             let Mailbox { store, commands } = &mailboxes[app.account_for(&next)];
             effect = match next {
-                Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
-                Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
-                Effect::LoadBody(id) => {
-                    commands.send(Command::LoadBody(id))?;
+                Effect::Core { command, .. } => {
+                    commands.send(command)?;
                     None
                 }
+                Effect::LoadFolder(id) => app.set_messages(store.messages_in(&id)?),
+                Effect::LoadUnread(id) => app.set_messages(store.unread_in(&id, &[])?),
                 Effect::LoadOlder {
                     folder,
                     before,
@@ -217,10 +217,6 @@ impl Mailboxes {
                 }
                 Effect::Move { ids, to, .. } => {
                     commands.send(Command::Move { ids, to })?;
-                    None
-                }
-                Effect::MarkRead(id) => {
-                    commands.send(Command::MarkRead(id))?;
                     None
                 }
                 Effect::Sync => {
