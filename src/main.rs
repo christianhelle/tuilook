@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use jiff::Zoned;
+use jiff::{Timestamp, Zoned};
 use ratatui::{
     crossterm::{
         cursor::SetCursorStyle,
@@ -19,7 +19,7 @@ use ratatui::{
 use tokio::sync::mpsc;
 use tuilook::accounts::{Account, Accounts};
 use tuilook::auth::{
-    KeyringStore, MemoryStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider,
+    KeyringStore, MemoryStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider, http_client,
 };
 use tuilook::core::{run_engine, sync_folders, sync_messages};
 use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
@@ -34,6 +34,7 @@ use tuilook::tui::{
     screen::Cursor,
     session, ui,
 };
+use tuilook::update;
 
 /// Delegated Graph scopes; contacts can be added later.
 const SCOPES: [&str; 6] = [
@@ -97,6 +98,8 @@ enum CliCommand {
     Accounts,
     /// Sync every account's folders once, without the UI.
     Sync,
+    /// Ask GitHub whether a newer tuilook has been released.
+    CheckUpdate,
 }
 
 fn main() -> Result<()> {
@@ -116,6 +119,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some(CliCommand::Sync) => runtime.block_on(sync_once(&cli)),
+        Some(CliCommand::CheckUpdate) => runtime.block_on(check_update()),
         None if cli.demo => {
             let mut mailboxes = Vec::new();
             for (index, (address, backend)) in demo::accounts().into_iter().enumerate() {
@@ -331,12 +335,43 @@ fn cache_path(address: &str) -> Result<PathBuf> {
     Ok(dir.join("cache.db"))
 }
 
+fn cache_dir() -> Result<PathBuf> {
+    let dirs = directories::ProjectDirs::from("", "", "tuilook")
+        .context("no home directory to keep tuilook's cache in")?;
+    std::fs::create_dir_all(dirs.cache_dir())?;
+    Ok(dirs.cache_dir().to_owned())
+}
+
 /// Where the place the user was when they quit is kept.
 fn session_path() -> Result<PathBuf> {
-    let dirs = directories::ProjectDirs::from("", "", "tuilook")
-        .context("no home directory to keep the session in")?;
-    std::fs::create_dir_all(dirs.cache_dir())?;
-    Ok(dirs.cache_dir().join("session.json"))
+    Ok(cache_dir()?.join("session.json"))
+}
+
+/// Where the last check for a newer tuilook is kept.
+fn update_check_path() -> Result<PathBuf> {
+    Ok(cache_dir()?.join("update-check.json"))
+}
+
+/// Tells the user whether a newer tuilook has been released.
+async fn check_update() -> Result<()> {
+    let release = update::check(
+        &http_client(),
+        update::GITHUB_API,
+        &update_check_path()?,
+        Timestamp::now(),
+    )
+    .await
+    .context("could not check for updates")?;
+    let current = update::current();
+    if update::newer(&current, &release.version) {
+        println!(
+            "tuilook {} is available (you have {current}): {}",
+            release.version, release.url
+        );
+    } else {
+        println!("tuilook {current} is up to date.");
+    }
+    Ok(())
 }
 
 /// Deletes a SQLite database along with its WAL files.
@@ -492,5 +527,12 @@ mod tests {
 
         let cli = Cli::try_parse_from(["otlk", "--sync-every", "0"]).unwrap();
         assert_eq!(sync_every(&cli), None);
+    }
+
+    #[test]
+    fn check_update_is_a_command() {
+        let cli = Cli::try_parse_from(["otlk", "check-update"]).unwrap();
+
+        assert!(matches!(cli.command, Some(CliCommand::CheckUpdate)));
     }
 }
