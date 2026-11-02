@@ -529,6 +529,23 @@ a script:
 otlk sync
 ```
 
+## Updates
+
+When the mail client starts, tuilook asks GitHub for its latest release, at most
+once a day. If there is a newer one, the status line shows `update` and its
+version until you quit. tuilook never installs anything itself, so update the
+way you [installed](#install) it.
+
+To ask at any time, and get a link to the release:
+
+```bash
+otlk check-update
+```
+
+To stop the check at start, pass `--no-update-check` or set
+`TUILOOK_NO_UPDATE_CHECK=1`. tuilook then only contacts GitHub when you run
+`otlk check-update`. `otlk --demo` never checks.
+
 ## Options
 
 | Option | Environment variable | Default | Meaning |
@@ -537,6 +554,7 @@ otlk sync
 | `--sync-every <seconds>` | `TUILOOK_SYNC_EVERY` | `60` | Seconds between checks for new mail; `0` turns it off |
 | `--tenant <tenant>` | `TUILOOK_TENANT` | `consumers` | `consumers`, `organizations`, `common` or a tenant ID to sign in to |
 | `--client-id <id>` | `TUILOOK_CLIENT_ID` | tuilook's own | Entra ID app (client) ID to sign in with |
+| `--no-update-check` | `TUILOOK_NO_UPDATE_CHECK` | | Don't ask GitHub for a newer tuilook when the mail client starts |
 
 | Command | What it does |
 | --- | --- |
@@ -545,6 +563,7 @@ otlk sync
 | `otlk logout [address]` | Forget an account's sign-in and cached mail |
 | `otlk accounts` | List the signed-in accounts |
 | `otlk sync` | Sync every account's folders once, without the UI |
+| `otlk check-update` | Ask GitHub whether a newer tuilook has been released |
 
 ## Where tuilook keeps things
 
@@ -558,6 +577,7 @@ otlk sync
 - **Last session:** `session.json` in tuilook's cache folder: `~/.cache/tuilook`
   on Linux, `~/Library/Caches/tuilook` on macOS, `%LOCALAPPDATA%\tuilook\cache`
   on Windows.
+- **Last update check:** `update-check.json` in the cache folder.
 
 ## License
 
