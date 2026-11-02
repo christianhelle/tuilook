@@ -1,0 +1,20 @@
+---
+source: tests/tui_render.rs
+expression: render_tall(&app)
+---
+"┌ Favorites ─────┐┌ Messages ────────────────────────────────────────────────────────────┐"
+"│* adds the selec││  ▾ Older (2)                                                         │"
+"└────────────────┘│> Ada                                                                 │"
+"┌ Unread ────────┐│    Analytical engine                                                 │"
+"│No unread mail  ││                                                                      │"
+"└────────────────┘└──────────────────────────────────────────────────────────────────────┘"
+"┏ Folders ━━━━━━━┓┌ Reading ─────────────────────────────────────────────────────────────┐"
+"┃>   Inbox (2)   ┃│1   From: Ada <ada@example.com>                                       │"
+"┃    Sent Items  ┃│  1 Subject: Analytical engine                                        │"
+"┃    Projects    ┃│  2                                                                   │"
+"┃                ┃│  3 Notes on the engine                                               │"
+"┃                ┃│                                                                      │"
+"┃                ┃│                                                                      │"
+"┃                ┃│                                                                      │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────────────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "

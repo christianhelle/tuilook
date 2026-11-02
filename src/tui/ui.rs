@@ -113,6 +113,15 @@ fn panes(area: Rect, app: &AppState) -> Panes {
                 Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                     .areas(main);
         }
+        None if app.reader_below => {
+            let [folders, right] =
+                Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+                    .areas(main);
+            panes.folders = folders;
+            [panes.messages, panes.reader] =
+                Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)])
+                    .areas(right);
+        }
         None => {
             [panes.folders, panes.messages, panes.reader] = Layout::horizontal([
                 Constraint::Percentage(20),

@@ -1088,3 +1088,22 @@ fn with_several_accounts_the_agenda_says_which_and_how_to_switch() {
 
     insta::assert_snapshot!(render(&app));
 }
+
+/// The pane at a point of a screen 100 wide and 41 tall. Without the status
+/// bar that leaves 40 rows: the folders take the first 20 columns, and in the
+/// other 80 the messages take the top 16 rows above the reader's 24.
+fn pane_at(app: &AppState, column: u16, row: u16) -> Option<Pane> {
+    let area = ratatui::layout::Rect::new(0, 0, 100, 41);
+    ui::hit(area, app, column, row).map(|hit| hit.pane)
+}
+
+#[test]
+fn the_reader_can_sit_below_the_messages() {
+    let mut app = sample_app();
+    app.reader_below = true;
+
+    assert_eq!(pane_at(&app, 50, 15), Some(Pane::Messages));
+    assert_eq!(pane_at(&app, 50, 16), Some(Pane::Reader));
+    assert_eq!(pane_at(&app, 5, 30), Some(Pane::Folders));
+    insta::assert_snapshot!(render_tall(&app));
+}

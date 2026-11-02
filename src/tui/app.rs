@@ -234,6 +234,8 @@ pub struct AppState {
     /// Whether the focused pane fills the screen.
     pub zoomed: bool,
     pub folders_hidden: bool,
+    /// Whether the reading pane sits below the message list, not right of it.
+    pub reader_below: bool,
     /// Messages picked for acting on together, such as deleting.
     pub marked: BTreeSet<MessageId>,
     /// The dialog over the panes, which takes every key.
