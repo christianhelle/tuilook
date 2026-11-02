@@ -1147,3 +1147,15 @@ fn shift_l_works_from_the_reading_pane() {
     assert_eq!(pane_at(&app, 50, 20), Some(Pane::Reader));
     assert_eq!(app.focus, Pane::Reader);
 }
+
+#[test]
+fn a_zoomed_pane_ignores_where_the_reader_sits() {
+    let mut app = sample_app();
+    app.focus = Pane::Reader;
+    app.zoomed = true;
+    let beside = render(&app);
+
+    app.reader_below = true;
+
+    assert_eq!(render(&app), beside);
+}
