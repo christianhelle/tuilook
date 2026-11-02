@@ -7,3 +7,4 @@ pub mod graph;
 pub mod model;
 pub mod store;
 pub mod tui;
+pub mod update;
