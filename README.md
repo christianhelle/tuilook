@@ -233,10 +233,14 @@ Three panes: folders, the messages in the selected folder, and the message you
 are reading. `Tab` and `Shift-Tab` move between them, or click a pane with the
 mouse. Press `?` at any time to see every key.
 
+The message you are reading sits right of the messages. On a screen taller than
+it is wide, `L` moves it below them, and pressing `L` again moves it back.
+
 ![The keys, shown over the panes after pressing ?](images/help.jpg)
 
 tuilook remembers where you were when you quit (folder, message, focused pane,
-zoom, expanded folders and favorites) and picks up there next time.
+zoom, where the reading pane sits, expanded folders and favorites) and picks up
+there next time.
 
 ## Reading mail
 
@@ -252,6 +256,7 @@ zoom, expanded folders and favorites) and picks up there next time.
 | `gg` `G` or `Home` `End` | Jump to the first or last |
 | `z` | Zoom the focused pane, or show every pane again |
 | `b` | Hide or show the folders |
+| `L` | Move the reading pane below the messages, or back right of them |
 | `F5` or `Ctrl-R` | Sync every folder now |
 | `?` | Show the keys |
 | `q` or `Ctrl-C` | Quit |
