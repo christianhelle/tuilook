@@ -1131,3 +1131,19 @@ fn shift_l_moves_the_reader_and_back() {
     assert_eq!(pane_at(&app, 50, 20), Some(Pane::Messages));
     assert_eq!(pane_at(&app, 70, 5), Some(Pane::Reader));
 }
+
+#[test]
+fn shift_l_works_from_the_reading_pane() {
+    let mut app = sample_app();
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "Dear Charles".to_owned(),
+        vec![],
+    );
+    app.focus = Pane::Reader;
+
+    press(&mut app, "L");
+
+    assert_eq!(pane_at(&app, 50, 20), Some(Pane::Reader));
+    assert_eq!(app.focus, Pane::Reader);
+}
