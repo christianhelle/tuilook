@@ -1119,3 +1119,15 @@ fn with_hidden_folders_the_reader_below_takes_the_full_width() {
     assert_eq!(pane_at(&app, 0, 16), Some(Pane::Reader));
     insta::assert_snapshot!(render_tall(&app));
 }
+
+#[test]
+fn shift_l_moves_the_reader_and_back() {
+    let mut app = sample_app();
+
+    press(&mut app, "L");
+    assert_eq!(pane_at(&app, 50, 20), Some(Pane::Reader));
+
+    press(&mut app, "L");
+    assert_eq!(pane_at(&app, 50, 20), Some(Pane::Messages));
+    assert_eq!(pane_at(&app, 70, 5), Some(Pane::Reader));
+}

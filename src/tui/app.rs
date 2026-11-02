@@ -578,6 +578,7 @@ impl AppState {
                     self.focus = Pane::Messages;
                 }
             }
+            Action::ToggleReaderPlace => self.reader_below = !self.reader_below,
             Action::Quit => self.should_quit = true,
             Action::SelectNext => return self.move_selection(1),
             Action::SelectPrev => return self.move_selection(-1),

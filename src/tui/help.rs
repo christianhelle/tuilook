@@ -156,7 +156,7 @@ pub const HELP: [(&str, &str); 22] = [
         "v V then y, or yy",
         "Pick text or lines from the cursor, copy them",
     ),
-    ("z  b", "Zoom the pane or show all, hide the folders"),
+    ("z  b  L", "Zoom or show all, hide folders, move the reader"),
     (
         "Space, Ctrl-A",
         "Mark a message, mark them all (Esc clears)",

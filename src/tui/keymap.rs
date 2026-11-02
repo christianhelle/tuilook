@@ -53,6 +53,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('z') => Action::ToggleZoom,
         KeyCode::Char('b') => Action::ToggleFolders,
+        KeyCode::Char('L') => Action::ToggleReaderPlace,
         KeyCode::Char(' ') => Action::ToggleMark,
         KeyCode::Esc => Action::ClearMarks,
         KeyCode::Char('d') => Action::Delete,

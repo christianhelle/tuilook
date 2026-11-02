@@ -28,6 +28,8 @@ pub enum Action {
     ToggleZoom,
     /// Hide or show the folder pane.
     ToggleFolders,
+    /// Put the reading pane below the message list, or back right of it.
+    ToggleReaderPlace,
     /// Mark or unmark the selected message, then move down.
     ToggleMark,
     MarkAll,
