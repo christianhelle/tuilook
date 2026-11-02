@@ -13,7 +13,7 @@ use tuilook::tui::{
     app::{AppState, Pane, Status},
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
-    run_loop::{on_terminal_event, take_core_events},
+    run_loop::{on_terminal_event, take_core_events, take_update},
 };
 
 const AREA: Rect = Rect::new(0, 0, 100, 30);
@@ -59,6 +59,39 @@ fn mouse(kind: MouseEventKind, column: u16, row: u16) -> TermEvent {
 
 fn deliver(s: &mut Setup, event: TermEvent) {
     on_terminal_event(&mut s.app, &mut s.mailboxes, &mut s.keymap, AREA, event).unwrap();
+}
+
+#[test]
+fn a_newer_release_reaches_the_app() {
+    let mut app = AppState::default();
+    let (updates, mut received) = mpsc::channel(1);
+    let version = semver::Version::new(0, 2, 0);
+
+    updates.try_send(version.clone()).unwrap();
+    take_update(&mut app, &mut received);
+
+    assert_eq!(app.update, Some(version));
+}
+
+#[test]
+fn a_check_still_running_changes_nothing() {
+    let mut app = AppState::default();
+    let (_updates, mut received) = mpsc::channel(1);
+
+    take_update(&mut app, &mut received);
+
+    assert_eq!(app.update, None);
+}
+
+#[test]
+fn a_check_that_found_nothing_changes_nothing() {
+    let mut app = AppState::default();
+    let (updates, mut received) = mpsc::channel(1);
+    drop(updates);
+
+    take_update(&mut app, &mut received);
+
+    assert_eq!(app.update, None);
 }
 
 #[test]

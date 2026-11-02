@@ -6,6 +6,7 @@ use ratatui::{
     crossterm::event::{Event as TermEvent, KeyEventKind, MouseButton, MouseEventKind},
     layout::Rect,
 };
+use semver::Version;
 use tokio::sync::mpsc;
 
 use crate::model::Event;
@@ -29,6 +30,14 @@ pub fn take_core_events(
         }
     }
     Ok(())
+}
+
+/// Shows the newer release a check has found, if it has. Never waits for one,
+/// so a slow network cannot hold up the UI.
+pub fn take_update(app: &mut AppState, updates: &mut mpsc::Receiver<Version>) {
+    if let Ok(version) = updates.try_recv() {
+        app.update = Some(version);
+    }
 }
 
 /// Hands a terminal event to the app, measuring the panes in `area` first so
