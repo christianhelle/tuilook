@@ -264,6 +264,8 @@ pub struct AppState {
     /// When it is, read once a frame so a key and the drawing after it put
     /// mail in the same date groups. Unset, it is read whenever asked.
     pub clock: Option<Zoned>,
+    /// A newer tuilook that has been released, once a check has found one.
+    pub update: Option<semver::Version>,
 }
 
 impl AppState {

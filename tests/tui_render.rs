@@ -63,6 +63,14 @@ fn shows_folders_messages_and_reading_pane() {
 }
 
 #[test]
+fn a_newer_release_shows_in_the_status_line() {
+    let mut app = sample_app();
+    app.update = Some(semver::Version::new(0, 2, 0));
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn pinned_mail_sits_above_the_date_groups() {
     let mut app = sample_app();
     let mut pinned = message("m3", "Linus", "Release checklist", "Tag it on Friday");

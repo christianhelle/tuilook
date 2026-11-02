@@ -571,6 +571,12 @@ fn draw_blocked(frame: &mut Frame, said: &str) {
 /// while a search is typed.
 fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     let mut spans = Vec::new();
+    // First, as key hints are cut off on narrow terminals and statuses come
+    // and go.
+    if let Some(version) = &app.update {
+        let badge = Style::new().fg(Color::Black).bg(Color::Yellow);
+        spans.push(Span::styled(format!(" update {version} "), badge));
+    }
     let editing = match &app.screen {
         Screen::Compose(compose) if compose.field == Field::Body => Some(&compose.body),
         Screen::Signature(editor) => Some(&editor.body),
