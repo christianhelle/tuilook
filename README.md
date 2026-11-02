@@ -236,6 +236,8 @@ mouse. Press `?` at any time to see every key.
 The message you are reading sits right of the messages. On a screen taller than
 it is wide, `L` moves it below them, and pressing `L` again moves it back.
 
+![The reading pane below the messages, after pressing L](images/emails-horizontal-layout.jpg)
+
 ![The keys, shown over the panes after pressing ?](images/help.jpg)
 
 tuilook remembers where you were when you quit (folder, message, focused pane,
