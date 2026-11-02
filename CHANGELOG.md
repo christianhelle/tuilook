@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `L` moves the reading pane below the messages, for screens taller than they
+  are wide, and back right of them. tuilook remembers where it was when you
+  quit.
+
 ### Fixed
 
 - The calendar's help lists `Home` and `End`, which it has always taken.
