@@ -16,6 +16,7 @@ use ratatui::{
     },
     layout::Rect,
 };
+use semver::Version;
 use tokio::sync::mpsc;
 use tuilook::accounts::{Account, Accounts};
 use tuilook::auth::{
@@ -30,7 +31,7 @@ use tuilook::tui::{
     demo,
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
-    run_loop::{on_terminal_event, take_core_events},
+    run_loop::{on_terminal_event, take_core_events, take_update},
     screen::Cursor,
     session, ui,
 };
@@ -80,6 +81,13 @@ struct Cli {
     /// Seconds between checks for new mail; 0 checks only at start and on F5.
     #[arg(long, env = "TUILOOK_SYNC_EVERY", default_value_t = 60, global = true)]
     sync_every: u64,
+    /// Don't ask GitHub for a newer tuilook when the mail client starts.
+    #[arg(
+        long,
+        env = "TUILOOK_NO_UPDATE_CHECK",
+        value_parser = clap::builder::FalseyValueParser::new()
+    )]
+    no_update_check: bool,
     #[command(subcommand)]
     command: Option<CliCommand>,
 }
@@ -127,7 +135,9 @@ fn main() -> Result<()> {
                 remove_db(&path)?;
                 mailboxes.push((address, backend, path));
             }
-            run_ui(&runtime, mailboxes, None, None, sync_every(&cli))
+            // The demo stays offline: nothing ever sends on this channel.
+            let (_, updates) = mpsc::channel(1);
+            run_ui(&runtime, mailboxes, None, None, sync_every(&cli), updates)
         }
         None => {
             let accounts = runtime.block_on(signed_in(&cli))?;
@@ -151,6 +161,7 @@ fn main() -> Result<()> {
                 Some(&accounts_path()?),
                 Some(&session_path()?),
                 sync_every(&cli),
+                watch_for_update(&runtime, &cli),
             )
         }
     }
@@ -352,6 +363,33 @@ fn update_check_path() -> Result<PathBuf> {
     Ok(cache_dir()?.join("update-check.json"))
 }
 
+/// Looks for a newer tuilook in the background, unless told not to. The
+/// receiver gets it if there is one.
+fn watch_for_update(runtime: &tokio::runtime::Runtime, cli: &Cli) -> mpsc::Receiver<Version> {
+    let (updates, received) = mpsc::channel(1);
+    if cli.no_update_check {
+        return received;
+    }
+    // With nowhere to remember checks, tuilook would ask GitHub on every start.
+    let Ok(path) = update_check_path() else {
+        return received;
+    };
+    runtime.spawn(async move {
+        let update = update::available(
+            &http_client(),
+            update::GITHUB_API,
+            &path,
+            &update::current(),
+            Timestamp::now(),
+        )
+        .await;
+        if let Some(version) = update {
+            let _ = updates.send(version).await;
+        }
+    });
+    received
+}
+
 /// Tells the user whether a newer tuilook has been released.
 async fn check_update() -> Result<()> {
     let release = update::check(
@@ -397,6 +435,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
     accounts_file: Option<&Path>,
     session: Option<&Path>,
     sync_every: Option<Duration>,
+    mut updates: mpsc::Receiver<Version>,
 ) -> Result<()> {
     let mut app = AppState::default();
     let saved = match accounts_file {
@@ -458,6 +497,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
                 cursor = shape;
             }
             take_core_events(&mut app, &mut mailboxes, &mut events)?;
+            take_update(&mut app, &mut updates);
             let ready = event::poll(Duration::from_millis(100))?;
             // The key and the drawing after it see the same time.
             app.clock = Some(Zoned::now());
@@ -527,6 +567,13 @@ mod tests {
 
         let cli = Cli::try_parse_from(["otlk", "--sync-every", "0"]).unwrap();
         assert_eq!(sync_every(&cli), None);
+    }
+
+    #[test]
+    fn the_update_check_can_be_turned_off() {
+        let cli = Cli::try_parse_from(["otlk", "--no-update-check"]).unwrap();
+
+        assert!(cli.no_update_check);
     }
 
     #[test]
