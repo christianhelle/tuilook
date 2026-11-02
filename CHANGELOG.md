@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `L` moves the reading pane below the messages, for screens taller than they
   are wide, and back right of them. tuilook remembers where it was when you
   quit.
+- tuilook tells you when a newer release is out. The status line shows it after
+  a check at start, at most once a day, and `otlk check-update` asks at any
+  time. Pass `--no-update-check` or set `TUILOOK_NO_UPDATE_CHECK` to stop the
+  check at start.
 
 ### Fixed
 
