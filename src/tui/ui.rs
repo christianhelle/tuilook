@@ -108,19 +108,24 @@ fn panes(area: Rect, app: &AppState) -> Panes {
         Some(Pane::Folders) => panes.folders = main,
         Some(Pane::Messages) => panes.messages = main,
         Some(Pane::Reader) => panes.reader = main,
+        None if app.reader_below => {
+            let mail = if app.folders_hidden {
+                main
+            } else {
+                let [folders, mail] =
+                    Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+                        .areas(main);
+                panes.folders = folders;
+                mail
+            };
+            [panes.messages, panes.reader] =
+                Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)])
+                    .areas(mail);
+        }
         None if app.folders_hidden => {
             [panes.messages, panes.reader] =
                 Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                     .areas(main);
-        }
-        None if app.reader_below => {
-            let [folders, right] =
-                Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
-                    .areas(main);
-            panes.folders = folders;
-            [panes.messages, panes.reader] =
-                Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)])
-                    .areas(right);
         }
         None => {
             [panes.folders, panes.messages, panes.reader] = Layout::horizontal([

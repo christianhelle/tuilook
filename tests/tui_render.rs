@@ -1107,3 +1107,15 @@ fn the_reader_can_sit_below_the_messages() {
     assert_eq!(pane_at(&app, 5, 30), Some(Pane::Folders));
     insta::assert_snapshot!(render_tall(&app));
 }
+
+#[test]
+fn with_hidden_folders_the_reader_below_takes_the_full_width() {
+    let mut app = sample_app();
+    app.reader_below = true;
+    app.folders_hidden = true;
+    app.focus = Pane::Messages;
+
+    assert_eq!(pane_at(&app, 0, 15), Some(Pane::Messages));
+    assert_eq!(pane_at(&app, 0, 16), Some(Pane::Reader));
+    insta::assert_snapshot!(render_tall(&app));
+}
