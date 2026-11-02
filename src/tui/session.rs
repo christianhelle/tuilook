@@ -20,6 +20,7 @@ pub struct Snapshot {
     pub message: Option<String>,
     pub zoomed: bool,
     pub folders_hidden: bool,
+    pub reader_below: bool,
     /// Folders whose subfolders were shown.
     pub expanded: Vec<String>,
     /// Accounts, in either section, whose folders were hidden. They start
@@ -42,6 +43,7 @@ impl Snapshot {
                 .map(|m| m.id.0.clone()),
             zoomed: app.zoomed,
             folders_hidden: app.folders_hidden,
+            reader_below: app.reader_below,
             expanded: app
                 .folder_pane
                 .expanded
@@ -86,6 +88,7 @@ impl AppState {
     pub fn restore(&mut self, snapshot: &Snapshot) -> Option<Effect> {
         self.zoomed = snapshot.zoomed;
         self.folders_hidden = snapshot.folders_hidden;
+        self.reader_below = snapshot.reader_below;
         self.focus = match snapshot.focus {
             Pane::Folders if snapshot.folders_hidden => Pane::Messages,
             focus => focus,
@@ -155,6 +158,7 @@ mod tests {
             message: Some("m2".to_owned()),
             zoomed: true,
             folders_hidden: true,
+            reader_below: true,
             expanded: vec!["a".to_owned()],
             collapsed: Vec::new(),
             favorites: vec!["b".to_owned()],

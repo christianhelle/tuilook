@@ -1159,3 +1159,15 @@ fn a_zoomed_pane_ignores_where_the_reader_sits() {
 
     assert_eq!(render(&app), beside);
 }
+
+#[test]
+fn the_readers_place_is_remembered() {
+    let mut app = sample_app();
+    press(&mut app, "L");
+    let snapshot = tuilook::tui::session::Snapshot::of(&app);
+
+    let mut restarted = sample_app();
+    restarted.restore(&snapshot);
+
+    assert_eq!(pane_at(&restarted, 50, 20), Some(Pane::Reader));
+}
