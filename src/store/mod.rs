@@ -598,6 +598,15 @@ impl Store {
         Ok(invite)
     }
 
+    /// Records the account's answer to the invite in `message`.
+    pub fn set_invite_answer(&mut self, message: &MessageId, answer: Rsvp) -> Result<()> {
+        self.conn.execute(
+            "UPDATE invites SET answer = ?2 WHERE message_id = ?1",
+            (&message.0, answer_name(answer)),
+        )?;
+        Ok(())
+    }
+
     pub fn remove_appointment(&mut self, id: &AppointmentId) -> Result<()> {
         self.conn
             .execute("DELETE FROM appointments WHERE id = ?1", [&id.0])?;

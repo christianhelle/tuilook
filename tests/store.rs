@@ -732,3 +732,18 @@ fn an_invite_is_forgotten_with_its_message() {
 
     assert_eq!(store.invite(&id).unwrap(), None);
 }
+
+#[test]
+fn a_new_answer_is_recorded_on_a_remembered_invite() {
+    let mut store = store_with_message();
+    let id = MessageId("m1".to_owned());
+    store.put_invite(&id, Some(&invite())).unwrap();
+
+    store.set_invite_answer(&id, Rsvp::Decline).unwrap();
+
+    let expected = Invite {
+        answer: Some(Rsvp::Decline),
+        ..invite()
+    };
+    assert_eq!(store.invite(&id).unwrap(), Some(Some(expected)));
+}
