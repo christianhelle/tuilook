@@ -7,9 +7,9 @@ use std::{
 use crate::core::Command;
 use crate::model::{
     Action, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId, Invite, Message,
-    MessageId, sort_messages,
+    MessageId, Rsvp, sort_messages,
 };
-use jiff::Zoned;
+use jiff::{SignedDuration, Zoned, tz::TimeZone};
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     widgets::{Paragraph, Wrap},
@@ -270,6 +270,38 @@ pub struct AppState {
     pub update: Option<semver::Version>,
 }
 
+/// When an invite is for, in `zone`. An all-day one ends at midnight, so on
+/// the morning after its last day.
+fn when(invite: &Invite, zone: &TimeZone) -> String {
+    let start = invite.start.to_zoned(zone.clone());
+    let end = invite.end.to_zoned(zone.clone());
+    let day = |at: &Zoned| at.strftime("%a %-d %b %Y").to_string();
+    if invite.all_day {
+        let last = invite.end.saturating_sub(SignedDuration::from_secs(1));
+        let last = last.unwrap_or(invite.end).to_zoned(zone.clone());
+        return if last.date() == start.date() {
+            format!("{}, all day", day(&start))
+        } else {
+            format!("{} to {}, all day", day(&start), day(&last))
+        };
+    }
+    let until = if end.date() == start.date() {
+        end.strftime("%H:%M").to_string()
+    } else {
+        end.strftime("%a %H:%M").to_string()
+    };
+    format!("{}, {}–{until}", day(&start), start.strftime("%H:%M"))
+}
+
+/// How an answer to an invite reads once given.
+fn answered(answer: Rsvp) -> &'static str {
+    match answer {
+        Rsvp::Accept => "Accepted",
+        Rsvp::Tentative => "Tentative",
+        Rsvp::Decline => "Declined",
+    }
+}
+
 impl AppState {
     /// The lines of the reading pane, before wrapping: the selected
     /// message's headers and body.
@@ -283,6 +315,17 @@ impl AppState {
             let label = if index == 0 { "Attached:" } else { "" };
             let size = human_size(a.size);
             text.push(format!("{label:<10}{} ({size})", shown(&a.name)));
+        }
+        if let Some(invite) = &self.invite {
+            text.push(format!(
+                "When:     {}",
+                when(invite, self.now().time_zone())
+            ));
+            if !invite.location.is_empty() {
+                text.push(format!("Where:    {}", shown(&invite.location)));
+            }
+            let answer = invite.answer.map_or("Not answered", answered);
+            text.push(format!("Answer:   {answer}"));
         }
         text.push(String::new());
         // The preview stands in until core has loaded the body.
@@ -1741,6 +1784,94 @@ Dear Charles,"
 
         app.update(Action::SelectNext);
         assert_eq!(app.invite, None);
+    }
+
+    /// The reading pane's rows about `invite`, read in Copenhagen.
+    fn invite_rows(invite: Invite) -> Vec<String> {
+        let mut app = in_message_list(&["m1"]);
+        app.clock = Some(
+            "2026-11-03T09:00:00+01:00[Europe/Copenhagen]"
+                .parse()
+                .unwrap(),
+        );
+        app.invite_loaded(MessageId("m1".to_owned()), invite);
+        let text = app.reader_text().unwrap();
+        text.into_iter()
+            .skip(2)
+            .take_while(|line| !line.is_empty())
+            .collect()
+    }
+
+    #[test]
+    fn the_reader_says_when_and_where_an_unanswered_invite_is() {
+        assert_eq!(
+            invite_rows(invite()),
+            [
+                "When:     Tue 10 Nov 2026, 14:00–15:00",
+                "Where:    Room 4",
+                "Answer:   Not answered",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_reader_says_how_an_invite_was_answered() {
+        for (answer, said) in [
+            (Rsvp::Accept, "Answer:   Accepted"),
+            (Rsvp::Tentative, "Answer:   Tentative"),
+            (Rsvp::Decline, "Answer:   Declined"),
+        ] {
+            let answered = Invite {
+                answer: Some(answer),
+                ..invite()
+            };
+            assert_eq!(invite_rows(answered)[2], said);
+        }
+    }
+
+    #[test]
+    fn the_reader_leaves_out_where_when_an_invite_does_not_say() {
+        let nowhere = Invite {
+            location: String::new(),
+            ..invite()
+        };
+        assert_eq!(invite_rows(nowhere)[1], "Answer:   Not answered");
+    }
+
+    #[test]
+    fn the_reader_shows_the_days_of_an_all_day_invite() {
+        let one_day = Invite {
+            start: "2026-11-09T23:00:00Z".parse().unwrap(),
+            end: "2026-11-10T23:00:00Z".parse().unwrap(),
+            all_day: true,
+            ..invite()
+        };
+        let days = Invite {
+            end: "2026-11-11T23:00:00Z".parse().unwrap(),
+            ..one_day.clone()
+        };
+
+        assert_eq!(
+            invite_rows(one_day)[0],
+            "When:     Tue 10 Nov 2026, all day"
+        );
+        assert_eq!(
+            invite_rows(days)[0],
+            "When:     Tue 10 Nov 2026 to Wed 11 Nov 2026, all day"
+        );
+    }
+
+    #[test]
+    fn the_reader_shows_both_days_of_an_invite_past_midnight() {
+        let late = Invite {
+            start: "2026-11-10T22:00:00Z".parse().unwrap(),
+            end: "2026-11-11T00:00:00Z".parse().unwrap(),
+            ..invite()
+        };
+        assert_eq!(
+            invite_rows(late)[0],
+            "When:     Tue 10 Nov 2026, 23:00–Wed 01:00"
+        );
     }
 
     #[test]
