@@ -530,6 +530,11 @@ impl AppState {
     fn dialog_key(&mut self, dialog: Dialog, key: KeyEvent) -> Option<Effect> {
         match dialog {
             Dialog::Help | Dialog::Blocked(_) => None,
+            Dialog::Invite { .. } if key.code == KeyCode::Esc => None,
+            dialog @ Dialog::Invite { .. } => {
+                self.dialog = Some(dialog);
+                None
+            }
             Dialog::Confirm(confirm) => {
                 // y or Enter agrees; any other key cancels and does nothing else.
                 if matches!(key.code, KeyCode::Char('y') | KeyCode::Enter) {
@@ -685,6 +690,7 @@ impl AppState {
             Action::AddFolder | Action::AddTopFolder | Action::RenameFolder => {}
             Action::Move => self.ask_where_to_move(),
             Action::SaveAttachments => return self.ask_which_to_save(),
+            Action::RespondToInvite => self.ask_how_to_answer(),
             Action::Refresh if self.sync.running => {
                 self.sync.forced = true;
                 self.show_busy("Syncing…");
@@ -1139,6 +1145,20 @@ impl AppState {
         shown.is_read = true;
         let account = self.message_account(&message);
         Some(Effect::core(account, Command::MarkRead(message)))
+    }
+
+    /// Asks how to answer the invite in the selected message, if it is one.
+    fn ask_how_to_answer(&mut self) {
+        match (self.selected(), &self.invite) {
+            (Some(m), Some(invite)) => {
+                self.dialog = Some(Dialog::Invite {
+                    message: m.id.clone(),
+                    subject: m.subject.clone(),
+                    invite: invite.clone(),
+                });
+            }
+            _ => self.show_info("This message is not a meeting invite"),
+        }
     }
 
     /// Shows an invite core loaded, unless the user has moved on.
@@ -1872,6 +1892,59 @@ Dear Charles,"
             invite_rows(late)[0],
             "When:     Tue 10 Nov 2026, 23:00–Wed 01:00"
         );
+    }
+
+    /// `m1` is selected and is the invite.
+    fn reading_an_invite(invite: Invite) -> AppState {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.invite_loaded(MessageId("m1".to_owned()), invite);
+        app
+    }
+
+    #[test]
+    fn i_asks_how_to_answer_an_invite_from_the_list_and_the_reader() {
+        for focus in [Pane::Messages, Pane::Reader] {
+            let mut app = reading_an_invite(invite());
+            app.focus = focus;
+
+            assert_eq!(key(&mut app, KeyCode::Char('i')), None);
+
+            assert_eq!(
+                app.dialog,
+                Some(Dialog::Invite {
+                    message: MessageId("m1".to_owned()),
+                    subject: "m1".to_owned(),
+                    invite: invite(),
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn i_on_other_mail_says_it_is_no_invite() {
+        let mut app = in_message_list(&["m1"]);
+
+        key(&mut app, KeyCode::Char('i'));
+
+        assert_eq!(app.dialog, None);
+        assert_eq!(
+            app.status,
+            Some(Status::Info(
+                "This message is not a meeting invite".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn esc_closes_the_invite_prompt_and_other_keys_leave_it_open() {
+        let mut app = reading_an_invite(invite());
+        key(&mut app, KeyCode::Char('i'));
+
+        assert_eq!(key(&mut app, KeyCode::Char('x')), None);
+        assert!(app.dialog.is_some());
+
+        assert_eq!(key(&mut app, KeyCode::Esc), None);
+        assert_eq!(app.dialog, None);
     }
 
     #[test]

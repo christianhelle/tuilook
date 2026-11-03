@@ -93,6 +93,14 @@ fn the_reader_shows_an_invite() {
 }
 
 #[test]
+fn the_invite_prompt_offers_the_answers() {
+    let mut app = app_with_invite();
+    app.update(Action::RespondToInvite);
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn a_newer_release_shows_in_the_status_line() {
     let mut app = sample_app();
     app.update = Some(semver::Version::new(0, 2, 0));

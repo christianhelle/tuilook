@@ -1,6 +1,6 @@
 //! Renders [`AppState`] into a frame. Pure: no IO, no state changes.
 
-use crate::model::{Appointment, ComposeKind, Message, folder_depths};
+use crate::model::{Appointment, ComposeKind, Invite, Message, folder_depths};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position, Rect},
@@ -207,6 +207,9 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
         Some(Dialog::Attachments(picker)) => draw_attachment_picker(frame, picker),
         Some(Dialog::Files(picker)) => draw_file_picker(frame, picker),
+        Some(Dialog::Invite {
+            subject, invite, ..
+        }) => draw_invite_prompt(frame, subject, invite),
         None => {}
     }
 }
@@ -1237,6 +1240,41 @@ pub fn help_line_width(help: &[(&str, &str)]) -> usize {
 }
 
 /// A dialog asking whether to delete `what`: messages, or a folder.
+fn draw_invite_prompt(frame: &mut Frame, subject: &str, invite: &Invite) {
+    let key = |key| Span::styled(key, Style::new().fg(Color::Cyan));
+    let lines = vec![
+        Line::raw(shown(subject)),
+        Line::raw(format!("from {}", shown(&invite.organizer))),
+        Line::raw(""),
+        Line::from(vec![
+            key("a"),
+            Span::raw(" accept   "),
+            key("t"),
+            Span::raw(" tentative   "),
+            key("d"),
+            Span::raw(" decline   "),
+            key("Esc"),
+            Span::raw(" cancel"),
+        ]),
+    ];
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    // Wide enough for a long subject, borders and a space each side.
+    let widest = lines.iter().map(Line::width).max().unwrap_or(0);
+    let width = u16::try_from(widest + 4).unwrap_or(u16::MAX);
+    let area = frame
+        .area()
+        .centered(Constraint::Length(width), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title("Respond to invite")
+                .border_style(Style::new().fg(Color::Cyan)),
+        ),
+        area,
+    );
+}
+
 fn draw_confirm_delete(frame: &mut Frame, what: &str, permanent: bool) {
     let mut lines = if permanent {
         vec![

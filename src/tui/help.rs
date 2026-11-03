@@ -164,8 +164,8 @@ pub const HELP: [(&str, &str); 22] = [
     ("d", "Move marked, selected or folder to Deleted Items"),
     ("D", "Delete marked, selected or folder for good"),
     (
-        "m  p  F Insert  s",
-        "Move, pin or flag mail; save its files",
+        "m  p  F Insert  s  i",
+        "Move, pin, flag mail; save files; answer invite",
     ),
     ("a  A  F2", "New subfolder, new top folder, rename folder"),
     (

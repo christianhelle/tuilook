@@ -1,5 +1,6 @@
 //! The dialog shown over the panes, which takes every key until it closes.
 
+use crate::model::{Invite, MessageId};
 use crate::tui::{
     app::Confirm, attachments::AttachmentPicker, files::FilePicker, folder_edit::NamePrompt,
     mover::MovePicker,
@@ -25,6 +26,12 @@ pub enum Dialog {
     Attachments(AttachmentPicker),
     /// The file being picked to attach.
     Files(FilePicker),
+    /// How to answer the invite in `message`, called `subject`.
+    Invite {
+        message: MessageId,
+        subject: String,
+        invite: Invite,
+    },
 }
 
 impl Dialog {

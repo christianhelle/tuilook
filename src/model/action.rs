@@ -71,6 +71,8 @@ pub enum Action {
     /// Save the selected message's attached files, asking which when
     /// there are several.
     SaveAttachments,
+    /// Answer the invite in the selected message, asking how.
+    RespondToInvite,
     /// Search every cached folder.
     Search,
     /// Show the calendar of the account being looked at.
