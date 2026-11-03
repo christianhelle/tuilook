@@ -293,6 +293,16 @@ fn when(invite: &Invite, zone: &TimeZone) -> String {
     format!("{}, {}–{until}", day(&start), start.strftime("%H:%M"))
 }
 
+/// The answer a key gives in the invite prompt.
+fn answer_key(key: KeyEvent) -> Option<Rsvp> {
+    match key.code {
+        KeyCode::Char('a') => Some(Rsvp::Accept),
+        KeyCode::Char('t') => Some(Rsvp::Tentative),
+        KeyCode::Char('d') => Some(Rsvp::Decline),
+        _ => None,
+    }
+}
+
 /// How an answer to an invite reads once given.
 fn answered(answer: Rsvp) -> &'static str {
     match answer {
@@ -530,6 +540,20 @@ impl AppState {
     fn dialog_key(&mut self, dialog: Dialog, key: KeyEvent) -> Option<Effect> {
         match dialog {
             Dialog::Help | Dialog::Blocked(_) => None,
+            Dialog::Invite {
+                message, invite, ..
+            } if answer_key(key).is_some() => {
+                let rsvp = answer_key(key)?;
+                self.show_busy("Answering the invite…");
+                let account = self.message_account(&message);
+                let command = Command::Respond {
+                    message,
+                    event: invite.event,
+                    rsvp,
+                    notify: invite.response_requested,
+                };
+                Some(Effect::core(account, command))
+            }
             Dialog::Invite { .. } if key.code == KeyCode::Esc => None,
             dialog @ Dialog::Invite { .. } => {
                 self.dialog = Some(dialog);
@@ -1933,6 +1957,57 @@ Dear Charles,"
                 "This message is not a meeting invite".to_owned()
             ))
         );
+    }
+
+    #[test]
+    fn each_answer_key_sends_its_answer_and_closes_the_prompt() {
+        for (c, rsvp) in [
+            ('a', Rsvp::Accept),
+            ('t', Rsvp::Tentative),
+            ('d', Rsvp::Decline),
+        ] {
+            let mut app = reading_an_invite(invite());
+            key(&mut app, KeyCode::Char('i'));
+
+            let effect = key(&mut app, KeyCode::Char(c));
+
+            assert_eq!(
+                effect,
+                Some(Effect::core(
+                    0,
+                    Command::Respond {
+                        message: MessageId("m1".to_owned()),
+                        event: AppointmentId("e1".to_owned()),
+                        rsvp,
+                        notify: true,
+                    }
+                ))
+            );
+            assert_eq!(app.dialog, None);
+            assert_eq!(
+                app.status,
+                Some(Status::Busy("Answering the invite…".to_owned()))
+            );
+        }
+    }
+
+    #[test]
+    fn an_organizer_who_asked_for_no_response_is_not_told_the_answer() {
+        let mut app = reading_an_invite(Invite {
+            response_requested: false,
+            ..invite()
+        });
+        key(&mut app, KeyCode::Char('i'));
+
+        let effect = key(&mut app, KeyCode::Char('a'));
+
+        assert!(matches!(
+            effect,
+            Some(Effect::Core {
+                command: Command::Respond { notify: false, .. },
+                ..
+            })
+        ));
     }
 
     #[test]
