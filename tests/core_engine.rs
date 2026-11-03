@@ -1019,3 +1019,22 @@ async fn opening_an_invite_loads_the_body_then_the_invite() {
         })
     );
 }
+
+#[tokio::test]
+async fn a_message_known_not_to_be_an_invite_is_not_asked_about_again() {
+    let (backend, id) = backend_with_mail(None);
+    let lookups = backend.invite_lookups.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    // Answered only once the second open has finished with the invite.
+    commands.send(Command::SyncCalendar).unwrap();
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+
+    assert_eq!(*lookups.lock().unwrap(), 1);
+}

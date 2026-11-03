@@ -96,6 +96,8 @@ pub struct FakeBackend {
     /// Answers given so far: the meeting, the answer, and whether the
     /// organizer was told.
     pub responses: Arc<Mutex<Vec<(AppointmentId, Rsvp, bool)>>>,
+    /// How many times a message was asked about being an invite.
+    pub invite_lookups: Arc<Mutex<usize>>,
     /// Why every calendar call fails, if it does.
     pub calendar_error: Option<BackendError>,
 }
@@ -337,6 +339,10 @@ impl MailBackend for FakeBackend {
     }
 
     async fn invite(&self, message: &MessageId) -> Result<Option<Invite>, BackendError> {
+        *self
+            .invite_lookups
+            .lock()
+            .expect("no test panics holding it") += 1;
         let invites = self.invites.lock().expect("no test panics holding it");
         Ok(invites.get(message).cloned())
     }
