@@ -68,3 +68,47 @@ async fn a_meeting_request_is_an_invite_in_local_time() {
         })
     );
 }
+
+async fn invite_from(response: Value) -> Option<Invite> {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/me/messages/m1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .mount(&server)
+        .await;
+    backend(&server)
+        .invite(&MessageId("m1".to_owned()))
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_plain_message_is_not_an_invite() {
+    let plain = json!({ "@odata.type": "#microsoft.graph.message", "id": "m1" });
+
+    assert_eq!(invite_from(plain).await, None);
+}
+
+#[tokio::test]
+async fn a_cancellation_is_not_an_invite_though_it_has_an_event() {
+    let mut cancelled = meeting_request();
+    cancelled["@odata.type"] = json!("#microsoft.graph.eventMessage");
+
+    assert_eq!(invite_from(cancelled).await, None);
+}
+
+#[tokio::test]
+async fn a_reply_to_a_meeting_is_not_an_invite_though_it_has_an_event() {
+    let mut reply = meeting_request();
+    reply["@odata.type"] = json!("#microsoft.graph.eventMessageResponse");
+
+    assert_eq!(invite_from(reply).await, None);
+}
+
+#[tokio::test]
+async fn an_unanswered_request_has_no_answer() {
+    let mut request = meeting_request();
+    request["event"]["responseStatus"]["response"] = json!("notResponded");
+
+    assert_eq!(invite_from(request).await.unwrap().answer, None);
+}

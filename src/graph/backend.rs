@@ -41,6 +41,10 @@ const EVENT_SELECT: &str =
 /// Reads a message's event, which only meeting messages have.
 const INVITE_EXPAND: &str = "microsoft.graph.eventMessage/event($select=id,start,end,isAllDay,location,organizer,responseStatus,responseRequested)";
 
+/// What Graph calls an invite. Cancellations and replies to a meeting have
+/// events too, but other types.
+const MEETING_REQUEST: &str = "#microsoft.graph.eventMessageRequest";
+
 /// Messages fetched at a time from past a folder's sync window.
 const OLDER_PAGE: usize = 50;
 
@@ -524,6 +528,9 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         );
         let prefer = format!(r#"outlook.timezone="{}""#, self.zone_name());
         let response: dto::EventMessage = self.client.get(&path, &[("Prefer", &prefer)]).await?;
+        if response.odata_type.as_deref() != Some(MEETING_REQUEST) {
+            return Ok(None);
+        }
         Ok(response.event.map(|e| self.to_invite(e)))
     }
 

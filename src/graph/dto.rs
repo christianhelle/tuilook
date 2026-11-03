@@ -148,6 +148,8 @@ pub struct ResponseStatus {
 /// A message, with the event it is about if it is a meeting message.
 #[derive(Debug, Deserialize)]
 pub struct EventMessage {
+    #[serde(rename = "@odata.type")]
+    pub odata_type: Option<String>,
     pub event: Option<Event>,
 }
 
