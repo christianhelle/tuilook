@@ -6,8 +6,8 @@ use std::{
 
 use crate::core::Command;
 use crate::model::{
-    Action, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId, Message, MessageId,
-    sort_messages,
+    Action, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId, Invite, Message,
+    MessageId, sort_messages,
 };
 use jiff::Zoned;
 use ratatui::{
@@ -221,6 +221,8 @@ pub struct AppState {
     /// The files attached to the selected message, once core has loaded
     /// its body.
     pub attachments: Vec<Attachment>,
+    /// What the selected message invites to, once core has said it does.
+    pub invite: Option<Invite>,
     pub status: Option<Status>,
     /// When the status was shown, to know when it has gone stale.
     pub status_since: Option<Instant>,
@@ -1096,6 +1098,13 @@ impl AppState {
         Some(Effect::core(account, Command::MarkRead(message)))
     }
 
+    /// Shows an invite core loaded, unless the user has moved on.
+    pub fn invite_loaded(&mut self, message: MessageId, invite: Invite) {
+        if self.selected().is_some_and(|m| m.id == message) {
+            self.invite = Some(invite);
+        }
+    }
+
     /// The selected message; none while a date header is selected.
     pub(crate) fn selected(&self) -> Option<&Message> {
         if self.selected_group.is_some() {
@@ -1226,6 +1235,7 @@ impl AppState {
     fn selection_changed(&mut self) -> Option<Effect> {
         self.body = None;
         self.attachments.clear();
+        self.invite = None;
         self.reader_scroll = 0;
         self.viewer = Viewer::default();
         self.selected().map(|m| self.load_body(m.id.clone()))
@@ -1707,6 +1717,40 @@ Dear Charles,"
             None
         );
         assert!(!app.messages[0].is_read);
+    }
+
+    fn invite() -> Invite {
+        Invite {
+            event: AppointmentId("e1".to_owned()),
+            start: "2026-11-10T13:00:00Z".parse().unwrap(),
+            end: "2026-11-10T14:00:00Z".parse().unwrap(),
+            all_day: false,
+            location: "Room 4".to_owned(),
+            organizer: "Ada Lovelace".to_owned(),
+            answer: None,
+            response_requested: true,
+        }
+    }
+
+    #[test]
+    fn an_invite_loaded_for_the_selected_message_is_kept_until_the_selection_moves() {
+        let mut app = in_message_list(&["m1", "m2"]);
+
+        app.invite_loaded(MessageId("m1".to_owned()), invite());
+        assert_eq!(app.invite, Some(invite()));
+
+        app.update(Action::SelectNext);
+        assert_eq!(app.invite, None);
+    }
+
+    #[test]
+    fn an_invite_loaded_after_the_selection_moved_is_ignored() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.update(Action::SelectNext);
+
+        app.invite_loaded(MessageId("m1".to_owned()), invite());
+
+        assert_eq!(app.invite, None);
     }
 
     #[test]
