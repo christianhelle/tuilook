@@ -43,6 +43,13 @@ pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
             " c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help"
         }
         Screen::Panes if picking => " y copy · Esc cancel",
+        // First, as a narrow status bar cuts off the end.
+        Screen::Panes if app.focus == Pane::Reader && app.invite.is_some() => {
+            " i respond · v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit"
+        }
+        Screen::Panes if app.invite.is_some() => {
+            " i respond · ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit"
+        }
         // Saving is offered only once the selected mail's files are known.
         Screen::Panes if app.focus == Pane::Reader && !app.attachments.is_empty() => {
             " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit · s save files"
@@ -186,6 +193,7 @@ mod tests {
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     use super::*;
+    use crate::model::{AppointmentId, Invite};
     use crate::tui::keymap::Keymap;
 
     /// The keys a help table's first column names.
@@ -260,6 +268,30 @@ mod tests {
         for hint in hints.split('·') {
             let key = hint.split_whitespace().next().unwrap();
             assert!(handled.iter().any(|h| h == key), "{key} does nothing");
+        }
+    }
+
+    #[test]
+    fn the_help_bar_offers_to_answer_an_invite_only_when_one_is_shown() {
+        let invite = Invite {
+            event: AppointmentId("e1".to_owned()),
+            start: jiff::Timestamp::UNIX_EPOCH,
+            end: jiff::Timestamp::UNIX_EPOCH,
+            all_day: false,
+            location: String::new(),
+            organizer: String::new(),
+            answer: None,
+            response_requested: true,
+        };
+        for focus in [Pane::Messages, Pane::Reader] {
+            let mut app = AppState {
+                focus,
+                ..Default::default()
+            };
+            assert!(!key_hints(&app, false).contains("i respond"));
+
+            app.invite = Some(invite.clone());
+            assert!(key_hints(&app, false).starts_with(" i respond"));
         }
     }
 
