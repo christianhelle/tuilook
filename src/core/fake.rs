@@ -98,6 +98,8 @@ pub struct FakeBackend {
     pub responses: Arc<Mutex<Vec<(AppointmentId, Rsvp, bool)>>>,
     /// How many times a message was asked about being an invite.
     pub invite_lookups: Arc<Mutex<usize>>,
+    /// Why asking whether a message is an invite fails, if it does.
+    pub invite_error: Arc<Mutex<Option<BackendError>>>,
     /// Why every calendar call fails, if it does.
     pub calendar_error: Option<BackendError>,
 }
@@ -343,6 +345,10 @@ impl MailBackend for FakeBackend {
             .invite_lookups
             .lock()
             .expect("no test panics holding it") += 1;
+        let error = self.invite_error.lock().expect("no test panics holding it");
+        if let Some(error) = &*error {
+            return Err(error.clone());
+        }
         let invites = self.invites.lock().expect("no test panics holding it");
         Ok(invites.get(message).cloned())
     }

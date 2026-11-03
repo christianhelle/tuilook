@@ -6,7 +6,7 @@ use tuilook::core::{Command, calendar_window, fake::FakeBackend, run_engine};
 use tuilook::model::{
     Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, AttachmentKind,
     BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Event, Folder, FolderId,
-    Importance, Invite, Message, MessageId, WellKnown,
+    Importance, Invite, Message, MessageId, Rsvp, WellKnown,
 };
 use tuilook::store::Store;
 
@@ -1037,4 +1037,89 @@ async fn a_message_known_not_to_be_an_invite_is_not_asked_about_again() {
     assert_eq!(events.recv().await, Some(Event::CalendarSynced));
 
     assert_eq!(*lookups.lock().unwrap(), 1);
+}
+
+#[tokio::test]
+async fn a_failed_invite_lookup_still_shows_the_body_and_tries_again_next_time() {
+    let (backend, id) = backend_with_mail(Some(invite()));
+    let failure = backend.invite_error.clone();
+    *failure.lock().unwrap() = Some(BackendError::Other("offline".to_owned()));
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    // Let the first open finish before the server comes back.
+    commands.send(Command::SyncCalendar).unwrap();
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+    *failure.lock().unwrap() = None;
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert_eq!(
+        events.recv().await,
+        Some(Event::InviteLoaded {
+            message: id,
+            invite: invite(),
+        })
+    );
+}
+
+#[tokio::test]
+async fn a_known_invite_is_read_again_so_answers_given_elsewhere_show() {
+    let (backend, id) = backend_with_mail(Some(invite()));
+    let invites = backend.invites.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert!(matches!(
+        events.recv().await,
+        Some(Event::InviteLoaded { .. })
+    ));
+
+    let answered = Invite {
+        answer: Some(Rsvp::Accept),
+        ..invite()
+    };
+    invites.lock().unwrap().insert(id.clone(), answered.clone());
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert_eq!(
+        events.recv().await,
+        Some(Event::InviteLoaded {
+            message: id,
+            invite: answered,
+        })
+    );
+}
+
+#[tokio::test]
+async fn a_known_invite_that_cannot_be_read_again_shows_as_it_was() {
+    let (backend, id) = backend_with_mail(Some(invite()));
+    let failure = backend.invite_error.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert!(matches!(
+        events.recv().await,
+        Some(Event::InviteLoaded { .. })
+    ));
+
+    *failure.lock().unwrap() = Some(BackendError::Other("offline".to_owned()));
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert_eq!(
+        events.recv().await,
+        Some(Event::InviteLoaded {
+            message: id,
+            invite: invite(),
+        })
+    );
 }

@@ -73,16 +73,21 @@ pub async fn load_body(
 }
 
 /// The meeting `message` invites to, if it is an invite. A message known
-/// not to be one is not asked about again.
+/// not to be one is not asked about again. A known invite is, as it may have
+/// been answered elsewhere, and is served as it was if that fails.
 pub async fn load_invite(
     backend: &impl MailBackend,
     store: &mut Store,
     message: &MessageId,
 ) -> Option<Invite> {
-    if let Ok(Some(None)) = store.invite(message) {
+    let known = store.invite(message).ok().flatten();
+    if let Some(None) = known {
         return None;
     }
-    let invite = backend.invite(message).await.ok()?;
-    store.put_invite(message, invite.as_ref()).ok()?;
+    let Ok(invite) = backend.invite(message).await else {
+        return known.flatten();
+    };
+    // Unsaved, it would only be asked about again.
+    let _ = store.put_invite(message, invite.as_ref());
     invite
 }
