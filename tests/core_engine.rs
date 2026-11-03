@@ -1177,3 +1177,47 @@ async fn answering_an_invite_tells_the_backend_remembers_it_and_syncs_the_calend
         })
     );
 }
+
+#[tokio::test]
+async fn a_refused_answer_to_an_invite_is_reported_and_changes_nothing() {
+    let (mut backend, id) = backend_with_mail(Some(invite()));
+    backend.calendar_error = Some(BackendError::Other("refused".to_owned()));
+    let responses = backend.responses.clone();
+    let failure = backend.invite_error.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert!(matches!(
+        events.recv().await,
+        Some(Event::InviteLoaded { .. })
+    ));
+
+    commands
+        .send(Command::Respond {
+            message: id.clone(),
+            event: AppointmentId("e1".to_owned()),
+            rsvp: Rsvp::Decline,
+            notify: true,
+        })
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::Error(
+            "could not answer the invite: refused".to_owned()
+        ))
+    );
+    assert!(responses.lock().unwrap().is_empty());
+    *failure.lock().unwrap() = Some(BackendError::Other("offline".to_owned()));
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert_eq!(
+        events.recv().await,
+        Some(Event::InviteLoaded {
+            message: id,
+            invite: invite(),
+        })
+    );
+}
