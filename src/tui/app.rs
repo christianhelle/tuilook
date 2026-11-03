@@ -1192,6 +1192,17 @@ impl AppState {
         }
     }
 
+    /// Says the invite in `message` was answered, and shows the answer if
+    /// it is still the selected message.
+    pub fn invite_answered(&mut self, message: &MessageId, answer: Rsvp) {
+        if self.selected().is_some_and(|m| m.id == *message)
+            && let Some(invite) = &mut self.invite
+        {
+            invite.answer = Some(answer);
+        }
+        self.show_info(format!("Answered the invite: {}", answered(answer)));
+    }
+
     /// The selected message; none while a date header is selected.
     pub(crate) fn selected(&self) -> Option<&Message> {
         if self.selected_group.is_some() {
@@ -2008,6 +2019,35 @@ Dear Charles,"
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn an_answered_invite_shows_its_answer() {
+        let mut app = reading_an_invite(invite());
+        let m1 = MessageId("m1".to_owned());
+
+        app.invite_answered(&m1, Rsvp::Tentative);
+
+        assert_eq!(app.invite.unwrap().answer, Some(Rsvp::Tentative));
+        assert_eq!(
+            app.status,
+            Some(Status::Info("Answered the invite: Tentative".to_owned()))
+        );
+    }
+
+    #[test]
+    fn an_answer_arriving_after_the_selection_moved_leaves_the_next_invite_alone() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.update(Action::SelectNext);
+        app.invite_loaded(MessageId("m2".to_owned()), invite());
+
+        app.invite_answered(&MessageId("m1".to_owned()), Rsvp::Decline);
+
+        assert_eq!(app.invite.unwrap().answer, None);
+        assert_eq!(
+            app.status,
+            Some(Status::Info("Answered the invite: Declined".to_owned()))
+        );
     }
 
     #[test]

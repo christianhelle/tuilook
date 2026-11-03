@@ -117,7 +117,10 @@ impl Mailboxes {
                 app.invite_loaded(message, invite);
                 None
             }
-            Event::InviteAnswered { .. } => None,
+            Event::InviteAnswered { message, answer } => {
+                app.invite_answered(&message, answer);
+                None
+            }
             Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
             Event::MessagesMoved { ids, to } => app.messages_moved(&ids, &to),
             Event::AttachmentSaved(path) => {
