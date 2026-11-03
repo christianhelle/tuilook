@@ -113,7 +113,7 @@ impl Mailboxes {
                 text,
                 attachments,
             } => app.body_loaded(message, text, attachments),
-            Event::InviteLoaded { .. } => None,
+            Event::InviteLoaded { .. } | Event::InviteAnswered { .. } => None,
             Event::MessagesDeleted(ids) => app.messages_deleted(&ids),
             Event::MessagesMoved { ids, to } => app.messages_moved(&ids, &to),
             Event::AttachmentSaved(path) => {

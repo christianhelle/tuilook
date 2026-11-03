@@ -2,7 +2,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 use crate::model::{
     AppointmentDraft, AppointmentId, Attachment, BackendError, Draft, Event, FolderId, MailBackend,
-    MessageId, WellKnown,
+    MessageId, Rsvp, WellKnown,
 };
 use crate::store::Store;
 use jiff::Timestamp;
@@ -81,6 +81,14 @@ pub enum Command {
         draft: AppointmentDraft,
     },
     DeleteAppointment(AppointmentId),
+    /// Answer the invite in `message` to the meeting `event`, telling the
+    /// organizer when `notify`.
+    Respond {
+        message: MessageId,
+        event: AppointmentId,
+        rsvp: Rsvp,
+        notify: bool,
+    },
 }
 
 /// Runs until the UI drops its command sender. Owns every write to `store`.
@@ -185,6 +193,12 @@ pub async fn run_engine(
                 };
                 events.send(event).await
             }
+            Command::Respond {
+                message,
+                event,
+                rsvp,
+                notify,
+            } => respond(&backend, &mut store, message, &event, rsvp, notify, &events).await,
         };
         if sent.is_err() {
             return; // The UI has gone away.
@@ -204,6 +218,37 @@ async fn invite_loaded(
         Some(invite) => events.send(Event::InviteLoaded { message, invite }).await,
         None => Ok(()),
     }
+}
+
+/// Answers an invite and, once the server has it, remembers the answer and
+/// syncs the calendar, which the answer may have changed.
+async fn respond(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    message: MessageId,
+    event: &AppointmentId,
+    answer: Rsvp,
+    notify: bool,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    let answered = match backend.respond(event, answer, notify).await {
+        Ok(()) => store
+            .set_invite_answer(&message, answer)
+            .map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = answered {
+        let error = format!("could not answer the invite: {e}");
+        return events.send(Event::Error(error)).await;
+    }
+    events
+        .send(Event::InviteAnswered { message, answer })
+        .await?;
+    let event = match sync_calendar(backend, store).await {
+        Ok(()) => Event::CalendarSynced,
+        Err(e) => Event::Error(format!("could not sync the calendar: {e}")),
+    };
+    events.send(event).await
 }
 
 /// Reports a saved appointment, or why it was not, then syncs the calendar

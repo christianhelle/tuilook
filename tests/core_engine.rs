@@ -1123,3 +1123,57 @@ async fn a_known_invite_that_cannot_be_read_again_shows_as_it_was() {
         })
     );
 }
+
+#[tokio::test]
+async fn answering_an_invite_tells_the_backend_remembers_it_and_syncs_the_calendar() {
+    let (backend, id) = backend_with_mail(Some(invite()));
+    let responses = backend.responses.clone();
+    let failure = backend.invite_error.clone();
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert!(matches!(
+        events.recv().await,
+        Some(Event::InviteLoaded { .. })
+    ));
+
+    commands
+        .send(Command::Respond {
+            message: id.clone(),
+            event: AppointmentId("e1".to_owned()),
+            rsvp: Rsvp::Accept,
+            notify: true,
+        })
+        .unwrap();
+
+    assert_eq!(
+        events.recv().await,
+        Some(Event::InviteAnswered {
+            message: id.clone(),
+            answer: Rsvp::Accept,
+        })
+    );
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+    assert_eq!(
+        *responses.lock().unwrap(),
+        [(AppointmentId("e1".to_owned()), Rsvp::Accept, true)]
+    );
+
+    // The answer is there to be served when the server cannot be asked.
+    *failure.lock().unwrap() = Some(BackendError::Other("offline".to_owned()));
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    let answered = Invite {
+        answer: Some(Rsvp::Accept),
+        ..invite()
+    };
+    assert_eq!(
+        events.recv().await,
+        Some(Event::InviteLoaded {
+            message: id,
+            invite: answered,
+        })
+    );
+}
