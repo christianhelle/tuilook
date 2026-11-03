@@ -1,0 +1,16 @@
+---
+source: tests/tui_render.rs
+expression: render(&app_with_invite())
+---
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││  ▾ Older (2)                     ││1   From: Ada <ada@example.com>   │"
+"└────────────────┘│> Ada                             ││  1 Subject: Analytical engine    │"
+"┌ Unread ────────┐│    Analytical engine             ││  2 When:     Tue 10 Nov 2026,    │"
+"│No unread mail  ││  Grace                           ││    14:00–15:00                   │"
+"└────────────────┘│    Compiler draft                ││  3 Where:    Room 4              │"
+"┏ Folders ━━━━━━━┓│                                  ││  4 Answer:   Not answered        │"
+"┃>   Inbox (2)   ┃│                                  ││  5                               │"
+"┃    Sent Items  ┃│                                  ││  6 Notes on the engine           │"
+"┃    Projects    ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "

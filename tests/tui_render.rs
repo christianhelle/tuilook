@@ -5,7 +5,7 @@ use ratatui::{
 };
 use tuilook::model::{
     Action, Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Folder, FolderId,
-    Message, MessageId, WellKnown, sort_folders,
+    Invite, Message, MessageId, WellKnown, sort_folders,
 };
 use tuilook::tui::{
     app::{AppState, Pane},
@@ -60,6 +60,36 @@ fn render(app: &AppState) -> String {
 #[test]
 fn shows_folders_messages_and_reading_pane() {
     insta::assert_snapshot!(render(&sample_app()));
+}
+
+fn invite() -> Invite {
+    Invite {
+        event: AppointmentId("e1".to_owned()),
+        start: "2026-11-10T13:00:00Z".parse().unwrap(),
+        end: "2026-11-10T14:00:00Z".parse().unwrap(),
+        all_day: false,
+        location: "Room 4".to_owned(),
+        organizer: "Ada Lovelace".to_owned(),
+        answer: None,
+        response_requested: true,
+    }
+}
+
+/// The sample app, in Copenhagen, reading an invite.
+fn app_with_invite() -> AppState {
+    let mut app = sample_app();
+    app.clock = Some(
+        "2026-11-03T09:00:00+01:00[Europe/Copenhagen]"
+            .parse()
+            .unwrap(),
+    );
+    app.invite_loaded(MessageId("m1".to_owned()), invite());
+    app
+}
+
+#[test]
+fn the_reader_shows_an_invite() {
+    insta::assert_snapshot!(render(&app_with_invite()));
 }
 
 #[test]
