@@ -10,7 +10,7 @@ use jiff::Timestamp;
 use crate::model::{
     Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, BackendError, Body,
     DeltaPage, Draft, Folder, FolderId, Importance, Invite, MailBackend, Message, MessageId,
-    OlderPage,
+    OlderPage, Rsvp,
 };
 
 /// A folder with no parent, called `id`, and no mail, to start a test from.
@@ -93,6 +93,9 @@ pub struct FakeBackend {
     pub appointments: Arc<Mutex<Vec<Appointment>>>,
     /// The messages that are invites, and to what.
     pub invites: HashMap<MessageId, Invite>,
+    /// Answers given so far: the meeting, the answer, and whether the
+    /// organizer was told.
+    pub responses: Arc<Mutex<Vec<(AppointmentId, Rsvp, bool)>>>,
     /// Why every calendar call fails, if it does.
     pub calendar_error: Option<BackendError>,
 }
@@ -335,6 +338,20 @@ impl MailBackend for FakeBackend {
 
     async fn invite(&self, message: &MessageId) -> Result<Option<Invite>, BackendError> {
         Ok(self.invites.get(message).cloned())
+    }
+
+    async fn respond(
+        &self,
+        event: &AppointmentId,
+        rsvp: Rsvp,
+        notify: bool,
+    ) -> Result<(), BackendError> {
+        if let Some(error) = &self.calendar_error {
+            return Err(error.clone());
+        }
+        let mut responses = self.responses.lock().expect("no test panics holding it");
+        responses.push((event.clone(), rsvp, notify));
+        Ok(())
     }
 
     async fn create_appointment(&self, draft: &AppointmentDraft) -> Result<(), BackendError> {

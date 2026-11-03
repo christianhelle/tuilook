@@ -534,6 +534,25 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
         Ok(response.event.map(|e| self.to_invite(e)))
     }
 
+    async fn respond(
+        &self,
+        event: &AppointmentId,
+        rsvp: Rsvp,
+        notify: bool,
+    ) -> Result<(), BackendError> {
+        let action = match rsvp {
+            Rsvp::Accept => "accept",
+            Rsvp::Tentative => "tentativelyAccept",
+            Rsvp::Decline => "decline",
+        };
+        let path = format!("/me/events/{}/{action}", event.0);
+        let body = json!({ "sendResponse": notify });
+        self.client
+            .post_no_content(&path, Some(&body))
+            .await
+            .map_err(calendar_error)
+    }
+
     async fn create_appointment(&self, draft: &AppointmentDraft) -> Result<(), BackendError> {
         self.client
             .post::<dto::Id>("/me/events", &self.event(draft))

@@ -5,10 +5,10 @@ use std::sync::Arc;
 use jiff::tz::TimeZone;
 use serde_json::{Value, json};
 use tuilook::graph::GraphBackend;
-use tuilook::model::{AppointmentId, Invite, MailBackend, MessageId, Rsvp};
+use tuilook::model::{AppointmentId, BackendError, Invite, MailBackend, MessageId, Rsvp};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{header, method, path, query_param},
+    matchers::{body_json, header, method, path, query_param},
 };
 
 fn backend(server: &MockServer) -> GraphBackend<Arc<support::FakeTokens>> {
@@ -111,4 +111,73 @@ async fn an_unanswered_request_has_no_answer() {
     request["event"]["responseStatus"]["response"] = json!("notResponded");
 
     assert_eq!(invite_from(request).await.unwrap().answer, None);
+}
+
+async fn answering_posts(rsvp: Rsvp, endpoint: &str) {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/me/events/e1/{endpoint}")))
+        .and(body_json(json!({ "sendResponse": true })))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .respond(&AppointmentId("e1".to_owned()), rsvp, true)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn accepting_posts_to_accept() {
+    answering_posts(Rsvp::Accept, "accept").await;
+}
+
+#[tokio::test]
+async fn answering_tentatively_posts_to_tentatively_accept() {
+    answering_posts(Rsvp::Tentative, "tentativelyAccept").await;
+}
+
+#[tokio::test]
+async fn declining_posts_to_decline() {
+    answering_posts(Rsvp::Decline, "decline").await;
+}
+
+#[tokio::test]
+async fn an_organizer_who_asked_for_no_response_is_not_sent_one() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/events/e1/accept"))
+        .and(body_json(json!({ "sendResponse": false })))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    backend(&server)
+        .respond(&AppointmentId("e1".to_owned()), Rsvp::Accept, false)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn an_answer_refused_for_want_of_calendar_access_says_to_sign_in_again() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/me/events/e1/accept"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server)
+        .await;
+
+    let refused = backend(&server)
+        .respond(&AppointmentId("e1".to_owned()), Rsvp::Accept, true)
+        .await;
+
+    assert_eq!(
+        refused,
+        Err(BackendError::Other(
+            "sign in again (otlk login) to allow calendar access".to_owned()
+        ))
+    );
 }

@@ -4,7 +4,7 @@ use jiff::Timestamp;
 
 use crate::model::{
     Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, Draft, Folder,
-    FolderId, Invite, Message, MessageChange, MessageId,
+    FolderId, Invite, Message, MessageChange, MessageId, Rsvp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -170,6 +170,15 @@ pub trait MailBackend {
         &self,
         message: &MessageId,
     ) -> impl Future<Output = Result<Option<Invite>, BackendError>> + Send;
+
+    /// Answers an invite to the meeting `event`, telling the organizer when
+    /// `notify`.
+    fn respond(
+        &self,
+        event: &AppointmentId,
+        rsvp: Rsvp,
+        notify: bool,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send;
 
     /// Puts a new appointment in the calendar, inviting its attendees.
     fn create_appointment(
