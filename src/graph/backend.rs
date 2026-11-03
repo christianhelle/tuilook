@@ -7,7 +7,7 @@ use crate::auth::TokenSource;
 use crate::model::{
     Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, AttachmentKind,
     BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Folder, FolderId, Importance,
-    MailBackend, Message, MessageChange, MessageId, OlderPage, WellKnown,
+    Invite, MailBackend, Message, MessageChange, MessageId, OlderPage, Rsvp, WellKnown,
 };
 use base64::prelude::{BASE64_STANDARD, Engine as _};
 use jiff::{SignedDuration, Timestamp, Unit, civil, tz::TimeZone};
@@ -37,6 +37,9 @@ const PAGE_SIZE: (&str, &str) = ("Prefer", "odata.maxpagesize=50");
 
 const EVENT_SELECT: &str =
     "id,subject,start,end,isAllDay,location,organizer,attendees,bodyPreview,isOrganizer";
+
+/// Reads a message's event, which only meeting messages have.
+const INVITE_EXPAND: &str = "microsoft.graph.eventMessage/event($select=id,start,end,isAllDay,location,organizer,responseStatus,responseRequested)";
 
 /// Messages fetched at a time from past a folder's sync window.
 const OLDER_PAGE: usize = 50;
@@ -153,6 +156,27 @@ impl<T: TokenSource> GraphBackend<T> {
                 .collect(),
             preview: e.body_preview.unwrap_or_default(),
             is_organizer: e.is_organizer.unwrap_or(false),
+        }
+    }
+
+    fn to_invite(&self, mut e: dto::Event) -> Invite {
+        let answer = match e.response_status.take().and_then(|s| s.response).as_deref() {
+            Some("accepted") => Some(Rsvp::Accept),
+            Some("tentativelyAccepted") => Some(Rsvp::Tentative),
+            Some("declined") => Some(Rsvp::Decline),
+            _ => None,
+        };
+        let response_requested = e.response_requested.unwrap_or(true);
+        let appointment = self.to_appointment(e);
+        Invite {
+            event: appointment.id,
+            start: appointment.start,
+            end: appointment.end,
+            all_day: appointment.all_day,
+            location: appointment.location,
+            organizer: appointment.organizer,
+            answer,
+            response_requested,
         }
     }
 
@@ -491,6 +515,16 @@ impl<T: TokenSource> MailBackend for GraphBackend<T> {
             .await
             .map_err(calendar_error)?;
         Ok(events.into_iter().map(|e| self.to_appointment(e)).collect())
+    }
+
+    async fn invite(&self, message: &MessageId) -> Result<Option<Invite>, BackendError> {
+        let path = format!(
+            "/me/messages/{}?$select=id&$expand={INVITE_EXPAND}",
+            message.0
+        );
+        let prefer = format!(r#"outlook.timezone="{}""#, self.zone_name());
+        let response: dto::EventMessage = self.client.get(&path, &[("Prefer", &prefer)]).await?;
+        Ok(response.event.map(|e| self.to_invite(e)))
     }
 
     async fn create_appointment(&self, draft: &AppointmentDraft) -> Result<(), BackendError> {

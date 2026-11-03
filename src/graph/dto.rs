@@ -135,6 +135,20 @@ pub struct Event {
     pub attendees: Option<Vec<Recipient>>,
     pub body_preview: Option<String>,
     pub is_organizer: Option<bool>,
+    pub response_status: Option<ResponseStatus>,
+    pub response_requested: Option<bool>,
+}
+
+/// How the account has answered an event.
+#[derive(Debug, Deserialize)]
+pub struct ResponseStatus {
+    pub response: Option<String>,
+}
+
+/// A message, with the event it is about if it is a meeting message.
+#[derive(Debug, Deserialize)]
+pub struct EventMessage {
+    pub event: Option<Event>,
 }
 
 /// A wall-clock time without an offset, in the time zone asked for.

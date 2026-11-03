@@ -6,6 +6,7 @@ mod attachment;
 mod backend;
 mod draft;
 mod folder;
+mod invite;
 mod message;
 
 pub use action::{Action, Event};
@@ -14,4 +15,5 @@ pub use attachment::{Attachment, AttachmentId, AttachmentKind};
 pub use backend::{BackendError, Body, BodyType, DeltaPage, MailBackend, OlderPage};
 pub use draft::{ComposeKind, Draft, parse_addresses};
 pub use folder::{Folder, FolderId, WellKnown, folder_depths, sort_folders};
+pub use invite::{Invite, Rsvp};
 pub use message::{Importance, Message, MessageChange, MessageId, sort_messages};

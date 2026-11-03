@@ -9,7 +9,8 @@ use jiff::Timestamp;
 
 use crate::model::{
     Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, BackendError, Body,
-    DeltaPage, Draft, Folder, FolderId, Importance, MailBackend, Message, MessageId, OlderPage,
+    DeltaPage, Draft, Folder, FolderId, Importance, Invite, MailBackend, Message, MessageId,
+    OlderPage,
 };
 
 /// A folder with no parent, called `id`, and no mail, to start a test from.
@@ -90,6 +91,8 @@ pub struct FakeBackend {
     pub folders_error: Option<BackendError>,
     /// The calendar, as the server has it.
     pub appointments: Arc<Mutex<Vec<Appointment>>>,
+    /// The messages that are invites, and to what.
+    pub invites: HashMap<MessageId, Invite>,
     /// Why every calendar call fails, if it does.
     pub calendar_error: Option<BackendError>,
 }
@@ -328,6 +331,10 @@ impl MailBackend for FakeBackend {
             .collect();
         overlapping.sort_by_key(|a| a.start);
         Ok(overlapping)
+    }
+
+    async fn invite(&self, message: &MessageId) -> Result<Option<Invite>, BackendError> {
+        Ok(self.invites.get(message).cloned())
     }
 
     async fn create_appointment(&self, draft: &AppointmentDraft) -> Result<(), BackendError> {
