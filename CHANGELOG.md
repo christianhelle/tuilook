@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a check at start, at most once a day, and `otlk check-update` asks at any
   time. Pass `--no-update-check` or set `TUILOOK_NO_UPDATE_CHECK` to stop the
   check at start.
+- Meeting invites can be answered. Opening one shows when and where the meeting
+  is and how you have answered, and `i` then `a`, `t` or `d` accepts, answers
+  tentatively or declines it.
 
 ### Fixed
 
