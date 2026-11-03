@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use crate::core::fake::FakeBackend;
 use crate::model::{
     Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder,
-    FolderId, Importance, Message, MessageId, WellKnown,
+    FolderId, Importance, Invite, Message, MessageId, WellKnown,
 };
 use jiff::{SignedDuration, Timestamp, ToSpan, Zoned, civil::Time};
 
@@ -54,7 +54,7 @@ pub fn accounts() -> Vec<(String, FakeBackend)> {
         ),
         (
             "ada@analytical.example".to_owned(),
-            with_calendar(work(), "w", WORK_CALENDAR),
+            with_invite(with_calendar(work(), "w", WORK_CALENDAR)),
         ),
         (
             "ada@university.example".to_owned(),
@@ -180,6 +180,44 @@ fn with_calendar(backend: FakeBackend, key: &str, calendar: &[AppointmentSpec]) 
         appointments: Arc::new(Mutex::new(appointments)),
         ..backend
     }
+}
+
+/// `backend` with the mail about the moved review an invite to it, three
+/// days from today as the calendar is.
+fn with_invite(backend: FakeBackend) -> FakeBackend {
+    const SUBJECT: &str = "Engine review moved to Thursday";
+    let id = backend
+        .messages
+        .values()
+        .flatten()
+        .find(|m| m.subject == SUBJECT)
+        .map(|m| m.id.clone());
+    let zone = jiff::tz::TimeZone::system();
+    let start = Zoned::now()
+        .date()
+        .checked_add(3.days())
+        .ok()
+        .and_then(|day| {
+            day.to_datetime(Time::constant(14, 0, 0, 0))
+                .to_zoned(zone)
+                .ok()
+        })
+        .map(|start| start.timestamp());
+    if let (Some(id), Some(start)) = (id, start) {
+        let invite = Invite {
+            event: AppointmentId("w-invite".to_owned()),
+            start,
+            end: start + SignedDuration::from_mins(60),
+            all_day: false,
+            location: "Board room".to_owned(),
+            organizer: "Charles Babbage".to_owned(),
+            answer: None,
+            response_requested: true,
+        };
+        let mut invites = backend.invites.lock().expect("nothing else holds it yet");
+        invites.insert(id, invite);
+    }
+    backend
 }
 
 fn personal() -> FakeBackend {

@@ -364,6 +364,10 @@ impl MailBackend for FakeBackend {
         }
         let mut responses = self.responses.lock().expect("no test panics holding it");
         responses.push((event.clone(), rsvp, notify));
+        let mut invites = self.invites.lock().expect("no test panics holding it");
+        for invite in invites.values_mut().filter(|i| i.event == *event) {
+            invite.answer = Some(rsvp);
+        }
         Ok(())
     }
 

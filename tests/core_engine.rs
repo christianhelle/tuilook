@@ -1221,3 +1221,19 @@ async fn a_refused_answer_to_an_invite_is_reported_and_changes_nothing() {
         })
     );
 }
+
+#[tokio::test]
+async fn the_demo_has_an_invite_that_stays_answered() {
+    use tuilook::model::MailBackend;
+    let (_, backend) = tuilook::tui::demo::accounts().remove(1);
+    let found = backend.invites.lock().unwrap().clone();
+    let (id, invite) = found.into_iter().next().unwrap();
+
+    backend
+        .respond(&invite.event, Rsvp::Accept, true)
+        .await
+        .unwrap();
+
+    let answered = backend.invite(&id).await.unwrap().unwrap();
+    assert_eq!(answered.answer, Some(Rsvp::Accept));
+}
