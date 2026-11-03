@@ -1,6 +1,6 @@
 use tuilook::model::{
     Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder,
-    FolderId, Importance, Message, MessageChange, MessageId, WellKnown,
+    FolderId, Importance, Invite, Message, MessageChange, MessageId, Rsvp, WellKnown,
 };
 use tuilook::store::Store;
 
@@ -178,6 +178,8 @@ fn opening_a_cache_blanked_by_partial_changes_drops_them_and_resyncs() {
     conn.execute("DROP TABLE appointments", []).unwrap();
     // Or attachments.
     conn.execute("DROP TABLE attachments", []).unwrap();
+    // Or invites.
+    conn.execute("DROP TABLE invites", []).unwrap();
     drop(conn);
 
     let store = Store::open(&path).unwrap();
@@ -665,4 +667,68 @@ fn a_removed_appointment_is_gone_from_the_cache() {
             .unwrap(),
         [kept]
     );
+}
+
+fn invite() -> Invite {
+    Invite {
+        event: AppointmentId("e1".to_owned()),
+        start: "2026-11-10T13:00:00Z".parse().unwrap(),
+        end: "2026-11-10T14:00:00Z".parse().unwrap(),
+        all_day: false,
+        location: "Room 4".to_owned(),
+        organizer: "Ada Lovelace".to_owned(),
+        answer: Some(Rsvp::Tentative),
+        response_requested: false,
+    }
+}
+
+/// A store holding message `m1`.
+fn store_with_message() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .upsert_folders(&[folder("f1", "Inbox", None)])
+        .unwrap();
+    store
+        .upsert_messages(&[message("m1", "f1", "2026-11-01T10:00:00Z")])
+        .unwrap();
+    store
+}
+
+#[test]
+fn a_message_not_looked_at_is_not_known_to_be_an_invite_or_not() {
+    let store = store_with_message();
+
+    assert_eq!(store.invite(&MessageId("m1".to_owned())).unwrap(), None);
+}
+
+#[test]
+fn a_message_can_be_remembered_as_no_invite() {
+    let mut store = store_with_message();
+    let id = MessageId("m1".to_owned());
+
+    store.put_invite(&id, None).unwrap();
+
+    assert_eq!(store.invite(&id).unwrap(), Some(None));
+}
+
+#[test]
+fn an_invite_can_be_remembered_and_then_replaced() {
+    let mut store = store_with_message();
+    let id = MessageId("m1".to_owned());
+    store.put_invite(&id, None).unwrap();
+
+    store.put_invite(&id, Some(&invite())).unwrap();
+
+    assert_eq!(store.invite(&id).unwrap(), Some(Some(invite())));
+}
+
+#[test]
+fn an_invite_is_forgotten_with_its_message() {
+    let mut store = store_with_message();
+    let id = MessageId("m1".to_owned());
+    store.put_invite(&id, Some(&invite())).unwrap();
+
+    store.delete_messages(std::slice::from_ref(&id)).unwrap();
+
+    assert_eq!(store.invite(&id).unwrap(), None);
 }

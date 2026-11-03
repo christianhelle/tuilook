@@ -4,7 +4,7 @@ use std::{collections::HashSet, sync::LazyLock};
 
 use crate::model::{
     Appointment, AppointmentId, Attachment, AttachmentId, AttachmentKind, Body, BodyType, Folder,
-    FolderId, Importance, Message, MessageChange, MessageId, WellKnown, sort_folders,
+    FolderId, Importance, Invite, Message, MessageChange, MessageId, Rsvp, WellKnown, sort_folders,
 };
 use jiff::Timestamp;
 use rusqlite::{Connection, OptionalExtension, Row, types::Type};
@@ -18,6 +18,7 @@ static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
         M::up(include_str!("migrations/004_pinned.sql")),
         M::up(include_str!("migrations/005_appointments.sql")),
         M::up(include_str!("migrations/006_attachments.sql")),
+        M::up(include_str!("migrations/007_invites.sql")),
     ])
 });
 
@@ -558,6 +559,45 @@ impl Store {
         Ok(appointments)
     }
 
+    /// Remembers what `message` invites to, or with `None` that it is no
+    /// invite.
+    pub fn put_invite(&mut self, message: &MessageId, invite: Option<&Invite>) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO invites
+                 (message_id, event_id, start_at, end_at, all_day, location, organizer,
+                  answer, response_requested)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            (
+                &message.0,
+                invite.map(|i| &i.event.0),
+                invite.map(|i| i.start.as_millisecond()),
+                invite.map(|i| i.end.as_millisecond()),
+                invite.map(|i| i.all_day),
+                invite.map(|i| &i.location),
+                invite.map(|i| &i.organizer),
+                invite.and_then(|i| i.answer).map(answer_name),
+                invite.map(|i| i.response_requested),
+            ),
+        )?;
+        Ok(())
+    }
+
+    /// What is remembered about `message` being an invite: `None` if nothing,
+    /// `Some(None)` if it is not one.
+    pub fn invite(&self, message: &MessageId) -> Result<Option<Option<Invite>>> {
+        let invite = self
+            .conn
+            .query_row(
+                "SELECT event_id, start_at, end_at, all_day, location, organizer, answer,
+                        response_requested
+                 FROM invites WHERE message_id = ?1",
+                [&message.0],
+                invite_from_row,
+            )
+            .optional()?;
+        Ok(invite)
+    }
+
     pub fn remove_appointment(&mut self, id: &AppointmentId) -> Result<()> {
         self.conn
             .execute("DELETE FROM appointments WHERE id = ?1", [&id.0])?;
@@ -589,6 +629,40 @@ fn folder_from_row(row: &Row) -> rusqlite::Result<Folder> {
         unread: row.get(4)?,
         total: row.get(5)?,
     })
+}
+
+fn answer_name(answer: Rsvp) -> &'static str {
+    match answer {
+        Rsvp::Accept => "accept",
+        Rsvp::Tentative => "tentative",
+        Rsvp::Decline => "decline",
+    }
+}
+
+fn invite_from_row(row: &Row) -> rusqlite::Result<Option<Invite>> {
+    let Some(event) = row.get::<_, Option<String>>(0)? else {
+        return Ok(None);
+    };
+    let instant = |column: usize| {
+        Timestamp::from_millisecond(row.get(column)?).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(column, Type::Integer, Box::new(e))
+        })
+    };
+    Ok(Some(Invite {
+        event: AppointmentId(event),
+        start: instant(1)?,
+        end: instant(2)?,
+        all_day: row.get(3)?,
+        location: row.get(4)?,
+        organizer: row.get(5)?,
+        answer: match row.get::<_, Option<String>>(6)?.as_deref() {
+            Some("accept") => Some(Rsvp::Accept),
+            Some("tentative") => Some(Rsvp::Tentative),
+            Some("decline") => Some(Rsvp::Decline),
+            _ => None,
+        },
+        response_requested: row.get(7)?,
+    }))
 }
 
 fn appointment_from_row(row: &Row) -> rusqlite::Result<Appointment> {
