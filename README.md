@@ -510,6 +510,16 @@ only that occurrence. tuilook cannot make an appointment repeat.
 If you signed in before tuilook had a calendar, sign in again with
 `otlk login` to allow calendar access.
 
+### Answering invites
+
+Opening a meeting invite shows when and where the meeting is, and how you have
+answered, under its subject. Press `i` to answer it, then `a` to accept, `t` for
+tentative or `d` to decline. `Esc` leaves it unanswered.
+
+The organizer is told your answer, unless they asked for no replies, and the
+calendar syncs so the agenda shows the change. The invite stays in its folder.
+An answer you give in another app shows the next time you open the invite.
+
 ## Syncing
 
 tuilook checks for new mail, and changes to the calendar, every minute, and
