@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::model::{AppointmentId, Attachment, FolderId, MessageId};
+use crate::model::{AppointmentId, Attachment, FolderId, Invite, MessageId};
 
 /// Something the user asked for. The UI applies it to its own state and
 /// forwards anything that needs IO to core.
@@ -90,6 +90,11 @@ pub enum Event {
         message: MessageId,
         text: String,
         attachments: Vec<Attachment>,
+    },
+    /// The message whose body was just loaded is this invite.
+    InviteLoaded {
+        message: MessageId,
+        invite: Invite,
     },
     /// A page of a folder's older mail is in the store; `more` says whether
     /// there is older mail still to fetch.

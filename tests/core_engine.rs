@@ -6,7 +6,7 @@ use tuilook::core::{Command, calendar_window, fake::FakeBackend, run_engine};
 use tuilook::model::{
     Appointment, AppointmentDraft, AppointmentId, Attachment, AttachmentId, AttachmentKind,
     BackendError, Body, BodyType, ComposeKind, DeltaPage, Draft, Event, Folder, FolderId,
-    Importance, Message, MessageId, WellKnown,
+    Importance, Invite, Message, MessageId, WellKnown,
 };
 use tuilook::store::Store;
 
@@ -951,5 +951,71 @@ async fn saved_names_are_safe_attached_mail_is_eml_and_cloud_links_are_skipped()
         Some(Event::Error(
             "Budget.xlsx is a link to a file in the cloud, with nothing to save".to_owned()
         ))
+    );
+}
+
+fn invite() -> Invite {
+    Invite {
+        event: AppointmentId("e1".to_owned()),
+        start: "2026-11-10T13:00:00Z".parse().unwrap(),
+        end: "2026-11-10T14:00:00Z".parse().unwrap(),
+        all_day: false,
+        location: "Room 4".to_owned(),
+        organizer: "Ada Lovelace".to_owned(),
+        answer: None,
+        response_requested: true,
+    }
+}
+
+/// A backend with one message, `m1`, and `invites`, if it is one.
+fn backend_with_mail(invites: Option<Invite>) -> (FakeBackend, MessageId) {
+    let id = MessageId("m1".to_owned());
+    let backend = FakeBackend {
+        folders: vec![folder("inbox")],
+        messages: [(
+            FolderId("inbox".to_owned()),
+            vec![tuilook::core::fake::message("m1")],
+        )]
+        .into(),
+        bodies: [(
+            id.clone(),
+            Body {
+                content_type: BodyType::Text,
+                content: "Hi".to_owned(),
+            },
+        )]
+        .into(),
+        invites: Arc::new(Mutex::new(
+            invites.into_iter().map(|i| (id.clone(), i)).collect(),
+        )),
+        ..Default::default()
+    };
+    (backend, id)
+}
+
+fn body_loaded(message: &MessageId) -> Event {
+    Event::BodyLoaded {
+        message: message.clone(),
+        text: "Hi".to_owned(),
+        attachments: vec![],
+    }
+}
+
+#[tokio::test]
+async fn opening_an_invite_loads_the_body_then_the_invite() {
+    let (backend, id) = backend_with_mail(Some(invite()));
+    let (commands, mut events) = start(backend);
+    commands.send(Command::SyncAll).unwrap();
+    while events.recv().await != Some(Event::SyncFinished) {}
+
+    commands.send(Command::LoadBody(id.clone())).unwrap();
+
+    assert_eq!(events.recv().await, Some(body_loaded(&id)));
+    assert_eq!(
+        events.recv().await,
+        Some(Event::InviteLoaded {
+            message: id,
+            invite: invite(),
+        })
     );
 }

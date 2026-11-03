@@ -92,7 +92,7 @@ pub struct FakeBackend {
     /// The calendar, as the server has it.
     pub appointments: Arc<Mutex<Vec<Appointment>>>,
     /// The messages that are invites, and to what.
-    pub invites: HashMap<MessageId, Invite>,
+    pub invites: Arc<Mutex<HashMap<MessageId, Invite>>>,
     /// Answers given so far: the meeting, the answer, and whether the
     /// organizer was told.
     pub responses: Arc<Mutex<Vec<(AppointmentId, Rsvp, bool)>>>,
@@ -337,7 +337,8 @@ impl MailBackend for FakeBackend {
     }
 
     async fn invite(&self, message: &MessageId) -> Result<Option<Invite>, BackendError> {
-        Ok(self.invites.get(message).cloned())
+        let invites = self.invites.lock().expect("no test panics holding it");
+        Ok(invites.get(message).cloned())
     }
 
     async fn respond(

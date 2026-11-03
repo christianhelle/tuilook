@@ -12,7 +12,7 @@ use crate::core::{
     attachments::save_attachments,
     calendar::sync_calendar,
     changes::{Change, Removal, change_messages, move_messages, remove_messages},
-    load_body, sync_folders, sync_messages,
+    load_body, load_invite, sync_folders, sync_messages,
 };
 
 /// What the UI asks core to do.
@@ -99,13 +99,16 @@ pub async fn run_engine(
             Command::LoadBody(message) => {
                 let event = match load_body(&backend, &mut store, &message).await {
                     Ok((text, attachments)) => Event::BodyLoaded {
-                        message,
+                        message: message.clone(),
                         text,
                         attachments,
                     },
                     Err(e) => Event::Error(e.to_string()),
                 };
-                events.send(event).await
+                match events.send(event).await {
+                    Ok(()) => invite_loaded(&backend, &mut store, message, &events).await,
+                    gone => gone,
+                }
             }
             Command::LoadOlder {
                 folder,
@@ -186,6 +189,20 @@ pub async fn run_engine(
         if sent.is_err() {
             return; // The UI has gone away.
         }
+    }
+}
+
+/// Reports the invite `message` is, if it is one. Not knowing is no failure:
+/// the message has been shown either way.
+async fn invite_loaded(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    message: MessageId,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), mpsc::error::SendError<Event>> {
+    match load_invite(backend, store, &message).await {
+        Some(invite) => events.send(Event::InviteLoaded { message, invite }).await,
+        None => Ok(()),
     }
 }
 

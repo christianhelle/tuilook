@@ -1,4 +1,4 @@
-use crate::model::{Attachment, BackendError, FolderId, MailBackend, MessageId};
+use crate::model::{Attachment, BackendError, FolderId, Invite, MailBackend, MessageId};
 use crate::store::{Store, StoreError};
 
 #[derive(Debug, thiserror::Error)]
@@ -70,4 +70,15 @@ pub async fn load_body(
         }
     };
     Ok((crate::core::body_text(&body), attachments))
+}
+
+/// The meeting `message` invites to, if it is an invite.
+pub async fn load_invite(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    message: &MessageId,
+) -> Option<Invite> {
+    let invite = backend.invite(message).await.ok()?;
+    store.put_invite(message, invite.as_ref()).ok()?;
+    invite
 }
