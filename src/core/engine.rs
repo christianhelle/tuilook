@@ -215,7 +215,14 @@ async fn invite_loaded(
     events: &mpsc::Sender<Event>,
 ) -> Result<(), mpsc::error::SendError<Event>> {
     match load_invite(backend, store, &message).await {
-        Some(invite) => events.send(Event::InviteLoaded { message, invite }).await,
+        Some(invite) => {
+            events
+                .send(Event::InviteLoaded {
+                    message,
+                    invite: Box::new(invite),
+                })
+                .await
+        }
         None => Ok(()),
     }
 }

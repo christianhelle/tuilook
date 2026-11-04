@@ -96,7 +96,7 @@ pub enum Event {
     /// The message whose body was just loaded is this invite.
     InviteLoaded {
         message: MessageId,
-        invite: Invite,
+        invite: Box<Invite>,
     },
     /// The invite in this message was answered. The calendar is synced right
     /// after.
@@ -145,4 +145,16 @@ pub enum Event {
     /// The appointment being saved was not, and why.
     AppointmentNotSaved(String),
     Error(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Event;
+    use std::mem::size_of;
+    use tokio::sync::mpsc::error::SendError;
+
+    #[test]
+    fn event_send_errors_stay_below_clippys_large_error_threshold() {
+        assert!(size_of::<SendError<Event>>() < 128);
+    }
 }

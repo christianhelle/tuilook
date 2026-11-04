@@ -114,7 +114,7 @@ impl Mailboxes {
                 attachments,
             } => app.body_loaded(message, text, attachments),
             Event::InviteLoaded { message, invite } => {
-                app.invite_loaded(message, invite);
+                app.invite_loaded(message, *invite);
                 None
             }
             Event::InviteAnswered { message, answer } => {

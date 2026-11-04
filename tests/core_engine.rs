@@ -1015,7 +1015,7 @@ async fn opening_an_invite_loads_the_body_then_the_invite() {
         events.recv().await,
         Some(Event::InviteLoaded {
             message: id,
-            invite: invite(),
+            invite: Box::new(invite()),
         })
     );
 }
@@ -1061,7 +1061,7 @@ async fn a_failed_invite_lookup_still_shows_the_body_and_tries_again_next_time()
         events.recv().await,
         Some(Event::InviteLoaded {
             message: id,
-            invite: invite(),
+            invite: Box::new(invite()),
         })
     );
 }
@@ -1092,7 +1092,7 @@ async fn a_known_invite_is_read_again_so_answers_given_elsewhere_show() {
         events.recv().await,
         Some(Event::InviteLoaded {
             message: id,
-            invite: answered,
+            invite: Box::new(answered),
         })
     );
 }
@@ -1119,7 +1119,7 @@ async fn a_known_invite_that_cannot_be_read_again_shows_as_it_was() {
         events.recv().await,
         Some(Event::InviteLoaded {
             message: id,
-            invite: invite(),
+            invite: Box::new(invite()),
         })
     );
 }
@@ -1173,7 +1173,7 @@ async fn answering_an_invite_tells_the_backend_remembers_it_and_syncs_the_calend
         events.recv().await,
         Some(Event::InviteLoaded {
             message: id,
-            invite: answered,
+            invite: Box::new(answered),
         })
     );
 }
@@ -1217,7 +1217,7 @@ async fn a_refused_answer_to_an_invite_is_reported_and_changes_nothing() {
         events.recv().await,
         Some(Event::InviteLoaded {
             message: id,
-            invite: invite(),
+            invite: Box::new(invite()),
         })
     );
 }
