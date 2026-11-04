@@ -67,6 +67,27 @@ To try changes that aren't released yet, install straight from GitHub:
 cargo install --git https://github.com/christianhelle/tuilook
 ```
 
+## Development Container
+
+Open this repository in VS Code with the Dev Containers extension and run
+**Dev Containers: Reopen in Container**, or open it in GitHub Codespaces.
+The container installs Rust 1.95.0, rustfmt, Clippy, Rust Analyzer, and CodeLLDB,
+and fetches the locked dependencies on creation.
+
+Run the same checks as CI from the container terminal:
+
+```bash
+cargo fmt --all --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+To run the terminal UI without signing in:
+
+```bash
+cargo run -- --demo
+```
+
 ## Try it without signing in
 
 ```bash
