@@ -301,8 +301,8 @@ fn viewport_measures_what_each_pane_can_show() {
             folders: 3,
             messages: 4,
             reader: 9,
-            // From, Subject, blank, "Hi", then the long line wrapped in four
-            reader_lines: 8,
+            // From, Subject, Date, blank, "Hi", then the long line wrapped in four
+            reader_lines: 9,
             // The line numbers take four of the 34 columns inside the border
             reader_width: 30,
             compose: 0,
@@ -608,6 +608,7 @@ fn a_burst_of_sends_asks_before_the_next() {
 fn two_accounts() -> AppState {
     let mut app = AppState {
         accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+        clock: Some("2026-11-03T09:00:00+00:00[UTC]".parse().unwrap()),
         ..Default::default()
     };
     app.set_account_folders(
@@ -916,7 +917,7 @@ fn the_focused_reader_shows_its_cursor() {
     assert!(!reversed(&terminal, "From: Ada"), "only while focused");
 
     app.focus = Pane::Reader;
-    press(&mut app, "jj");
+    press(&mut app, "jjj");
     terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
     let cursor = terminal
         .backend()
@@ -931,7 +932,7 @@ fn the_focused_reader_shows_its_cursor() {
     );
     assert!(!reversed(&terminal, "From: Ada"));
 
-    press(&mut app, "k");
+    press(&mut app, "kk");
     terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
     assert!(reversed(&terminal, "Subject:"));
     assert!(!reversed(&terminal, "ubject:"));
@@ -941,11 +942,12 @@ fn the_focused_reader_shows_its_cursor() {
 fn the_reader_numbers_its_lines_from_the_cursor() {
     let mut app = sample_app();
     app.focus = Pane::Reader;
-    press(&mut app, "jj");
+    press(&mut app, "jjj");
 
     let screen = render(&app);
-    assert!(screen.contains("  2 From: Ada"), "{screen}");
-    assert!(screen.contains("  1 Subject:"), "{screen}");
+    assert!(screen.contains("  3 From: Ada"), "{screen}");
+    assert!(screen.contains("  2 Subject:"), "{screen}");
+    assert!(screen.contains("  1 Date:"), "{screen}");
     assert!(screen.contains("  1 Notes on the engine"), "{screen}");
 }
 

@@ -6,9 +6,9 @@ expression: render(&app)
 "│* adds the selec││  ▾ Pinned (1)                    ││1   From: Linus                   │"
 "└────────────────┘│> Linus ⚑ 📌                      ││    <linus@example.com>           │" Hidden by multi-width symbols: [(30, " ")]
 "┌ Unread ────────┐│    Release checklist             ││  1 Subject: Release checklist    │"
-"│No unread mail  ││  ▾ Older (2)                     ││  2                               │"
-"└────────────────┘│  Ada                             ││  3 Tag it on Friday              │"
-"┏ Folders ━━━━━━━┓│    Analytical engine             ││                                  │"
+"│No unread mail  ││  ▾ Older (2)                     ││  2 Date: Thu 1 Jan 1970, 00:00   │"
+"└────────────────┘│  Ada                             ││  3                               │"
+"┏ Folders ━━━━━━━┓│    Analytical engine             ││  4 Tag it on Friday              │"
 "┃>   Inbox (2)   ┃│  Grace                           ││                                  │"
 "┃    Sent Items  ┃│    Compiler draft                ││                                  │"
 "┃    Projects    ┃│                                  ││                                  │"

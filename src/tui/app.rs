@@ -320,6 +320,12 @@ impl AppState {
         let mut text = vec![
             format!("From: {} <{}>", shown(&m.from_name), shown(&m.from_addr)),
             format!("Subject: {}", shown(&m.subject)),
+            format!(
+                "Date: {}",
+                m.received_at
+                    .to_zoned(self.now().time_zone().clone())
+                    .strftime("%a %-d %b %Y, %H:%M")
+            ),
         ];
         for (index, a) in self.attachments.iter().enumerate() {
             let label = if index == 0 { "Attached:" } else { "" };
@@ -1509,6 +1515,21 @@ mod tests {
     }
 
     #[test]
+    fn the_reader_says_when_mail_arrived_in_local_time() {
+        let mut app = in_message_list(&["m1"]);
+        app.clock = Some(
+            "2026-11-03T09:00:00+01:00[Europe/Copenhagen]"
+                .parse()
+                .unwrap(),
+        );
+        app.messages[0].received_at = "2026-10-31T23:30:00Z".parse().unwrap();
+
+        let text = app.reader_text().unwrap();
+
+        assert_eq!(text[2], "Date: Sun 1 Nov 2026, 00:30");
+    }
+
+    #[test]
     fn j_and_k_scroll_the_reading_pane_within_the_body() {
         let mut app = reading(10, 12);
 
@@ -1550,9 +1571,9 @@ mod tests {
         let mut app = reading(10, 5);
         app.body = Some("Dear Charles,".to_owned());
 
-        type_keys(&mut app, "jjjw");
+        type_keys(&mut app, "jjjjw");
 
-        assert_eq!(app.viewer.cursor(), (3, 5));
+        assert_eq!(app.viewer.cursor(), (4, 5));
     }
 
     #[test]
@@ -1568,13 +1589,14 @@ mod tests {
     fn v_in_the_reader_picks_from_the_cursor_and_y_copies_it() {
         let mut app = reading(10, 5);
         app.body = Some("Dear Charles,".to_owned());
+        app.clock = Some("2026-11-03T09:00:00+00:00[UTC]".parse().unwrap());
 
-        let effect = type_keys(&mut app, "jvjj$y");
+        let effect = type_keys(&mut app, "jjvjj$y");
 
         assert_eq!(
             effect,
             Some(Effect::Copy(
-                "Subject: m0
+                "Date: Thu 1 Jan 1970, 00:00
 
 Dear Charles,"
                     .to_owned()
@@ -1852,7 +1874,7 @@ Dear Charles,"
         app.invite_loaded(MessageId("m1".to_owned()), invite);
         let text = app.reader_text().unwrap();
         text.into_iter()
-            .skip(2)
+            .skip(3)
             .take_while(|line| !line.is_empty())
             .collect()
     }
