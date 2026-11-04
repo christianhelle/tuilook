@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Meeting invites can be answered. Opening one shows when and where the meeting
   is and how you have answered, and `i` then `a`, `t` or `d` accepts, answers
   tentatively or declines it.
+- The reading pane shows the date and time a mail arrived, in your own time
+  zone, under its subject.
 
 ### Fixed
 
