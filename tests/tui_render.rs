@@ -48,6 +48,8 @@ fn sample_app() -> AppState {
         message("m1", "Ada", "Analytical engine", "Notes on the engine"),
         message("m2", "Grace", "Compiler draft", "First pass attached"),
     ]);
+    // Dates show in the local time zone, which differs between machines.
+    app.clock = Some("2026-11-03T09:00:00+00:00[UTC]".parse().unwrap());
     app
 }
 
