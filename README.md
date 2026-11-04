@@ -71,8 +71,17 @@ cargo install --git https://github.com/christianhelle/tuilook
 
 Open this repository in VS Code with the Dev Containers extension and run
 **Dev Containers: Reopen in Container**, or open it in GitHub Codespaces.
-The container installs Rust 1.95.0, rustfmt, Clippy, Rust Analyzer, and CodeLLDB,
+The container installs stable Rust, rustfmt, Clippy, Rust Analyzer, and CodeLLDB,
 and fetches the locked dependencies on creation.
+Like CI, it follows the latest stable toolchain rather than the minimum Rust
+version in `Cargo.toml`. Rust Analyzer runs Clippy with warnings treated as errors.
+
+In an existing container, update and select the toolchain before running checks:
+
+```bash
+rustup toolchain install stable --profile minimal --component rustfmt --component clippy --component rust-src
+rustup default stable
+```
 
 Run the same checks as CI from the container terminal:
 
