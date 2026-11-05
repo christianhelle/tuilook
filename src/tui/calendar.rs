@@ -62,13 +62,7 @@ impl AppState {
                 return Some(Effect::core(account, Command::SyncCalendar));
             }
             agenda::Request::New => {
-                let today = agenda.today();
-                let day = agenda
-                    .selected()
-                    .map(|a| agenda.day_of(a))
-                    .filter(|day| *day >= today)
-                    .unwrap_or(today);
-                let form = AppointmentForm::new(day, agenda.time_zone().clone());
+                let form = AppointmentForm::new(agenda.day_for_new(), agenda.time_zone().clone());
                 self.screen.open_appointment(form);
             }
             agenda::Request::Edit(appointment) => {

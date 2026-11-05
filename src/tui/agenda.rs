@@ -1,6 +1,6 @@
-//! The calendar, listed day by day from a week ago to three months ahead.
+//! The calendar: listed day by day, or laid out by the week or the month.
 
-use jiff::{Timestamp, civil::Date, tz::TimeZone};
+use jiff::{Timestamp, ToSpan, civil::Date, tz::TimeZone};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
 
@@ -53,13 +53,17 @@ pub struct Agenda {
     pub account: usize,
     pub address: String,
     appointments: Vec<Appointment>,
-    /// Index into `appointments`.
+    /// Index into `appointments`, the selection in [`CalendarView::Agenda`].
     selected: usize,
     /// Whether the selected appointment is shown in full.
     pub details: bool,
     time_zone: TimeZone,
     today: Date,
     view: CalendarView,
+    /// The selected day in the week and the month.
+    day: Date,
+    /// The selected one of [`Agenda::appointments_on`] that day.
+    on_day: usize,
 }
 
 impl Agenda {
@@ -81,6 +85,8 @@ impl Agenda {
             time_zone,
             today,
             view,
+            day: today,
+            on_day: 0,
         }
     }
 
@@ -88,15 +94,32 @@ impl Agenda {
         self.view
     }
 
+    /// The selected day in the week and the month.
+    pub fn day(&self) -> Date {
+        self.day
+    }
+
+    /// The selected one of the selected day's appointments.
+    pub fn selected_on_day(&self) -> usize {
+        self.on_day
+    }
+
     /// Shows `appointments`, soonest first. The selection stays on the same
-    /// appointment if it is still there, or else goes to today's first.
+    /// appointment if it is still there. Or else, in the agenda it goes to
+    /// today's first, and in the week and the month it stays on its day.
     pub fn set_appointments(&mut self, appointments: Vec<Appointment>) {
-        let was = self.selected().map(|a| a.id.clone());
+        let listed = self.appointments.get(self.selected).map(|a| a.id.clone());
+        let on_day = self.selected_of_day().map(|a| a.id.clone());
         self.appointments = appointments;
-        self.selected = match was.and_then(|id| self.appointments.iter().position(|a| a.id == id)) {
-            Some(index) => index,
-            None => self.first_from_today(),
-        };
+        self.selected =
+            match listed.and_then(|id| self.appointments.iter().position(|a| a.id == id)) {
+                Some(index) => index,
+                None => self.first_from_today(),
+            };
+        let day = self.appointments_on(self.day);
+        self.on_day = on_day
+            .and_then(|id| day.iter().position(|a| a.id == id))
+            .unwrap_or_else(|| self.on_day.min(day.len().saturating_sub(1)));
     }
 
     /// Today's first appointment, or the next after it, or else the last.
@@ -111,8 +134,16 @@ impl Agenda {
         &self.appointments
     }
 
+    /// The appointment that changing, deleting or showing in full acts on.
     pub fn selected(&self) -> Option<&Appointment> {
-        self.appointments.get(self.selected)
+        match self.view {
+            CalendarView::Agenda => self.appointments.get(self.selected),
+            CalendarView::Week | CalendarView::Month => self.selected_of_day(),
+        }
+    }
+
+    fn selected_of_day(&self) -> Option<&Appointment> {
+        self.appointments_on(self.day).get(self.on_day).copied()
     }
 
     /// The appointments on `day`, including any lasting from an earlier day.
@@ -126,6 +157,45 @@ impl Agenda {
             .iter()
             .filter(|a| a.start < end && (a.end > start || a.start == start))
             .collect()
+    }
+
+    /// The day a new appointment starts on: the selected one, or today
+    /// rather than a day gone by.
+    pub fn day_for_new(&self) -> Date {
+        let day = match self.view {
+            CalendarView::Agenda => self.selected().map(|a| self.day_of(a)),
+            CalendarView::Week | CalendarView::Month => Some(self.day),
+        };
+        day.filter(|day| *day >= self.today).unwrap_or(self.today)
+    }
+
+    /// Lays the calendar out as `view`, keeping to the same place.
+    fn set_view(&mut self, view: CalendarView) {
+        match (self.view, view) {
+            (CalendarView::Agenda, CalendarView::Week | CalendarView::Month) => {
+                if let Some(selected) = self.selected().cloned() {
+                    self.day = self.day_of(&selected);
+                    self.on_day = self
+                        .appointments_on(self.day)
+                        .iter()
+                        .position(|a| a.id == selected.id)
+                        .unwrap_or(0);
+                }
+            }
+            (CalendarView::Week | CalendarView::Month, CalendarView::Agenda) => {
+                let chosen = self.selected().map(|a| a.id.clone());
+                self.selected = chosen
+                    .and_then(|id| self.appointments.iter().position(|a| a.id == id))
+                    .or_else(|| {
+                        self.appointments
+                            .iter()
+                            .position(|a| self.day_of(a) >= self.day)
+                    })
+                    .unwrap_or(self.appointments.len().saturating_sub(1));
+            }
+            _ => {}
+        }
+        self.view = view;
     }
 
     /// From the start of `first` to the end of `last`, if those are times
@@ -190,9 +260,35 @@ impl Agenda {
             KeyCode::Char('?') => return Request::Help,
             KeyCode::Tab => return Request::NextAccount,
             KeyCode::BackTab => return Request::PrevAccount,
-            _ => self.move_selection(key),
+            KeyCode::Char('a') => self.set_view(CalendarView::Agenda),
+            KeyCode::Char('w') => self.set_view(CalendarView::Week),
+            KeyCode::Char('m') => self.set_view(CalendarView::Month),
+            _ if self.view == CalendarView::Agenda => self.move_selection(key),
+            _ => self.move_in_grid(key),
         }
         Request::None
+    }
+
+    /// Moves about the week or the month, leaving the selection as it is at
+    /// the ends of the calendar's dates.
+    fn move_in_grid(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('h') | KeyCode::Left => self.step_days(-1),
+            KeyCode::Char('l') | KeyCode::Right => self.step_days(1),
+            _ => {}
+        }
+    }
+
+    /// Selects `day` and its first appointment.
+    fn select_day(&mut self, day: Date) {
+        self.day = day;
+        self.on_day = 0;
+    }
+
+    fn step_days(&mut self, days: i64) {
+        if let Ok(day) = self.day.checked_add(days.days()) {
+            self.select_day(day);
+        }
     }
 
     /// Moves the selection, or leaves it at either end.
@@ -379,6 +475,13 @@ mod tests {
         assert_eq!(press(&mut agenda, KeyCode::Char('q')), Request::Close);
     }
 
+    /// The same agenda, laid out by the `key` of a view.
+    fn in_view(key: char) -> Agenda {
+        let mut agenda = agenda();
+        press(&mut agenda, KeyCode::Char(key));
+        agenda
+    }
+
     fn ids(appointments: &[&Appointment]) -> Vec<String> {
         appointments.iter().map(|a| a.id.0.clone()).collect()
     }
@@ -451,6 +554,47 @@ mod tests {
             ids(&agenda.appointments_on(date(2026, 11, 3))),
             ["reminder"]
         );
+    }
+
+    #[test]
+    fn a_new_appointment_goes_on_today_rather_than_a_day_gone_by() {
+        let mut agenda = in_view('w');
+        press(&mut agenda, KeyCode::Char('h'));
+
+        assert_eq!(agenda.day(), date(2026, 11, 1));
+        assert_eq!(agenda.day_for_new(), date(2026, 11, 2));
+    }
+
+    #[test]
+    fn changing_the_view_keeps_the_selected_appointment() {
+        let mut agenda = agenda();
+        press(&mut agenda, KeyCode::Char('j'));
+        assert_eq!(selected(&agenda), "today 14");
+
+        press(&mut agenda, KeyCode::Char('w'));
+        assert_eq!(agenda.view(), CalendarView::Week);
+        assert_eq!(agenda.day(), date(2026, 11, 2));
+        assert_eq!(selected(&agenda), "today 14");
+        press(&mut agenda, KeyCode::Char('m'));
+        assert_eq!(selected(&agenda), "today 14");
+        press(&mut agenda, KeyCode::Char('l'));
+        press(&mut agenda, KeyCode::Char('a'));
+
+        assert_eq!(agenda.view(), CalendarView::Agenda);
+        assert_eq!(selected(&agenda), "tomorrow");
+    }
+
+    #[test]
+    fn back_in_the_agenda_from_an_empty_day_the_next_appointment_is_selected() {
+        let mut agenda = in_view('w');
+        // Back to Saturday 31 October, with nothing on it.
+        press(&mut agenda, KeyCode::Char('h'));
+        press(&mut agenda, KeyCode::Char('h'));
+        assert!(agenda.selected().is_none());
+
+        press(&mut agenda, KeyCode::Char('a'));
+
+        assert_eq!(selected(&agenda), "yesterday");
     }
 
     #[test]
