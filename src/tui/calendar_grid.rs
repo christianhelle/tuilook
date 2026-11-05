@@ -131,12 +131,16 @@ fn draw_week_day(frame: &mut Frame, agenda: &Agenda, day: Date, column: Rect) {
     frame.render_widget(Paragraph::new(lines), Rect { width, ..column });
 }
 
-/// The weeks of a month, with the selected day's appointments beside them.
+/// The weeks of a month, with the selected day's appointments beside them,
+/// or the selected appointment in full while asked for.
 pub(crate) fn draw_month(frame: &mut Frame, agenda: &Agenda, area: Rect) {
     let [grid, side] =
         Layout::horizontal([Constraint::Ratio(2, 3), Constraint::Ratio(1, 3)]).areas(area);
     draw_month_grid(frame, agenda, grid);
-    draw_month_side(frame, agenda, side);
+    match agenda.selected().filter(|_| agenda.details) {
+        Some(appointment) => draw_appointment_details(frame, agenda, appointment, side),
+        None => draw_month_side(frame, agenda, side),
+    }
 }
 
 fn draw_month_grid(frame: &mut Frame, agenda: &Agenda, area: Rect) {

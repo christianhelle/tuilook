@@ -1164,6 +1164,27 @@ fn an_empty_day_of_the_month_says_how_to_write_an_appointment() {
 }
 
 #[test]
+fn enter_shows_the_appointment_in_full_beside_the_month() {
+    let mut app = in_agenda(week());
+    press(&mut app, "m⏎");
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
+fn the_calendars_views_fit_a_tiny_screen_without_breaking() {
+    for keys in ["a", "w", "m", "w⏎", "m⏎"] {
+        let mut app = in_agenda(week());
+        press(&mut app, keys);
+
+        for (width, height) in [(20, 5), (1, 1), (9, 3)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+        }
+    }
+}
+
+#[test]
 fn with_several_accounts_the_agenda_says_which_and_how_to_switch() {
     let mut app = in_agenda(week());
     app.accounts.push("me@work.example".to_owned());
