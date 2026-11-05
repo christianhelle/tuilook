@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tentatively or declines it.
 - The reading pane shows the date and time a mail arrived, in your own time
   zone, under its subject.
+- The calendar can show the week or the month as well as the agenda: press `w`,
+  `m` or `a`. These two views reach any date, fetching what is not cached yet,
+  and the calendar opens in the view you last used.
 
 ### Fixed
 
