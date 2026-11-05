@@ -9,7 +9,7 @@ use crate::model::{
     Action, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId, Invite, Message,
     MessageId, Rsvp, sort_messages,
 };
-use jiff::{SignedDuration, Zoned, tz::TimeZone};
+use jiff::{SignedDuration, Timestamp, Zoned, tz::TimeZone};
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     widgets::{Paragraph, Wrap},
@@ -70,6 +70,12 @@ pub enum Effect {
     LoadAgenda {
         account: usize,
         sync: bool,
+    },
+    /// Show `account`'s cached calendar in its open agenda, with all it lays
+    /// out, then ask the server for the stretch `fetch`, if any.
+    ShowCalendarRange {
+        account: usize,
+        fetch: Option<(Timestamp, Timestamp)>,
     },
 }
 
@@ -850,7 +856,9 @@ impl AppState {
             Effect::Cores(_) | Effect::Sync | Effect::Search(_) | Effect::Copy(_) => {
                 self.current_account()
             }
-            Effect::SaveSignature { account, .. } | Effect::LoadAgenda { account, .. } => *account,
+            Effect::SaveSignature { account, .. }
+            | Effect::LoadAgenda { account, .. }
+            | Effect::ShowCalendarRange { account, .. } => *account,
         }
     }
 

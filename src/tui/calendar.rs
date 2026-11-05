@@ -1,7 +1,7 @@
 //! The calendar in the app: the agenda that takes over the screen, and the
 //! appointment being written or changed from it.
 
-use crate::core::Command;
+use crate::core::{Command, calendar_window};
 use crate::model::Appointment;
 
 use crate::tui::{
@@ -46,12 +46,17 @@ impl AppState {
 
     /// A key for the open agenda.
     pub(crate) fn agenda_key(&mut self, key: KeyEvent) -> Option<Effect> {
+        let window = calendar_window(self.now().timestamp());
         let agenda = self.screen.agenda_mut()?;
         let account = agenda.account;
         let request = agenda.key(key);
         self.calendar_view = agenda.view();
         match request {
-            agenda::Request::None => {}
+            agenda::Request::None => {
+                return agenda
+                    .take_moved(window)
+                    .map(|fetch| Effect::ShowCalendarRange { account, fetch });
+            }
             agenda::Request::Close => self.screen.close_agenda(),
             agenda::Request::Help => self.dialog = Some(Dialog::Help),
             agenda::Request::NextAccount => return self.switch_calendar(account, 1),
@@ -393,6 +398,64 @@ mod tests {
         app.calendar_synced(0);
 
         assert_eq!(app.status, Some(Status::Info("Up to date".to_owned())));
+    }
+
+    /// The week view, this many weeks past the week of 2 November 2026.
+    fn weeks_on(app: &mut AppState, weeks: usize) -> Option<Effect> {
+        let mut effect = press(app, KeyCode::Char('w'));
+        for _ in 0..weeks {
+            effect = press(app, KeyCode::PageDown);
+        }
+        effect
+    }
+
+    fn range(from: &str, to: &str) -> (Timestamp, Timestamp) {
+        (at(from), at(to))
+    }
+
+    #[test]
+    fn stepping_past_the_cached_calendar_asks_for_the_month_once() {
+        let mut app = in_agenda();
+
+        // 1 February 2027: the first week in that month, past 90 days from today.
+        let effect = weeks_on(&mut app, 13);
+        assert_eq!(
+            effect,
+            Some(Effect::ShowCalendarRange {
+                account: 0,
+                fetch: Some(range("2027-02-01T00:00:00Z", "2027-03-01T00:00:00Z")),
+            })
+        );
+
+        // In the same month: load what the cache has, without asking again.
+        assert_eq!(
+            press(&mut app, KeyCode::PageDown),
+            Some(Effect::ShowCalendarRange {
+                account: 0,
+                fetch: None,
+            })
+        );
+    }
+
+    #[test]
+    fn moving_about_the_week_shown_asks_for_nothing_more() {
+        let mut app = in_agenda();
+        weeks_on(&mut app, 14);
+
+        assert_eq!(press(&mut app, KeyCode::Char('l')), None);
+        assert_eq!(press(&mut app, KeyCode::Char('j')), None);
+    }
+
+    #[test]
+    fn tab_keeps_the_view_and_the_new_calendar_asks_for_its_own_months() {
+        let mut app = in_three_agendas();
+        weeks_on(&mut app, 14);
+
+        press(&mut app, KeyCode::Tab);
+
+        let agenda = app.screen.agenda_mut().unwrap();
+        assert_eq!(agenda.account, 1);
+        assert_eq!(agenda.view(), CalendarView::Week);
     }
 
     #[test]

@@ -240,10 +240,17 @@ impl Mailboxes {
                     None
                 }
                 Effect::LoadAgenda { account, sync } => {
-                    let (from, to) = calendar_window(jiff::Timestamp::now());
-                    app.appointments_loaded(account, store.appointments_between(from, to)?);
+                    let window = calendar_window(jiff::Timestamp::now());
+                    load_calendar(app, store, account, window)?;
                     if sync {
                         commands.send(Command::SyncCalendar)?;
+                    }
+                    None
+                }
+                Effect::ShowCalendarRange { account, fetch } => {
+                    load_calendar(app, store, account, calendar_window(jiff::Timestamp::now()))?;
+                    if let Some((from, to)) = fetch {
+                        commands.send(Command::SyncCalendarBetween { from, to })?;
                     }
                     None
                 }
@@ -251,6 +258,22 @@ impl Mailboxes {
         }
         Ok(())
     }
+}
+
+/// Shows `account`'s cached calendar in its open agenda: what is kept around
+/// today in `window`, and anything laid out beyond it.
+fn load_calendar(
+    app: &mut AppState,
+    store: &Store,
+    account: usize,
+    window: (jiff::Timestamp, jiff::Timestamp),
+) -> Result<()> {
+    let (from, to) = app
+        .screen
+        .agenda()
+        .map_or(window, |agenda| agenda.loaded_span(window));
+    app.appointments_loaded(account, store.appointments_between(from, to)?);
+    Ok(())
 }
 
 /// Keeps `signature` for `address`, reading the accounts again so a sign-in

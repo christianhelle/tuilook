@@ -284,6 +284,62 @@ fn shift_c_opens_the_calendar_from_the_cache_and_syncs_it() {
 }
 
 #[test]
+fn a_month_beyond_the_cached_calendar_is_asked_for_and_stays_through_a_sync() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let mailbox = Mailbox {
+        store: Store::open(&path).unwrap(),
+        commands: tx,
+    };
+    let mut mailboxes = Mailboxes::new(vec![mailbox], None, Box::new(io::sink()));
+    let mut app = AppState::default();
+    let mut keymap = Keymap::default();
+    let effect = app.on_key(shift_c(), &mut keymap);
+    mailboxes.apply(&mut app, effect).unwrap();
+    sent(&mut rx);
+    let effect = app.on_key(KeyEvent::from(KeyCode::Char('m')), &mut keymap);
+    mailboxes.apply(&mut app, effect).unwrap();
+    sent(&mut rx);
+
+    // Six months on is always past the cached three months.
+    for _ in 0..6 {
+        let effect = app.on_key(KeyEvent::from(KeyCode::PageDown), &mut keymap);
+        mailboxes.apply(&mut app, effect).unwrap();
+    }
+    let asked = sent(&mut rx);
+    assert!(
+        matches!(asked.last(), Some(Command::SyncCalendarBetween { .. })),
+        "{asked:?}"
+    );
+
+    let (first, _) = app.screen.agenda().unwrap().visible_days().unwrap();
+    let start = first
+        .to_zoned(app.screen.agenda().unwrap().time_zone().clone())
+        .unwrap()
+        .timestamp()
+        + jiff::SignedDuration::from_hours(36);
+    let far = appointment("far", start);
+    {
+        let mut store = Store::open(&path).unwrap();
+        store
+            .replace_appointments(
+                start - jiff::SignedDuration::from_hours(1),
+                start + jiff::SignedDuration::from_hours(2),
+                std::slice::from_ref(&far),
+            )
+            .unwrap();
+    }
+
+    // As the sync every minute does.
+    mailboxes
+        .on_event(&mut app, 0, Event::CalendarSynced)
+        .unwrap();
+
+    assert_eq!(app.screen.agenda().unwrap().appointments(), [far]);
+}
+
+#[test]
 fn a_synced_calendar_shows_in_the_open_agenda() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("cache.db");
