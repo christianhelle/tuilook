@@ -818,7 +818,8 @@ fn draw_agenda(frame: &mut Frame, agenda: &Agenda, accounts: usize, area: Rect) 
     let inner = Block::bordered().inner(area);
     match agenda.view() {
         CalendarView::Week => return calendar_grid::draw_week(frame, agenda, inner),
-        CalendarView::Agenda | CalendarView::Month => {}
+        CalendarView::Month => return calendar_grid::draw_month(frame, agenda, inner),
+        CalendarView::Agenda => {}
     }
     let [list, details] = if agenda.details {
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(inner)
@@ -884,7 +885,7 @@ fn draw_agenda(frame: &mut Frame, agenda: &Agenda, accounts: usize, area: Rect) 
 }
 
 /// When an appointment is on its day: its times, or all day.
-fn when(agenda: &Agenda, appointment: &Appointment) -> String {
+pub(crate) fn when(agenda: &Agenda, appointment: &Appointment) -> String {
     if appointment.all_day {
         return "All day".to_owned();
     }

@@ -1147,6 +1147,23 @@ fn enter_shows_the_appointment_in_full_beside_the_week() {
 }
 
 #[test]
+fn the_month_lays_out_its_weeks_with_the_selected_days_appointments_beside_them() {
+    let mut app = in_agenda(week());
+    press(&mut app, "m");
+
+    insta::assert_snapshot!(render(&app));
+    insta::assert_snapshot!("the_month_on_a_tall_screen", render_tall(&app));
+}
+
+#[test]
+fn an_empty_day_of_the_month_says_how_to_write_an_appointment() {
+    let mut app = in_agenda(week());
+    press(&mut app, "mG");
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn with_several_accounts_the_agenda_says_which_and_how_to_switch() {
     let mut app = in_agenda(week());
     app.accounts.push("me@work.example".to_owned());
