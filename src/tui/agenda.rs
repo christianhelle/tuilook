@@ -1,5 +1,7 @@
 //! The calendar: listed day by day, or laid out by the week or the month.
 
+use std::collections::BTreeSet;
+
 use jiff::{Timestamp, ToSpan, civil::Date, tz::TimeZone};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
@@ -64,6 +66,12 @@ pub struct Agenda {
     day: Date,
     /// The selected one of [`Agenda::appointments_on`] that day.
     on_day: usize,
+    /// The stretch last laid out beyond the cached calendar, whose
+    /// appointments are kept loaded with those around today.
+    beyond: Option<(Timestamp, Timestamp)>,
+    /// The first days of the months asked of the server beyond the cached
+    /// calendar, so that stepping through them asks only once.
+    fetched: BTreeSet<Date>,
 }
 
 impl Agenda {
@@ -87,6 +95,8 @@ impl Agenda {
             view,
             day: today,
             on_day: 0,
+            beyond: None,
+            fetched: BTreeSet::new(),
         }
     }
 
@@ -231,6 +241,51 @@ impl Agenda {
             .to_zoned(self.time_zone.clone())
             .ok()?;
         Some((start.timestamp(), end.timestamp()))
+    }
+
+    /// The stretch of time laid out, if it reaches beyond `window`.
+    fn visible_beyond(&self, window: (Timestamp, Timestamp)) -> Option<(Timestamp, Timestamp)> {
+        let (first, last) = self.visible_days()?;
+        self.span_of(first, last)
+            .filter(|(start, end)| *start < window.0 || *end > window.1)
+    }
+
+    /// What should be loaded from the cache with `window` around today in it.
+    pub fn loaded_span(&self, window: (Timestamp, Timestamp)) -> (Timestamp, Timestamp) {
+        self.beyond.map_or(window, |(start, end)| {
+            (start.min(window.0), end.max(window.1))
+        })
+    }
+
+    /// Notes what is laid out now. `None` if nothing more needs loading;
+    /// otherwise the cache must be loaded again, and the stretch inside says
+    /// what to ask of the server first, if any.
+    pub fn take_moved(
+        &mut self,
+        window: (Timestamp, Timestamp),
+    ) -> Option<Option<(Timestamp, Timestamp)>> {
+        let span = self.visible_beyond(window);
+        if self.visible_days().is_some() && span != self.beyond {
+            self.beyond = span;
+            span?;
+            return Some(self.take_unfetched());
+        }
+        None
+    }
+
+    /// The stretch of whole months laid out but not asked of the server yet,
+    /// taken as asked.
+    fn take_unfetched(&mut self) -> Option<(Timestamp, Timestamp)> {
+        let (first, last) = self.visible_days()?;
+        let mut month = first.first_of_month();
+        let mut wanted = Vec::new();
+        while month <= last {
+            if self.fetched.insert(month) {
+                wanted.push(month);
+            }
+            month = month.checked_add(1.month()).ok()?;
+        }
+        self.span_of(*wanted.first()?, wanted.last()?.last_of_month())
     }
 
     /// The day `appointment` is listed under: the day it starts.
@@ -826,6 +881,47 @@ mod tests {
 
         assert_eq!(agenda.day(), date(2026, 11, 2));
         assert_eq!(selected(&agenda), "today 9");
+    }
+
+    /// The cached calendar on 2 November 2026 at 08:00.
+    fn window() -> (Timestamp, Timestamp) {
+        crate::core::calendar_window("2026-11-02T08:00:00Z".parse().unwrap())
+    }
+
+    fn start_of(day: &str) -> Timestamp {
+        format!("{day}T00:00:00Z").parse().unwrap()
+    }
+
+    #[test]
+    fn the_week_inside_the_cached_calendar_needs_nothing_more() {
+        let mut agenda = in_view('w');
+
+        assert_eq!(agenda.take_moved(window()), None);
+        assert_eq!(agenda.loaded_span(window()), window());
+    }
+
+    #[test]
+    fn moving_past_the_cached_calendar_asks_for_the_months_shown_once() {
+        let mut agenda = in_view('w');
+        for _ in 0..14 {
+            press(&mut agenda, KeyCode::PageDown);
+        }
+        assert_eq!(agenda.day(), date(2027, 2, 8));
+
+        assert_eq!(
+            agenda.take_moved(window()),
+            Some(Some((start_of("2027-02-01"), start_of("2027-03-01"))))
+        );
+        assert_eq!(agenda.take_moved(window()), None);
+        assert_eq!(
+            agenda.loaded_span(window()).1,
+            start_of("2027-02-15"),
+            "keeps what it shows loaded"
+        );
+
+        // The next week is in the same month, so only needs loading.
+        press(&mut agenda, KeyCode::PageDown);
+        assert_eq!(agenda.take_moved(window()), Some(None));
     }
 
     #[test]
