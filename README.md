@@ -514,9 +514,10 @@ and syncs it in the background, so it works offline too.
 
 | Keys | What they do |
 | --- | --- |
+| `a` `w` `m` | Show the agenda, the week or the month |
 | `j` `k` `↓` `↑` | Move between appointments |
 | `g` `G` `t` | Jump to the first, the last, or today's first |
-| `Enter` | Show the appointment in full beside the agenda, or hide it |
+| `Enter` | Show the appointment in full beside the calendar, or hide it |
 | `c` | Write a new appointment, on the selected day |
 | `e` | Change the selected appointment |
 | `d` | Delete it, after asking; anyone invited is told it is cancelled |
@@ -525,6 +526,27 @@ and syncs it in the background, so it works offline too.
 | `Esc` `q` | Back to the mail |
 
 ![The calendar's agenda with an appointment's details beside it](images/calendar.jpg)
+
+The week shows seven days side by side, Monday first. The month shows its weeks,
+with the selected day's appointments beside them. An appointment lasting several
+days shows on each of them. The calendar opens the way you last left it, even
+after you quit.
+
+In the week and the month you select a day, which may have no appointments, and
+these keys differ from the agenda:
+
+| Keys | Week | Month |
+| --- | --- | --- |
+| `h` `l` `←` `→` | Previous / next day | Previous / next day |
+| `j` `k` `↓` `↑` | Next / previous appointment of the day | Next / previous week |
+| `n` `p` | Next / previous appointment of the day | Next / previous appointment of the day |
+| `PgUp` `PgDn` | Previous / next week | Previous / next month |
+| `g` `G` | First / last day of the week | First / last day of the month |
+| `t` | Today | Today |
+
+The week and the month can go to any date. Beyond the agenda's stretch of a week
+ago to three months ahead, tuilook asks the server for the whole months shown and
+keeps them, so they need a connection only the first time.
 
 A new appointment runs from 9:00 to 10:00 unless you change it. Write the date
 as `2026-11-30` and times as `14:30`, in your computer's time zone. Press
