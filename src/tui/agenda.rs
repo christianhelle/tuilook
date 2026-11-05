@@ -295,10 +295,13 @@ impl Agenda {
     /// Moves about the week or the month, leaving the selection as it is at
     /// the ends of the calendar's dates.
     fn move_in_grid(&mut self, key: KeyEvent) {
+        let month = self.view == CalendarView::Month;
         let last_on_day = self.appointments_on(self.day).len().saturating_sub(1);
         match key.code {
             KeyCode::Char('h') | KeyCode::Left => self.step_days(-1),
             KeyCode::Char('l') | KeyCode::Right => self.step_days(1),
+            KeyCode::Char('j') | KeyCode::Down if month => self.step_days(7),
+            KeyCode::Char('k') | KeyCode::Up if month => self.step_days(-7),
             KeyCode::Char('j' | 'n') | KeyCode::Down => {
                 self.on_day = (self.on_day + 1).min(last_on_day);
             }
@@ -544,6 +547,17 @@ mod tests {
             agenda.visible_days(),
             Some((date(2026, 10, 26), date(2026, 11, 1)))
         );
+    }
+
+    #[test]
+    fn up_and_down_move_by_the_week_in_the_month() {
+        let mut agenda = in_view('m');
+
+        press(&mut agenda, KeyCode::Char('j'));
+        assert_eq!(agenda.day(), date(2026, 11, 9));
+        press(&mut agenda, KeyCode::Up);
+        press(&mut agenda, KeyCode::Up);
+        assert_eq!(agenda.day(), date(2026, 10, 26));
     }
 
     #[test]
