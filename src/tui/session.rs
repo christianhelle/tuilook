@@ -6,6 +6,7 @@ use crate::model::{FolderId, MessageId};
 use serde::{Deserialize, Serialize};
 
 use crate::tui::{
+    agenda::CalendarView,
     app::{AppState, Effect, Pane},
     groups::DateGroup,
     rows::{account_row, unread_row},
@@ -21,6 +22,8 @@ pub struct Snapshot {
     pub zoomed: bool,
     pub folders_hidden: bool,
     pub reader_below: bool,
+    /// How the calendar was last laid out.
+    pub calendar_view: CalendarView,
     /// Folders whose subfolders were shown.
     pub expanded: Vec<String>,
     /// Accounts, in either section, whose folders were hidden. They start
@@ -44,6 +47,7 @@ impl Snapshot {
             zoomed: app.zoomed,
             folders_hidden: app.folders_hidden,
             reader_below: app.reader_below,
+            calendar_view: app.calendar_view,
             expanded: app
                 .folder_pane
                 .expanded
@@ -89,6 +93,7 @@ impl AppState {
         self.zoomed = snapshot.zoomed;
         self.folders_hidden = snapshot.folders_hidden;
         self.reader_below = snapshot.reader_below;
+        self.calendar_view = snapshot.calendar_view;
         self.focus = match snapshot.focus {
             Pane::Folders if snapshot.folders_hidden => Pane::Messages,
             focus => focus,
@@ -159,6 +164,7 @@ mod tests {
             zoomed: true,
             folders_hidden: true,
             reader_below: true,
+            calendar_view: CalendarView::Month,
             expanded: vec!["a".to_owned()],
             collapsed: Vec::new(),
             favorites: vec!["b".to_owned()],
@@ -183,6 +189,14 @@ mod tests {
             ))
         );
         assert_eq!(Snapshot::of(&app), snapshot);
+    }
+
+    #[test]
+    fn a_session_saved_before_the_calendar_had_views_opens_the_agenda() {
+        let snapshot: Snapshot = serde_json::from_str(r#"{ "zoomed": true }"#).unwrap();
+
+        assert!(snapshot.zoomed);
+        assert_eq!(snapshot.calendar_view, CalendarView::Agenda);
     }
 
     #[test]
