@@ -198,6 +198,29 @@ impl Agenda {
         self.view = view;
     }
 
+    /// The first and the last day laid out, unless in the agenda.
+    pub fn visible_days(&self) -> Option<(Date, Date)> {
+        match self.view {
+            CalendarView::Agenda => None,
+            CalendarView::Week => {
+                let monday = monday_of(self.day);
+                Some((monday, add_days(monday, 6)))
+            }
+            CalendarView::Month => Some((
+                monday_of(self.day.first_of_month()),
+                add_days(monday_of(self.day.last_of_month()), 6),
+            )),
+        }
+    }
+
+    /// Every day laid out, in order.
+    pub fn visible_dates(&self) -> Vec<Date> {
+        let Some((first, last)) = self.visible_days() else {
+            return vec![];
+        };
+        first.series(1.day()).take_while(|d| *d <= last).collect()
+    }
+
     /// From the start of `first` to the end of `last`, if those are times
     /// that exist.
     fn span_of(&self, first: Date, last: Date) -> Option<(Timestamp, Timestamp)> {
@@ -310,6 +333,17 @@ impl Agenda {
             _ => self.selected,
         };
     }
+}
+
+/// The Monday of `day`'s week, or `day` at the very start of the dates.
+fn monday_of(day: Date) -> Date {
+    let back = i64::from(day.weekday().to_monday_zero_offset());
+    day.checked_sub(back.days()).unwrap_or(day)
+}
+
+/// `days` after `day`, or `day` at the very end of the dates.
+fn add_days(day: Date, days: i64) -> Date {
+    day.checked_add(days.days()).unwrap_or(day)
 }
 
 #[cfg(test)]
@@ -498,6 +532,18 @@ mod tests {
             end: end.parse().unwrap(),
             ..appointment(id, start)
         }
+    }
+
+    #[test]
+    fn a_sunday_is_the_last_day_of_its_week() {
+        let mut agenda = in_view('w');
+        press(&mut agenda, KeyCode::Char('h'));
+
+        assert_eq!(agenda.day(), date(2026, 11, 1));
+        assert_eq!(
+            agenda.visible_days(),
+            Some((date(2026, 10, 26), date(2026, 11, 1)))
+        );
     }
 
     #[test]
