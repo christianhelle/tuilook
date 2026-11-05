@@ -17,4 +17,4 @@ expression: render_tall(&app)
 "┃      │Ctrl-C                   Quit                                             │      ┃"
 "┃      │                         Press any key to close                           │      ┃"
 "┗━━━━━━└──────────────────────────────────────────────────────────────────────────┘━━━━━━┛"
-" c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help      "
+" a w m view · c new · e change · d delete · Enter details · t today · Esc back · ? help   "

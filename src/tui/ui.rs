@@ -823,7 +823,7 @@ fn draw_agenda(frame: &mut Frame, agenda: &Agenda, accounts: usize, area: Rect) 
         frame.render_widget(
             Paragraph::new(
                 "Nothing in the calendar from a week ago to three months ahead. \
-                 Press c to write an appointment.",
+                 Press c to write an appointment, or w or m to see the week or the month.",
             )
             .style(Style::new().fg(Color::DarkGray))
             .wrap(Wrap { trim: true }),

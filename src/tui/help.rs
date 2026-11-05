@@ -3,6 +3,7 @@
 //! hold the two together.
 
 use crate::tui::{
+    agenda::CalendarView,
     app::{AppState, Pane},
     appointment_form::Field as AppointmentField,
     compose::Field,
@@ -39,9 +40,19 @@ pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
         Screen::Agenda { form: Some(_), .. } => {
             " Ctrl-S save · Tab next field · Esc close · ? help"
         }
-        Screen::Agenda { form: None, .. } => {
-            " c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help"
-        }
+        Screen::Agenda {
+            agenda, form: None, ..
+        } => match agenda.view() {
+            CalendarView::Agenda => {
+                " a w m view · c new · e change · d delete · Enter details · t today · Esc back · ? help"
+            }
+            CalendarView::Week => {
+                " h l day · j k item · PgUp PgDn week · a m view · c new · e change · d delete · ? help"
+            }
+            CalendarView::Month => {
+                " h l day · j k week · n p item · PgUp PgDn month · a w view · c new · e change · ? help"
+            }
+        },
         Screen::Panes if picking => " y copy · Esc cancel",
         // First, as a narrow status bar cuts off the end.
         Screen::Panes if app.focus == Pane::Reader && app.invite.is_some() => {

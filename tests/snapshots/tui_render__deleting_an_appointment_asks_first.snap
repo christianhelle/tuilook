@@ -13,4 +13,4 @@ expression: render(&app)
 "┃                  └──────────────────────────────────────────────────┘                  ┃"
 "┃                                                                                        ┃"
 "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-" c new · e change · d delete · Enter details · t today · F5 sync · Esc back · ? help      "
+" a w m view · c new · e change · d delete · Enter details · t today · Esc back · ? help   "
