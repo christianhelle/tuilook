@@ -899,7 +899,7 @@ fn when(agenda: &Agenda, appointment: &Appointment) -> String {
     format!("{}–{end}", start.strftime("%H:%M"))
 }
 
-fn draw_appointment_details(
+pub(crate) fn draw_appointment_details(
     frame: &mut Frame,
     agenda: &Agenda,
     appointment: &Appointment,

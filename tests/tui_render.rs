@@ -1139,6 +1139,14 @@ fn the_week_lays_out_its_days_side_by_side() {
 }
 
 #[test]
+fn enter_shows_the_appointment_in_full_beside_the_week() {
+    let mut app = in_agenda(week());
+    press(&mut app, "w⏎");
+
+    insta::assert_snapshot!(render(&app));
+}
+
+#[test]
 fn with_several_accounts_the_agenda_says_which_and_how_to_switch() {
     let mut app = in_agenda(week());
     app.accounts.push("me@work.example".to_owned());

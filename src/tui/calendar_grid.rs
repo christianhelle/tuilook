@@ -12,7 +12,7 @@ use ratatui::{
 use crate::model::Appointment;
 use crate::tui::{
     agenda::{Agenda, CalendarView},
-    ui::shown,
+    ui::{draw_appointment_details, shown},
 };
 
 fn dim() -> Style {
@@ -47,11 +47,20 @@ fn day_style(agenda: &Agenda, day: Date) -> Style {
     }
 }
 
-/// Seven days side by side.
+/// Seven days side by side, with the selected appointment in full beside
+/// them while asked for.
 pub(crate) fn draw_week(frame: &mut Frame, agenda: &Agenda, area: Rect) {
-    let columns: [Rect; 7] = Layout::horizontal([Constraint::Ratio(1, 7); 7]).areas(area);
+    let [grid, details] = if agenda.details {
+        Layout::horizontal([Constraint::Percentage(65), Constraint::Percentage(35)]).areas(area)
+    } else {
+        [area, Rect::default()]
+    };
+    let columns: [Rect; 7] = Layout::horizontal([Constraint::Ratio(1, 7); 7]).areas(grid);
     for (day, column) in agenda.visible_dates().into_iter().zip(columns) {
         draw_week_day(frame, agenda, day, column);
+    }
+    if let Some(appointment) = agenda.selected().filter(|_| agenda.details) {
+        draw_appointment_details(frame, agenda, appointment, details);
     }
 }
 
