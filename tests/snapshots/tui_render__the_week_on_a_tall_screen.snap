@@ -1,0 +1,20 @@
+---
+source: tests/tui_render.rs
+expression: render_tall(&app)
+---
+"┏ Calendar — me@outlook.com · Week of 2 Nov 2026 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃Mon 2•       Tue 3       Wed 4        Thu 5       Fri 6        Sat 7       Sun 8        ┃"
+"┃──────────── ─────────── ──────────── ─────────── ──────────── ─────────── ──────────── ┃"
+"┃All day      14:00                                                                      ┃"
+"┃Holiday      Design revi                                                                ┃"
+"┃09:00                                                                                   ┃"
+"┃Standup                                                                                 ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┃                                                                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+" h l day · j k item · PgUp PgDn week · a m view · c new · e change · d delete · ? help    "

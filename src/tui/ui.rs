@@ -10,10 +10,11 @@ use ratatui::{
 };
 
 use crate::tui::{
-    agenda::{Agenda, Row as AgendaRow},
+    agenda::{Agenda, CalendarView, Row as AgendaRow},
     app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
     appointment_form::{AppointmentForm, Field as AppointmentField},
     attachments::{AttachmentPicker, human_size},
+    calendar_grid,
     compose::{Compose, Field},
     dialog::Dialog,
     editor::{Editor, Pos},
@@ -799,13 +800,14 @@ fn draw_attached(frame: &mut Frame, compose: &Compose, row: Rect) {
 /// selected appointment in full beside them while asked for. With several
 /// `accounts`, the title says which it is and how to show another's.
 fn draw_agenda(frame: &mut Frame, agenda: &Agenda, accounts: usize, area: Rect) {
+    let period = calendar_grid::period(agenda).map_or(String::new(), |p| format!(" · {p}"));
     let title = match agenda.address.as_str() {
-        "" => " Calendar ".to_owned(),
+        "" => format!(" Calendar{period} "),
         address if accounts > 1 => format!(
-            " Calendar — {address} ({} of {accounts}) · Tab next account ",
+            " Calendar — {address} ({} of {accounts}){period} · Tab next account ",
             agenda.account + 1
         ),
-        address => format!(" Calendar — {address} "),
+        address => format!(" Calendar — {address}{period} "),
     };
     frame.render_widget(
         Block::bordered()
@@ -814,6 +816,10 @@ fn draw_agenda(frame: &mut Frame, agenda: &Agenda, accounts: usize, area: Rect) 
         area,
     );
     let inner = Block::bordered().inner(area);
+    match agenda.view() {
+        CalendarView::Week => return calendar_grid::draw_week(frame, agenda, inner),
+        CalendarView::Agenda | CalendarView::Month => {}
+    }
     let [list, details] = if agenda.details {
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(inner)
     } else {

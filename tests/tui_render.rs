@@ -1130,6 +1130,15 @@ fn question_mark_in_the_agenda_shows_its_keys() {
 }
 
 #[test]
+fn the_week_lays_out_its_days_side_by_side() {
+    let mut app = in_agenda(week());
+    press(&mut app, "w");
+
+    insta::assert_snapshot!(render(&app));
+    insta::assert_snapshot!("the_week_on_a_tall_screen", render_tall(&app));
+}
+
+#[test]
 fn with_several_accounts_the_agenda_says_which_and_how_to_switch() {
     let mut app = in_agenda(week());
     app.accounts.push("me@work.example".to_owned());
