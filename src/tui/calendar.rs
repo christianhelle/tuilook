@@ -48,7 +48,9 @@ impl AppState {
     pub(crate) fn agenda_key(&mut self, key: KeyEvent) -> Option<Effect> {
         let agenda = self.screen.agenda_mut()?;
         let account = agenda.account;
-        match agenda.key(key) {
+        let request = agenda.key(key);
+        self.calendar_view = agenda.view();
+        match request {
             agenda::Request::None => {}
             agenda::Request::Close => self.screen.close_agenda(),
             agenda::Request::Help => self.dialog = Some(Dialog::Help),
@@ -165,7 +167,7 @@ mod tests {
     use ratatui::crossterm::event::{KeyCode, KeyModifiers};
 
     use crate::model::{Action, AppointmentId};
-    use crate::tui::{app::Confirm, appointment_form::Field, keymap::Keymap};
+    use crate::tui::{agenda::CalendarView, app::Confirm, appointment_form::Field, keymap::Keymap};
 
     use super::*;
 
@@ -391,6 +393,18 @@ mod tests {
         app.calendar_synced(0);
 
         assert_eq!(app.status, Some(Status::Info("Up to date".to_owned())));
+    }
+
+    #[test]
+    fn the_calendar_opens_in_the_last_view_used() {
+        let mut app = in_agenda();
+        press(&mut app, KeyCode::Char('m'));
+        assert_eq!(app.calendar_view, CalendarView::Month);
+
+        press(&mut app, KeyCode::Esc);
+        app.update(Action::Calendar);
+
+        assert_eq!(app.screen.agenda().unwrap().view(), CalendarView::Month);
     }
 
     #[test]
