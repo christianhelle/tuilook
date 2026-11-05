@@ -1,6 +1,6 @@
 //! The calendar, listed day by day from a week ago to three months ahead.
 
-use jiff::{civil::Date, tz::TimeZone};
+use jiff::{Timestamp, civil::Date, tz::TimeZone};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
 
@@ -113,6 +113,31 @@ impl Agenda {
 
     pub fn selected(&self) -> Option<&Appointment> {
         self.appointments.get(self.selected)
+    }
+
+    /// The appointments on `day`, including any lasting from an earlier day.
+    /// One ending at the very start of `day` is not on it, but one that starts
+    /// and ends then is.
+    pub fn appointments_on(&self, day: Date) -> Vec<&Appointment> {
+        let Some((start, end)) = self.span_of(day, day) else {
+            return vec![];
+        };
+        self.appointments
+            .iter()
+            .filter(|a| a.start < end && (a.end > start || a.start == start))
+            .collect()
+    }
+
+    /// From the start of `first` to the end of `last`, if those are times
+    /// that exist.
+    fn span_of(&self, first: Date, last: Date) -> Option<(Timestamp, Timestamp)> {
+        let start = first.to_zoned(self.time_zone.clone()).ok()?;
+        let end = last
+            .tomorrow()
+            .ok()?
+            .to_zoned(self.time_zone.clone())
+            .ok()?;
+        Some((start.timestamp(), end.timestamp()))
     }
 
     /// The day `appointment` is listed under: the day it starts.
@@ -352,6 +377,80 @@ mod tests {
         assert_eq!(press(&mut agenda, KeyCode::F(5)), Request::Refresh);
         assert_eq!(press(&mut agenda, KeyCode::Char('?')), Request::Help);
         assert_eq!(press(&mut agenda, KeyCode::Char('q')), Request::Close);
+    }
+
+    fn ids(appointments: &[&Appointment]) -> Vec<String> {
+        appointments.iter().map(|a| a.id.0.clone()).collect()
+    }
+
+    fn lasting(id: &str, start: &str, end: &str) -> Appointment {
+        Appointment {
+            end: end.parse().unwrap(),
+            ..appointment(id, start)
+        }
+    }
+
+    #[test]
+    fn an_appointment_is_on_every_day_it_touches() {
+        let mut agenda = agenda();
+        agenda.set_appointments(vec![lasting(
+            "trip",
+            "2026-11-02T22:00:00Z",
+            "2026-11-04T09:00:00Z",
+        )]);
+
+        for day in [2, 3, 4] {
+            assert_eq!(
+                ids(&agenda.appointments_on(date(2026, 11, day))),
+                ["trip"],
+                "on the {day}th"
+            );
+        }
+        assert!(agenda.appointments_on(date(2026, 11, 5)).is_empty());
+    }
+
+    #[test]
+    fn a_whole_day_ending_at_midnight_is_not_on_the_next_day() {
+        let mut agenda = agenda();
+        agenda.set_appointments(vec![Appointment {
+            all_day: true,
+            ..lasting("holiday", "2026-11-02T00:00:00Z", "2026-11-03T00:00:00Z")
+        }]);
+
+        assert_eq!(ids(&agenda.appointments_on(date(2026, 11, 2))), ["holiday"]);
+        assert!(agenda.appointments_on(date(2026, 11, 3)).is_empty());
+    }
+
+    #[test]
+    fn days_follow_the_time_zone_not_utc() {
+        let zone = TimeZone::fixed(jiff::tz::offset(2));
+        let mut agenda = Agenda::new(
+            0,
+            String::new(),
+            zone,
+            date(2026, 11, 2),
+            CalendarView::Week,
+        );
+        agenda.set_appointments(vec![appointment("late", "2026-11-02T23:00:00Z")]);
+
+        assert!(agenda.appointments_on(date(2026, 11, 2)).is_empty());
+        assert_eq!(ids(&agenda.appointments_on(date(2026, 11, 3))), ["late"]);
+    }
+
+    #[test]
+    fn an_appointment_of_no_length_at_midnight_is_on_that_day() {
+        let mut agenda = agenda();
+        agenda.set_appointments(vec![lasting(
+            "reminder",
+            "2026-11-03T00:00:00Z",
+            "2026-11-03T00:00:00Z",
+        )]);
+
+        assert!(agenda.appointments_on(date(2026, 11, 2)).is_empty());
+        assert_eq!(
+            ids(&agenda.appointments_on(date(2026, 11, 3))),
+            ["reminder"]
+        );
     }
 
     #[test]
