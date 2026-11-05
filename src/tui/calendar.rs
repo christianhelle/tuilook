@@ -34,6 +34,7 @@ impl AppState {
                 address,
                 now.time_zone().clone(),
                 now.date(),
+                self.calendar_view,
             )),
             form: None,
         };

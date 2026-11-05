@@ -16,6 +16,7 @@ use ratatui::{
 };
 
 use crate::tui::{
+    agenda::CalendarView,
     attachments::{self, human_size},
     compose::{Compose, Request},
     dialog::Dialog,
@@ -238,6 +239,8 @@ pub struct AppState {
     pub folders_hidden: bool,
     /// Whether the reading pane sits below the message list, not right of it.
     pub reader_below: bool,
+    /// How the calendar was last laid out, to open it the same way.
+    pub calendar_view: CalendarView,
     /// Messages picked for acting on together, such as deleting.
     pub marked: BTreeSet<MessageId>,
     /// The dialog over the panes, which takes every key.

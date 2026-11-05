@@ -2,8 +2,21 @@
 
 use jiff::{civil::Date, tz::TimeZone};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use serde::{Deserialize, Serialize};
 
 use crate::model::Appointment;
+
+/// How the calendar is laid out.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CalendarView {
+    /// Day by day, listing only the days with appointments.
+    #[default]
+    Agenda,
+    /// The seven days of a week, Monday first, side by side.
+    Week,
+    /// The weeks of a month.
+    Month,
+}
 
 /// What a key asks of the app, beyond moving about the agenda.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,12 +59,19 @@ pub struct Agenda {
     pub details: bool,
     time_zone: TimeZone,
     today: Date,
+    view: CalendarView,
 }
 
 impl Agenda {
-    /// An empty agenda of `account`, at `address`, whose days are those of
-    /// `time_zone`, starting from `today`.
-    pub fn new(account: usize, address: String, time_zone: TimeZone, today: Date) -> Self {
+    /// An empty calendar of `account`, at `address`, whose days are those of
+    /// `time_zone`, laid out as `view` and starting from `today`.
+    pub fn new(
+        account: usize,
+        address: String,
+        time_zone: TimeZone,
+        today: Date,
+        view: CalendarView,
+    ) -> Self {
         Self {
             account,
             address,
@@ -60,7 +80,12 @@ impl Agenda {
             details: false,
             time_zone,
             today,
+            view,
         }
+    }
+
+    pub fn view(&self) -> CalendarView {
+        self.view
     }
 
     /// Shows `appointments`, soonest first. The selection stays on the same
@@ -191,6 +216,7 @@ mod tests {
             "me@example.com".to_owned(),
             TimeZone::UTC,
             date(2026, 11, 2),
+            CalendarView::Agenda,
         );
         agenda.set_appointments(vec![
             appointment("yesterday", "2026-11-01T09:00:00Z"),
