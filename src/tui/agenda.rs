@@ -308,6 +308,10 @@ impl Agenda {
             KeyCode::Char('k' | 'p') | KeyCode::Up => {
                 self.on_day = self.on_day.saturating_sub(1);
             }
+            KeyCode::PageDown if month => self.step_months(1),
+            KeyCode::PageUp if month => self.step_months(-1),
+            KeyCode::PageDown => self.step_days(7),
+            KeyCode::PageUp => self.step_days(-7),
             _ => {}
         }
     }
@@ -320,6 +324,13 @@ impl Agenda {
 
     fn step_days(&mut self, days: i64) {
         if let Ok(day) = self.day.checked_add(days.days()) {
+            self.select_day(day);
+        }
+    }
+
+    /// To the same day of another month, or the last if it has too few.
+    fn step_months(&mut self, months: i64) {
+        if let Ok(day) = self.day.checked_add(months.months()) {
             self.select_day(day);
         }
     }
@@ -538,6 +549,26 @@ mod tests {
     }
 
     #[test]
+    fn a_week_starts_on_a_monday_and_runs_over_the_end_of_a_year() {
+        let mut agenda = agenda();
+        press(&mut agenda, KeyCode::Char('w'));
+        assert_eq!(
+            agenda.visible_days(),
+            Some((date(2026, 11, 2), date(2026, 11, 8)))
+        );
+
+        for _ in 0..8 {
+            press(&mut agenda, KeyCode::PageDown);
+        }
+
+        assert_eq!(agenda.day(), date(2026, 12, 28));
+        assert_eq!(
+            agenda.visible_days(),
+            Some((date(2026, 12, 28), date(2027, 1, 3)))
+        );
+    }
+
+    #[test]
     fn a_sunday_is_the_last_day_of_its_week() {
         let mut agenda = in_view('w');
         press(&mut agenda, KeyCode::Char('h'));
@@ -546,6 +577,25 @@ mod tests {
         assert_eq!(
             agenda.visible_days(),
             Some((date(2026, 10, 26), date(2026, 11, 1)))
+        );
+    }
+
+    #[test]
+    fn a_month_lays_out_the_whole_weeks_it_touches() {
+        let mut agenda = in_view('m');
+        assert_eq!(
+            agenda.visible_days(),
+            Some((date(2026, 10, 26), date(2026, 12, 6)))
+        );
+
+        // February 2027 starts on a Monday and ends on a Sunday: four weeks.
+        for _ in 0..3 {
+            press(&mut agenda, KeyCode::PageDown);
+        }
+
+        assert_eq!(
+            agenda.visible_days(),
+            Some((date(2027, 2, 1), date(2027, 2, 28)))
         );
     }
 
