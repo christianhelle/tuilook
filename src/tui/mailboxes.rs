@@ -241,9 +241,19 @@ impl Mailboxes {
                 }
                 Effect::LoadAgenda { account, sync } => {
                     let window = calendar_window(jiff::Timestamp::now());
+                    // Opened laid out beyond the calendar kept around today.
+                    let fetch = app
+                        .screen
+                        .agenda_mut()
+                        .filter(|_| sync)
+                        .and_then(|agenda| agenda.take_moved(window))
+                        .flatten();
                     load_calendar(app, store, account, window)?;
                     if sync {
                         commands.send(Command::SyncCalendar)?;
+                    }
+                    if let Some((from, to)) = fetch {
+                        commands.send(Command::SyncCalendarBetween { from, to })?;
                     }
                     None
                 }
