@@ -305,6 +305,17 @@ impl Agenda {
         }
     }
 
+    /// Forgets what was asked of the server, for the calendar has changed:
+    /// the stretch inside should be asked for again, if any is laid out.
+    pub fn take_changed(
+        &mut self,
+        window: (Timestamp, Timestamp),
+    ) -> Option<(Timestamp, Timestamp)> {
+        self.fetched.clear();
+        self.visible_beyond(window)?;
+        self.take_unfetched()
+    }
+
     /// The day `appointment` is listed under: the day it starts.
     pub fn day_of(&self, appointment: &Appointment) -> Date {
         appointment.start.to_zoned(self.time_zone.clone()).date()

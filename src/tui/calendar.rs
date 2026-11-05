@@ -122,10 +122,20 @@ impl AppState {
         None
     }
 
-    /// Closes the appointment core saved, back to the agenda.
-    pub fn appointment_saved(&mut self) {
+    /// Closes the appointment core saved, back to the calendar. Core syncs
+    /// the calendar around today, so anything laid out beyond it is asked for
+    /// again.
+    pub fn appointment_saved(&mut self) -> Option<Effect> {
         self.screen.close_appointment();
         self.show_info("Saved");
+        let window = calendar_window(self.now().timestamp());
+        let agenda = self.screen.agenda_mut()?;
+        let account = agenda.account;
+        let fetch = agenda.take_changed(window)?;
+        Some(Effect::ShowCalendarRange {
+            account,
+            fetch: Some(fetch),
+        })
     }
 
     /// Lets the appointment being saved be saved again: core could not.
@@ -467,6 +477,32 @@ mod tests {
             app.status,
             Some(Status::Busy("Syncing the calendar…".to_owned()))
         );
+    }
+
+    #[test]
+    fn saving_an_appointment_beyond_the_cached_calendar_asks_for_it_again() {
+        let mut app = in_agenda();
+        weeks_on(&mut app, 14);
+        press(&mut app, KeyCode::Char('c'));
+        typing(&mut app, "Far off");
+        ctrl_s(&mut app);
+
+        assert_eq!(
+            app.appointment_saved(),
+            Some(Effect::ShowCalendarRange {
+                account: 0,
+                fetch: Some(range("2027-02-01T00:00:00Z", "2027-03-01T00:00:00Z")),
+            })
+        );
+    }
+
+    #[test]
+    fn saving_with_nothing_beyond_the_cached_calendar_asks_for_nothing_more() {
+        let mut app = in_agenda();
+        press(&mut app, KeyCode::Char('c'));
+        ctrl_s(&mut app);
+
+        assert_eq!(app.appointment_saved(), None);
     }
 
     #[test]

@@ -140,10 +140,7 @@ impl Mailboxes {
                 None
             }
             Event::CalendarSynced => app.calendar_synced(account),
-            Event::AppointmentSaved => {
-                app.appointment_saved();
-                None
-            }
+            Event::AppointmentSaved => app.appointment_saved(),
             Event::AppointmentDeleted(_) => app.appointment_deleted(account),
             Event::AppointmentNotSaved(why) => {
                 app.appointment_not_saved();
