@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 
 use crate::core::{
     attachments::save_attachments,
-    calendar::sync_calendar,
+    calendar::{sync_calendar, sync_calendar_between},
     changes::{Change, Removal, change_messages, move_messages, remove_messages},
     load_body, load_invite, sync_folders, sync_messages,
 };
@@ -74,6 +74,11 @@ pub enum Command {
     Send(Draft),
     /// Refresh the appointments around today.
     SyncCalendar,
+    /// Refresh the appointments from `from` to `to`, wherever that is.
+    SyncCalendarBetween {
+        from: Timestamp,
+        to: Timestamp,
+    },
     CreateAppointment(AppointmentDraft),
     /// Change an appointment to be as `draft` has it.
     UpdateAppointment {
@@ -169,6 +174,13 @@ pub async fn run_engine(
             Command::Send(draft) => send(&backend, &mut store, &draft, &events).await,
             Command::SyncCalendar => {
                 let event = match sync_calendar(&backend, &mut store).await {
+                    Ok(()) => Event::CalendarSynced,
+                    Err(e) => Event::Error(format!("could not sync the calendar: {e}")),
+                };
+                events.send(event).await
+            }
+            Command::SyncCalendarBetween { from, to } => {
+                let event = match sync_calendar_between(&backend, &mut store, from, to).await {
                     Ok(()) => Event::CalendarSynced,
                     Err(e) => Event::Error(format!("could not sync the calendar: {e}")),
                 };

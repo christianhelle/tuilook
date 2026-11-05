@@ -26,6 +26,17 @@ pub(crate) async fn sync_calendar(
     store: &mut Store,
 ) -> Result<(), String> {
     let (from, to) = calendar_window(Timestamp::now());
+    sync_calendar_between(backend, store, from, to).await
+}
+
+/// Caches the server's appointments from `from` to `to`, in place of those
+/// cached there before.
+pub(crate) async fn sync_calendar_between(
+    backend: &impl MailBackend,
+    store: &mut Store,
+    from: Timestamp,
+    to: Timestamp,
+) -> Result<(), String> {
     let appointments = backend
         .appointments(from, to)
         .await

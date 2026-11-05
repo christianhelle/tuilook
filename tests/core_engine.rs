@@ -709,6 +709,38 @@ fn cached_appointments(path: &std::path::Path) -> Vec<Appointment> {
 }
 
 #[tokio::test]
+async fn syncing_a_stretch_of_the_calendar_leaves_the_rest_of_the_cache_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    let tomorrow = appointment("a1", now() + SignedDuration::from_hours(24));
+    let start = now() + SignedDuration::from_hours(400 * 24);
+    let next_year = appointment("a2", start);
+    let appointments = Arc::new(Mutex::new(vec![tomorrow.clone(), next_year.clone()]));
+    let backend = FakeBackend {
+        appointments: appointments.clone(),
+        ..Default::default()
+    };
+    let (commands, mut events) = start_on(backend, &path);
+    commands.send(Command::SyncCalendar).unwrap();
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+    // Gone from the server, so the second sync must not touch the cached one.
+    appointments.lock().unwrap().retain(|a| a.id != tomorrow.id);
+
+    let (from, to) = (
+        start - SignedDuration::from_hours(24),
+        start + SignedDuration::from_hours(24),
+    );
+    commands
+        .send(Command::SyncCalendarBetween { from, to })
+        .unwrap();
+
+    assert_eq!(events.recv().await, Some(Event::CalendarSynced));
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.appointments_between(from, to).unwrap(), [next_year]);
+    assert_eq!(cached_appointments(&path), [tomorrow]);
+}
+
+#[tokio::test]
 async fn syncing_the_calendar_caches_the_appointments_around_today() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("cache.db");
