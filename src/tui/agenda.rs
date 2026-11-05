@@ -312,6 +312,9 @@ impl Agenda {
             KeyCode::PageUp if month => self.step_months(-1),
             KeyCode::PageDown => self.step_days(7),
             KeyCode::PageUp => self.step_days(-7),
+            KeyCode::Char('g') | KeyCode::Home => self.go_to_end(false),
+            KeyCode::Char('G') | KeyCode::End => self.go_to_end(true),
+            KeyCode::Char('t') => self.select_day(self.today),
             _ => {}
         }
     }
@@ -333,6 +336,17 @@ impl Agenda {
         if let Ok(day) = self.day.checked_add(months.months()) {
             self.select_day(day);
         }
+    }
+
+    /// To the first or last day of the week or month.
+    fn go_to_end(&mut self, last: bool) {
+        let day = match (self.view, last) {
+            (CalendarView::Month, false) => self.day.first_of_month(),
+            (CalendarView::Month, true) => self.day.last_of_month(),
+            (_, false) => monday_of(self.day),
+            (_, true) => add_days(monday_of(self.day), 6),
+        };
+        self.select_day(day);
     }
 
     /// Moves the selection, or leaves it at either end.
@@ -600,6 +614,21 @@ mod tests {
     }
 
     #[test]
+    fn the_next_month_from_the_31st_is_its_last_day() {
+        let mut agenda = in_view('m');
+        // To the last day of November, the first of December, the 31st.
+        press(&mut agenda, KeyCode::Char('G'));
+        press(&mut agenda, KeyCode::Char('l'));
+        press(&mut agenda, KeyCode::Char('G'));
+        assert_eq!(agenda.day(), date(2026, 12, 31));
+
+        press(&mut agenda, KeyCode::PageDown);
+        press(&mut agenda, KeyCode::PageDown);
+
+        assert_eq!(agenda.day(), date(2027, 2, 28));
+    }
+
+    #[test]
     fn up_and_down_move_by_the_week_in_the_month() {
         let mut agenda = in_view('m');
 
@@ -631,6 +660,33 @@ mod tests {
         assert_eq!(selected(&agenda), "today 14");
         press(&mut agenda, KeyCode::Char('p'));
         assert_eq!(selected(&agenda), "today 9");
+    }
+
+    #[test]
+    fn another_day_selects_its_first_appointment_and_t_goes_back_to_today() {
+        let mut agenda = in_view('w');
+        press(&mut agenda, KeyCode::Char('n'));
+
+        press(&mut agenda, KeyCode::Right);
+        assert_eq!(selected(&agenda), "tomorrow");
+        press(&mut agenda, KeyCode::Char('t'));
+        assert_eq!(agenda.day(), date(2026, 11, 2));
+        assert_eq!(selected(&agenda), "today 9");
+    }
+
+    #[test]
+    fn g_and_shift_g_go_to_the_ends_of_the_week_or_month() {
+        let mut agenda = in_view('w');
+        press(&mut agenda, KeyCode::Char('G'));
+        assert_eq!(agenda.day(), date(2026, 11, 8));
+        press(&mut agenda, KeyCode::Char('g'));
+        assert_eq!(agenda.day(), date(2026, 11, 2));
+
+        let mut agenda = in_view('m');
+        press(&mut agenda, KeyCode::End);
+        assert_eq!(agenda.day(), date(2026, 11, 30));
+        press(&mut agenda, KeyCode::Home);
+        assert_eq!(agenda.day(), date(2026, 11, 1));
     }
 
     #[test]
@@ -694,6 +750,18 @@ mod tests {
             ids(&agenda.appointments_on(date(2026, 11, 3))),
             ["reminder"]
         );
+    }
+
+    #[test]
+    fn an_empty_day_has_nothing_to_change_or_delete_but_can_have_a_new_one() {
+        let mut agenda = in_view('w');
+        press(&mut agenda, KeyCode::Char('G'));
+
+        assert!(agenda.selected().is_none());
+        assert_eq!(press(&mut agenda, KeyCode::Char('e')), Request::None);
+        assert_eq!(press(&mut agenda, KeyCode::Char('d')), Request::None);
+        assert_eq!(press(&mut agenda, KeyCode::Char('c')), Request::New);
+        assert_eq!(agenda.day_for_new(), date(2026, 11, 8));
     }
 
     #[test]

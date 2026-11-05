@@ -408,6 +408,17 @@ mod tests {
     }
 
     #[test]
+    fn c_in_the_week_writes_on_the_selected_day_even_with_nothing_on_it() {
+        let mut app = in_agenda();
+        press(&mut app, KeyCode::Char('w'));
+        press(&mut app, KeyCode::Char('G'));
+
+        press(&mut app, KeyCode::Char('c'));
+
+        assert_eq!(app.screen.appointment().unwrap().date.text(), "2026-11-08");
+    }
+
+    #[test]
     fn a_deleted_appointment_shows_the_agenda_again() {
         let mut app = in_agenda();
 
