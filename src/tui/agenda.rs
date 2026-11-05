@@ -6,6 +6,7 @@ use jiff::{Timestamp, ToSpan, civil::Date, tz::TimeZone};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
 
+use crate::core::Command;
 use crate::model::Appointment;
 
 /// How the calendar is laid out.
@@ -286,6 +287,22 @@ impl Agenda {
             month = month.checked_add(1.month()).ok()?;
         }
         self.span_of(*wanted.first()?, wanted.last()?.last_of_month())
+    }
+
+    /// What F5 asks of the server: the calendar around today, and whatever
+    /// is laid out beyond it.
+    pub fn refresh(&mut self, window: (Timestamp, Timestamp)) -> Command {
+        self.fetched.clear();
+        if self.visible_beyond(window).is_none() {
+            return Command::SyncCalendar;
+        }
+        match self.take_unfetched() {
+            Some((from, to)) => Command::SyncCalendarBetween {
+                from: from.min(window.0),
+                to: to.max(window.1),
+            },
+            None => Command::SyncCalendar,
+        }
     }
 
     /// The day `appointment` is listed under: the day it starts.
@@ -922,6 +939,32 @@ mod tests {
         // The next week is in the same month, so only needs loading.
         press(&mut agenda, KeyCode::PageDown);
         assert_eq!(agenda.take_moved(window()), Some(None));
+    }
+
+    #[test]
+    fn f5_asks_for_the_calendar_around_today_with_nothing_shown_beyond_it() {
+        let mut agenda = agenda();
+        assert_eq!(agenda.refresh(window()), Command::SyncCalendar);
+
+        let mut agenda = in_view('w');
+        assert_eq!(agenda.refresh(window()), Command::SyncCalendar);
+    }
+
+    #[test]
+    fn f5_asks_again_for_what_is_shown_beyond_the_cached_calendar() {
+        let mut agenda = in_view('w');
+        for _ in 0..14 {
+            press(&mut agenda, KeyCode::PageDown);
+        }
+        agenda.take_moved(window());
+
+        assert_eq!(
+            agenda.refresh(window()),
+            Command::SyncCalendarBetween {
+                from: window().0,
+                to: start_of("2027-03-01"),
+            }
+        );
     }
 
     #[test]

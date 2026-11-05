@@ -65,8 +65,9 @@ impl AppState {
                 return self.switch_calendar(account, back);
             }
             agenda::Request::Refresh => {
+                let command = agenda.refresh(window);
                 self.show_busy(SYNCING);
-                return Some(Effect::core(account, Command::SyncCalendar));
+                return Some(Effect::core(account, command));
             }
             agenda::Request::New => {
                 let form = AppointmentForm::new(agenda.day_for_new(), agenda.time_zone().clone());
@@ -444,6 +445,28 @@ mod tests {
 
         assert_eq!(press(&mut app, KeyCode::Char('l')), None);
         assert_eq!(press(&mut app, KeyCode::Char('j')), None);
+    }
+
+    #[test]
+    fn f5_beyond_the_cached_calendar_asks_for_that_stretch_too() {
+        let mut app = in_agenda();
+        weeks_on(&mut app, 14);
+
+        let (from, _) = calendar_window(at("2026-11-02T08:00:00Z"));
+        assert_eq!(
+            press(&mut app, KeyCode::F(5)),
+            Some(Effect::core(
+                0,
+                Command::SyncCalendarBetween {
+                    from,
+                    to: at("2027-03-01T00:00:00Z"),
+                }
+            ))
+        );
+        assert_eq!(
+            app.status,
+            Some(Status::Busy("Syncing the calendar…".to_owned()))
+        );
     }
 
     #[test]
