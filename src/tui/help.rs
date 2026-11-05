@@ -98,12 +98,13 @@ pub const COMPOSE_HELP: [(&str, &str); 13] = [
 ];
 
 /// What each key does in the agenda, shown with `?`.
-pub const AGENDA_HELP: [(&str, &str); 11] = [
-    ("↑ ↓  j k", "Move between appointments"),
-    (
-        "g Home  G End  t",
-        "Jump to the first, the last, or today's first",
-    ),
+pub const AGENDA_HELP: [(&str, &str); 15] = [
+    ("a  w  m", "Show the agenda, the week or the month"),
+    ("↑ ↓  j k", "Next appointment; in the month, the week"),
+    ("← →  h l", "Week and month: the day before or after"),
+    ("n p", "Week and month: the day's next or previous"),
+    ("PgUp PgDn", "Week and month: the one before or after"),
+    ("g Home  G End  t", "Jump to the first, the last, or today"),
     ("Enter", "Show the appointment in full, or hide it"),
     ("c", "Write a new appointment"),
     ("e", "Change the appointment"),
@@ -312,10 +313,21 @@ mod tests {
 
         // As Agenda::key takes them.
         for key in [
+            "a",
+            "w",
+            "m",
             "↑",
             "↓",
             "j",
             "k",
+            "←",
+            "→",
+            "h",
+            "l",
+            "n",
+            "p",
+            "PgUp",
+            "PgDn",
             "g",
             "G",
             "Home",
