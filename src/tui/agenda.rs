@@ -272,9 +272,16 @@ impl Agenda {
     /// Moves about the week or the month, leaving the selection as it is at
     /// the ends of the calendar's dates.
     fn move_in_grid(&mut self, key: KeyEvent) {
+        let last_on_day = self.appointments_on(self.day).len().saturating_sub(1);
         match key.code {
             KeyCode::Char('h') | KeyCode::Left => self.step_days(-1),
             KeyCode::Char('l') | KeyCode::Right => self.step_days(1),
+            KeyCode::Char('j' | 'n') | KeyCode::Down => {
+                self.on_day = (self.on_day + 1).min(last_on_day);
+            }
+            KeyCode::Char('k' | 'p') | KeyCode::Up => {
+                self.on_day = self.on_day.saturating_sub(1);
+            }
             _ => {}
         }
     }
@@ -494,6 +501,29 @@ mod tests {
     }
 
     #[test]
+    fn up_and_down_move_between_the_days_appointments_in_the_week() {
+        let mut agenda = in_view('w');
+        assert_eq!(selected(&agenda), "today 9");
+
+        press(&mut agenda, KeyCode::Char('j'));
+        assert_eq!(selected(&agenda), "today 14");
+        press(&mut agenda, KeyCode::Down);
+        assert_eq!(selected(&agenda), "today 14");
+        press(&mut agenda, KeyCode::Char('k'));
+        assert_eq!(selected(&agenda), "today 9");
+    }
+
+    #[test]
+    fn n_and_p_move_between_the_days_appointments_in_the_month_too() {
+        let mut agenda = in_view('m');
+
+        press(&mut agenda, KeyCode::Char('n'));
+        assert_eq!(selected(&agenda), "today 14");
+        press(&mut agenda, KeyCode::Char('p'));
+        assert_eq!(selected(&agenda), "today 9");
+    }
+
+    #[test]
     fn an_appointment_is_on_every_day_it_touches() {
         let mut agenda = agenda();
         agenda.set_appointments(vec![lasting(
@@ -595,6 +625,29 @@ mod tests {
         press(&mut agenda, KeyCode::Char('a'));
 
         assert_eq!(selected(&agenda), "yesterday");
+    }
+
+    #[test]
+    fn a_refreshed_week_stays_on_the_selected_appointment() {
+        let mut agenda = in_view('w');
+        press(&mut agenda, KeyCode::Char('n'));
+
+        let mut appointments = agenda.appointments().to_vec();
+        appointments.insert(1, appointment("earlier", "2026-11-02T08:00:00Z"));
+        agenda.set_appointments(appointments);
+
+        assert_eq!(selected(&agenda), "today 14");
+    }
+
+    #[test]
+    fn with_its_appointment_gone_a_refreshed_week_stays_on_the_day() {
+        let mut agenda = in_view('w');
+        press(&mut agenda, KeyCode::Char('n'));
+
+        agenda.set_appointments(vec![appointment("today 9", "2026-11-02T09:00:00Z")]);
+
+        assert_eq!(agenda.day(), date(2026, 11, 2));
+        assert_eq!(selected(&agenda), "today 9");
     }
 
     #[test]
