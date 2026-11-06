@@ -155,7 +155,7 @@ pub const SIGNATURE_HELP: [(&str, &str); 9] = [
 ];
 
 /// What each key does, shown with `?`.
-pub const HELP: [(&str, &str); 22] = [
+pub const HELP: [(&str, &str); 23] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
     ("Enter", "Open the folder or message, fold a date group"),
     (
@@ -194,6 +194,7 @@ pub const HELP: [(&str, &str); 22] = [
     ("F5  Ctrl-R", "Sync every folder now"),
     ("/", "Search every folder (Esc goes back)"),
     ("S  C", "Write this account's signature, show its calendar"),
+    ("M", "Add, sign in again, move or remove accounts"),
     ("?  U  q  Ctrl-C", "Show this help, update tuilook, quit"),
     ("", "Press any key to close"),
 ];

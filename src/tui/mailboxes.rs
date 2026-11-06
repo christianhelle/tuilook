@@ -16,6 +16,7 @@ use crate::core::{Command, calendar_window};
 use crate::model::{Event, FolderId, Message};
 use crate::store::Store;
 use crate::tui::{
+    account_manager::{AccountRequest, Reload},
     app::{AppState, Effect},
     clipboard,
     search::SEARCH_LIMIT,
@@ -38,6 +39,8 @@ pub struct Mailboxes {
     clipboard: Box<dyn Write>,
     /// Asks for tuilook to be updated, where it can be.
     installer: Option<mpsc::UnboundedSender<()>>,
+    /// Asks for accounts to be signed in, where they can be.
+    signer: Option<mpsc::UnboundedSender<AccountRequest>>,
 }
 
 impl Mailboxes {
@@ -51,7 +54,15 @@ impl Mailboxes {
             accounts_file,
             clipboard,
             installer: None,
+            signer: None,
         }
+    }
+
+    /// Has accounts signed in by asking `signer`. Without one, as in the
+    /// demo, accounts are not changed.
+    pub fn with_signer(mut self, signer: mpsc::UnboundedSender<AccountRequest>) -> Self {
+        self.signer = Some(signer);
+        self
     }
 
     /// Has an update installed by asking `installer`. Without one, as in
@@ -250,6 +261,45 @@ impl Mailboxes {
                     }
                     None
                 }
+                Effect::SignIn { login, replacing } => {
+                    let asked = self.signer.as_ref().is_some_and(|signer| {
+                        signer
+                            .send(AccountRequest::SignIn { login, replacing })
+                            .is_ok()
+                    });
+                    if !asked {
+                        app.sign_in_failed(NOT_HERE);
+                    }
+                    None
+                }
+                Effect::CancelSignIn => {
+                    if let Some(signer) = &self.signer {
+                        let _ = signer.send(AccountRequest::Cancel);
+                    }
+                    None
+                }
+                Effect::MoveAccount { address, delta } => {
+                    match self.accounts_file.as_deref() {
+                        Some(path) => {
+                            if let Err(e) = move_account(path, &address, delta) {
+                                app.show_error(format!("Could not move the account: {e}"));
+                            }
+                        }
+                        None => {
+                            app.accounts_changed = false;
+                            app.show_info(NOT_HERE);
+                        }
+                    }
+                    None
+                }
+                Effect::RemoveAccount(address) => {
+                    if self.accounts_file.is_some() {
+                        app.reload_accounts(Reload::Remove(address));
+                    } else {
+                        app.show_info(NOT_HERE);
+                    }
+                    None
+                }
                 Effect::Copy(text) => {
                     self.clipboard
                         .write_all(clipboard::osc52(&text).as_bytes())?;
@@ -301,6 +351,16 @@ fn load_calendar(
         .map_or(window, |agenda| agenda.loaded_span(window));
     app.appointments_loaded(account, store.appointments_between(from, to)?);
     Ok(())
+}
+
+/// Why accounts cannot be changed, as in the demo.
+const NOT_HERE: &str = "accounts are not changed here";
+
+/// Moves the account at `address` `delta` places later in the saved list.
+fn move_account(path: &Path, address: &str, delta: isize) -> std::io::Result<()> {
+    let mut accounts = Accounts::load(path)?;
+    accounts.move_by(address, delta);
+    accounts.save(path)
 }
 
 /// Keeps `signature` for `address`, reading the accounts again so a sign-in

@@ -4,7 +4,32 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
-use crate::tui::input::TextInput;
+use crate::tui::{
+    app::{AppState, Confirm, Effect},
+    dialog::Dialog,
+    input::TextInput,
+};
+
+/// What the UI asks of whatever signs accounts in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccountRequest {
+    /// Sign in with `login`, as the account at `replacing` if given.
+    SignIn {
+        login: Login,
+        replacing: Option<String>,
+    },
+    /// Stop the sign-in under way.
+    Cancel,
+}
+
+/// How to start again once the UI closes for accounts to change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reload {
+    /// Show the accounts as they are saved now.
+    Keep,
+    /// Forget the account at this address first, once its cache is closed.
+    Remove(String),
+}
 
 /// What an account signs in with.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -237,6 +262,101 @@ impl AccountManager {
     }
 }
 
+impl AppState {
+    /// M: opens the accounts, with the one being looked at picked.
+    pub(crate) fn manage_accounts(&mut self) {
+        let accounts = self
+            .accounts
+            .iter()
+            .enumerate()
+            .map(|(i, address)| {
+                let login = self.logins.get(i).unwrap_or(&self.default_login);
+                (address.clone(), login.clone())
+            })
+            .collect();
+        let manager =
+            AccountManager::new(accounts, self.current_account(), self.default_login.clone());
+        self.dialog = Some(Dialog::Accounts(manager));
+    }
+
+    /// A key for the accounts dialog.
+    pub(crate) fn accounts_key(
+        &mut self,
+        mut manager: AccountManager,
+        key: KeyEvent,
+    ) -> Option<Effect> {
+        let request = manager.key(key);
+        match request {
+            Request::Close => {
+                if self.accounts_changed {
+                    self.reload_accounts(Reload::Keep);
+                }
+                return None;
+            }
+            Request::Remove(address) => {
+                self.dialog = Some(Dialog::Confirm(Confirm::RemoveAccount { address }));
+                return None;
+            }
+            Request::Signature(address) => {
+                match self
+                    .accounts
+                    .iter()
+                    .position(|a| a.eq_ignore_ascii_case(&address))
+                {
+                    Some(account) => self.edit_signature(account),
+                    None => {
+                        self.show_info("Close this dialog first to write its signature");
+                        self.dialog = Some(Dialog::Accounts(manager));
+                    }
+                }
+                return None;
+            }
+            _ => {}
+        }
+        self.dialog = Some(Dialog::Accounts(manager));
+        match request {
+            Request::SignIn { login, replacing } => Some(Effect::SignIn { login, replacing }),
+            Request::Cancel => Some(Effect::CancelSignIn),
+            Request::Move { address, delta } => {
+                self.accounts_changed = true;
+                Some(Effect::MoveAccount { address, delta })
+            }
+            _ => None,
+        }
+    }
+
+    /// Closes the UI to start it again with the accounts changed.
+    pub fn reload_accounts(&mut self, reload: Reload) {
+        self.reload = Some(reload);
+        self.should_quit = true;
+    }
+
+    /// Shows what Microsoft says to do to sign in.
+    pub fn sign_in_code(&mut self, message: String) {
+        if let Some(Dialog::Accounts(manager)) = &mut self.dialog {
+            manager.show_code(message);
+        }
+    }
+
+    /// Lists the account signed in as. It shows in the panes once the
+    /// accounts dialog closes, or at once if it has closed already.
+    pub fn signed_in(&mut self, address: String, login: Login) {
+        self.show_info(format!("Signed in as {address}"));
+        self.accounts_changed = true;
+        match &mut self.dialog {
+            Some(Dialog::Accounts(manager)) => manager.signed_in(address, login),
+            _ => self.reload_accounts(Reload::Keep),
+        }
+    }
+
+    pub fn sign_in_failed(&mut self, reason: &str) {
+        self.show_error(format!("Could not sign in: {reason}"));
+        if let Some(Dialog::Accounts(manager)) = &mut self.dialog {
+            manager.sign_in_failed();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,6 +562,165 @@ mod tests {
         assert_eq!(manager.accounts.len(), 2);
         assert_eq!(manager.accounts[1].1, login("contoso"));
         assert_eq!(manager.selected, 1);
+    }
+
+    mod in_the_app {
+        use super::*;
+        use crate::model::Action;
+        use crate::tui::keymap::Keymap;
+
+        fn app() -> AppState {
+            AppState {
+                accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+                signatures: vec![String::new(), String::new()],
+                logins: vec![login("consumers"), login("organizations")],
+                default_login: login("consumers"),
+                ..AppState::default()
+            }
+        }
+
+        fn key(app: &mut AppState, code: KeyCode) -> Option<Effect> {
+            app.on_key(KeyEvent::from(code), &mut Keymap::default())
+        }
+
+        fn manager(app: &AppState) -> &AccountManager {
+            match &app.dialog {
+                Some(Dialog::Accounts(manager)) => manager,
+                other => panic!("no accounts dialog: {other:?}"),
+            }
+        }
+
+        #[test]
+        fn shift_m_lists_the_accounts_with_what_each_signs_in_with() {
+            let mut app = app();
+
+            app.update(Action::ManageAccounts);
+
+            assert_eq!(manager(&app).accounts[1].1, login("organizations"));
+        }
+
+        #[test]
+        fn removing_asks_first_then_closes_the_ui_to_forget_it() {
+            let mut app = app();
+            app.update(Action::ManageAccounts);
+
+            key(&mut app, KeyCode::Char('d'));
+            assert_eq!(
+                app.confirm(),
+                Some(&Confirm::RemoveAccount {
+                    address: "me@outlook.com".to_owned()
+                })
+            );
+            let effect = key(&mut app, KeyCode::Char('y'));
+
+            assert_eq!(
+                effect,
+                Some(Effect::RemoveAccount("me@outlook.com".to_owned()))
+            );
+            app.reload_accounts(Reload::Remove("me@outlook.com".to_owned()));
+            assert!(app.should_quit);
+        }
+
+        #[test]
+        fn signing_in_shows_the_code_then_lists_the_account() {
+            let mut app = app();
+            app.update(Action::ManageAccounts);
+
+            let effect = key(&mut app, KeyCode::Char('a'));
+            assert_eq!(effect, None);
+            let effect = key(&mut app, KeyCode::Enter);
+            assert_eq!(
+                effect,
+                Some(Effect::SignIn {
+                    login: login("consumers"),
+                    replacing: None
+                })
+            );
+            app.sign_in_code("Enter ABC".to_owned());
+            assert_eq!(manager(&app).mode, Mode::Waiting("Enter ABC".to_owned()));
+
+            app.signed_in("new@outlook.com".to_owned(), login("consumers"));
+
+            assert_eq!(manager(&app).accounts.len(), 3);
+            assert!(!app.should_quit, "shown once the dialog closes");
+        }
+
+        #[test]
+        fn closing_after_a_change_shows_the_accounts_again() {
+            let mut app = app();
+            app.update(Action::ManageAccounts);
+
+            let effect = key(&mut app, KeyCode::Char('J'));
+            assert_eq!(
+                effect,
+                Some(Effect::MoveAccount {
+                    address: "me@outlook.com".to_owned(),
+                    delta: 1
+                })
+            );
+            key(&mut app, KeyCode::Esc);
+
+            assert_eq!(app.reload, Some(Reload::Keep));
+            assert!(app.should_quit);
+        }
+
+        #[test]
+        fn closing_with_nothing_changed_just_closes() {
+            let mut app = app();
+            app.update(Action::ManageAccounts);
+
+            key(&mut app, KeyCode::Esc);
+
+            assert_eq!(app.dialog, None);
+            assert!(!app.should_quit);
+        }
+
+        #[test]
+        fn a_failed_sign_in_says_why_and_goes_back_to_the_list() {
+            let mut app = app();
+            app.update(Action::ManageAccounts);
+            key(&mut app, KeyCode::Char('r'));
+
+            app.sign_in_failed("denied");
+
+            assert_eq!(manager(&app).mode, Mode::List);
+            assert_eq!(
+                app.status,
+                Some(crate::tui::app::Status::Error(
+                    "Could not sign in: denied".to_owned()
+                ))
+            );
+        }
+
+        #[test]
+        fn esc_while_waiting_cancels_the_sign_in() {
+            let mut app = app();
+            app.update(Action::ManageAccounts);
+            key(&mut app, KeyCode::Char('r'));
+
+            assert_eq!(key(&mut app, KeyCode::Esc), Some(Effect::CancelSignIn));
+        }
+
+        #[test]
+        fn s_writes_the_picked_accounts_signature() {
+            let mut app = app();
+            app.update(Action::ManageAccounts);
+
+            key(&mut app, KeyCode::Char('j'));
+            key(&mut app, KeyCode::Char('s'));
+
+            assert_eq!(app.dialog, None);
+            assert_eq!(app.screen.signature().unwrap().account, 1);
+        }
+
+        #[test]
+        fn a_sign_in_finishing_after_the_dialog_closed_shows_at_once() {
+            let mut app = app();
+
+            app.signed_in("new@outlook.com".to_owned(), login("consumers"));
+
+            assert_eq!(app.reload, Some(Reload::Keep));
+        }
     }
 
     #[test]

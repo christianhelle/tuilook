@@ -1286,3 +1286,58 @@ fn the_readers_place_is_remembered() {
 
     assert_eq!(pane_at(&restarted, 50, 20), Some(Pane::Reader));
 }
+
+fn with_two_accounts() -> AppState {
+    use tuilook::tui::account_manager::Login;
+    let login = |tenant: &str| Login {
+        tenant: tenant.to_owned(),
+        client_id: "5de297ab-80a5-4cfc-bdea-38e33b917993".to_owned(),
+    };
+    AppState {
+        accounts: vec!["me@outlook.com".to_owned(), "me@work.example".to_owned()],
+        signatures: vec![String::new(), String::new()],
+        logins: vec![login("consumers"), login("organizations")],
+        default_login: login("consumers"),
+        ..sample_app()
+    }
+}
+
+#[test]
+fn the_accounts_dialog_lists_each_account_and_its_tenant() {
+    let mut app = with_two_accounts();
+    app.update(Action::ManageAccounts);
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn adding_an_account_asks_what_to_sign_in_with() {
+    let mut app = with_two_accounts();
+    app.update(Action::ManageAccounts);
+    press(&mut app, "a");
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn signing_in_shows_what_microsoft_says_to_do() {
+    let mut app = with_two_accounts();
+    app.update(Action::ManageAccounts);
+    press(&mut app, "r");
+    app.sign_in_code(
+        "To sign in, use a web browser to open the page https://microsoft.com/devicelogin \
+         and enter the code ABCD1234 to authenticate."
+            .to_owned(),
+    );
+
+    insta::assert_snapshot!(render_tall(&app));
+}
+
+#[test]
+fn removing_an_account_asks_first() {
+    let mut app = with_two_accounts();
+    app.update(Action::ManageAccounts);
+    press(&mut app, "jd");
+
+    insta::assert_snapshot!(render_tall(&app));
+}

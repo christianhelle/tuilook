@@ -79,6 +79,8 @@ pub enum Action {
     Search,
     /// Show the calendar of the account being looked at.
     Calendar,
+    /// Add, sign in again, move or remove accounts.
+    ManageAccounts,
 }
 
 /// Something core tells the UI happened.

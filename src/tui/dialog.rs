@@ -2,8 +2,8 @@
 
 use crate::model::{Invite, MessageId};
 use crate::tui::{
-    app::Confirm, attachments::AttachmentPicker, files::FilePicker, folder_edit::NamePrompt,
-    mover::MovePicker,
+    account_manager::AccountManager, app::Confirm, attachments::AttachmentPicker,
+    files::FilePicker, folder_edit::NamePrompt, mover::MovePicker,
 };
 
 /// At most one dialog is open at a time. A dialog owns its state and answers
@@ -26,6 +26,8 @@ pub enum Dialog {
     Attachments(AttachmentPicker),
     /// The file being picked to attach.
     Files(FilePicker),
+    /// The accounts, to add, sign in again, move or remove.
+    Accounts(AccountManager),
     /// How to answer the invite in `message`, called `subject`.
     Invite {
         message: MessageId,
@@ -37,6 +39,10 @@ pub enum Dialog {
 impl Dialog {
     /// Whether text is typed into the dialog, at a cursor.
     pub fn takes_text(&self) -> bool {
-        matches!(self, Dialog::Name(_) | Dialog::Move(_) | Dialog::Files(_))
+        match self {
+            Dialog::Name(_) | Dialog::Move(_) | Dialog::Files(_) => true,
+            Dialog::Accounts(manager) => manager.takes_text(),
+            _ => false,
+        }
     }
 }

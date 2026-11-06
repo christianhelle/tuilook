@@ -1,0 +1,20 @@
+---
+source: tests/tui_render.rs
+expression: render_tall(&app)
+---
+"┌ Favorites ─────┐┌ Messages ────────────────────────┐┌ Reading ─────────────────────────┐"
+"│* adds the selec││  ▾ Older (2)                     ││1   From: Ada <ada@example.com>   │"
+"└────────────────┘│> Ada                             ││  1 Subject: Analytical engine    │"
+"┌ Unread ────────┐│    Analytical engine             ││  2 Date: Thu 1 Jan 1970, 00:00   │"
+"│No unread mail  ││  Grace                           ││  3                               │"
+"└────────────┌ Add account ─────────────────────────────────────────────────┐e           │"
+"┏ Accounts ━━│Tenant:    consumers                                          │            │"
+"┃>   Inbox (2│Client ID: 5de297ab-80a5-4cfc-bdea-38e33b917993               │            │"
+"┃    Sent Ite│                                                              │            │"
+"┃    Projects│Enter sign in   Tab next field   Esc back                     │            │"
+"┃            └──────────────────────────────────────────────────────────────┘            │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┃                ┃│                                  ││                                  │"
+"┗━━━━━━━━━━━━━━━━┛└──────────────────────────────────┘└──────────────────────────────────┘"
+" ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit "

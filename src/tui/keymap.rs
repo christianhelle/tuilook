@@ -68,6 +68,7 @@ fn single_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('S') => Action::EditSignature,
         KeyCode::Char('U') => Action::Update,
         KeyCode::Char('C') => Action::Calendar,
+        KeyCode::Char('M') => Action::ManageAccounts,
         KeyCode::Char('a') => Action::AddFolder,
         KeyCode::Char('A') => Action::AddTopFolder,
         KeyCode::F(2) => Action::RenameFolder,

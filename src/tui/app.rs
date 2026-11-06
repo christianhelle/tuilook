@@ -16,6 +16,7 @@ use ratatui::{
 };
 
 use crate::tui::{
+    account_manager::{Login, Reload},
     agenda::CalendarView,
     attachments::{self, human_size},
     compose::{Compose, Request},
@@ -79,6 +80,20 @@ pub enum Effect {
     },
     /// Replace tuilook with its latest release.
     InstallUpdate,
+    /// Sign in with `login`, as the account at `replacing` if given.
+    SignIn {
+        login: Login,
+        replacing: Option<String>,
+    },
+    /// Stop waiting for the sign-in under way.
+    CancelSignIn,
+    /// Move the account at `address` `delta` places later in the list.
+    MoveAccount {
+        address: String,
+        delta: isize,
+    },
+    /// Forget the account at this address, with its sign-in and cache.
+    RemoveAccount(String),
 }
 
 impl Effect {
@@ -117,6 +132,8 @@ pub enum Confirm {
     /// Replace tuilook with its latest release: `version`, when a check has
     /// found it.
     Update { version: Option<semver::Version> },
+    /// Sign out of the account at `address` and delete its cached mail.
+    RemoveAccount { address: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -285,6 +302,16 @@ pub struct AppState {
     /// The tuilook installed in place of the running one, which runs from
     /// the next start.
     pub installed: Option<semver::Version>,
+    /// What each account signs in with, in the order of `accounts`.
+    pub logins: Vec<Login>,
+    /// What a new account signs in with unless changed.
+    pub default_login: Login,
+    /// Whether accounts were added, signed in again or moved while the
+    /// accounts dialog was open, to show them once it closes.
+    pub accounts_changed: bool,
+    /// How to start again once the UI closes, if it closes for accounts to
+    /// change rather than to quit.
+    pub reload: Option<Reload>,
 }
 
 /// When an invite is for, in `zone`. An all-day one ends at midnight, so on
@@ -611,6 +638,7 @@ impl AppState {
                 }
                 self.save_requested(request)
             }
+            Dialog::Accounts(manager) => self.accounts_key(manager, key),
             Dialog::Files(mut picker) => {
                 let request = picker.key(key);
                 match request {
@@ -756,11 +784,8 @@ impl AppState {
             Action::Search => self.start_search(),
             Action::Calendar => return self.open_calendar(),
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
-            Action::EditSignature => {
-                let account = self.current_account();
-                let signature = self.signatures.get(account).map_or("", String::as_str);
-                self.screen = Screen::Signature(Box::new(SignatureEditor::new(account, signature)));
-            }
+            Action::EditSignature => self.edit_signature(self.current_account()),
+            Action::ManageAccounts => self.manage_accounts(),
             Action::Reply | Action::ReplyAll | Action::Forward => {
                 if let Some(original) = self.selected() {
                     let id = original.id.clone();
@@ -829,6 +854,12 @@ impl AppState {
     }
 
     /// The account of the selected folder, and so of the messages shown.
+    /// Opens `account`'s signature to write.
+    pub(crate) fn edit_signature(&mut self, account: usize) {
+        let signature = self.signatures.get(account).map_or("", String::as_str);
+        self.screen = Screen::Signature(Box::new(SignatureEditor::new(account, signature)));
+    }
+
     pub fn current_account(&self) -> usize {
         self.folder_pane.account_of(self.folder_pane.selected)
     }
@@ -869,7 +900,11 @@ impl AppState {
             | Effect::Sync
             | Effect::Search(_)
             | Effect::Copy(_)
-            | Effect::InstallUpdate => self.current_account(),
+            | Effect::InstallUpdate
+            | Effect::SignIn { .. }
+            | Effect::CancelSignIn
+            | Effect::MoveAccount { .. }
+            | Effect::RemoveAccount(_) => self.current_account(),
             Effect::SaveSignature { account, .. }
             | Effect::LoadAgenda { account, .. }
             | Effect::ShowCalendarRange { account, .. } => *account,
@@ -1083,6 +1118,7 @@ impl AppState {
                 self.show_busy("Updating tuilook…");
                 Some(Effect::InstallUpdate)
             }
+            Confirm::RemoveAccount { address } => Some(Effect::RemoveAccount(address)),
         }
     }
 

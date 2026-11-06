@@ -10,6 +10,7 @@ use ratatui::{
 };
 
 use crate::tui::{
+    account_manager::{AccountManager, Field as LoginField, Mode as AccountsMode},
     agenda::{Agenda, CalendarView, Row as AgendaRow},
     app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
     appointment_form::{AppointmentForm, Field as AppointmentField},
@@ -208,6 +209,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
         Some(Dialog::Move(mover)) => draw_move_picker(frame, mover),
         Some(Dialog::Attachments(picker)) => draw_attachment_picker(frame, picker),
         Some(Dialog::Files(picker)) => draw_file_picker(frame, picker),
+        Some(Dialog::Accounts(manager)) => draw_accounts(frame, manager),
         Some(Dialog::Invite {
             subject, invite, ..
         }) => draw_invite_prompt(frame, subject, invite),
@@ -250,6 +252,174 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
             "Close the appointment and lose your changes?",
         ),
         Confirm::Update { version } => draw_confirm_update(frame, version.as_ref()),
+        Confirm::RemoveAccount { address } => draw_confirm_remove_account(frame, address),
+    }
+}
+
+/// Asks whether to sign out of `address` and delete its cached mail.
+fn draw_confirm_remove_account(frame: &mut Frame, address: &str) {
+    let lines = vec![
+        Line::raw(format!("Sign out of {}?", shown(address))),
+        Line::raw("Its cached mail is deleted; the mail on the server stays."),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("y / Enter", Style::new().fg(Color::Red)),
+            Span::raw(" remove   "),
+            Span::styled("Esc", Style::new().fg(Color::Cyan)),
+            Span::raw(" or any other key cancel"),
+        ]),
+    ];
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let widest = lines.iter().map(Line::width).max().unwrap_or(0);
+    let width = u16::try_from(widest + 4).unwrap_or(u16::MAX).max(52);
+    let area = frame
+        .area()
+        .centered(Constraint::Length(width), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title("Remove account")
+                .border_style(Style::new().fg(Color::Red)),
+        ),
+        area,
+    );
+}
+
+/// Width of the accounts dialog, borders included.
+const ACCOUNTS_WIDTH: u16 = 64;
+
+/// The label before each field of the sign-in form.
+const LOGIN_LABELS: [&str; 2] = ["Tenant:    ", "Client ID: "];
+
+/// The accounts, what to sign one in with, or how to sign in.
+fn draw_accounts(frame: &mut Frame, manager: &AccountManager) {
+    let key = |k: &'static str| Span::styled(k, Style::new().fg(Color::Yellow));
+    let mut cursor = None;
+    let (title, lines) = match &manager.mode {
+        AccountsMode::List => {
+            let mut lines = Vec::new();
+            if manager.accounts.is_empty() {
+                lines.push(Line::styled(
+                    "No accounts; press a to add one",
+                    Style::new().fg(Color::DarkGray),
+                ));
+            }
+            // Borders and the keys take 4 lines.
+            let fits = usize::from(frame.area().height).saturating_sub(4).max(1);
+            let visible = manager.accounts.len().clamp(1, MOVE_ROWS).min(fits);
+            let first = list_offset(manager.selected, visible);
+            for (row, (address, login)) in manager
+                .accounts
+                .iter()
+                .enumerate()
+                .skip(first)
+                .take(visible)
+            {
+                let picked = row == manager.selected;
+                let text = format!(
+                    "{}{}  ({})",
+                    if picked { "> " } else { "  " },
+                    shown(address),
+                    shown(&login.tenant)
+                );
+                let style = if picked {
+                    Style::new().add_modifier(Modifier::REVERSED)
+                } else {
+                    Style::new()
+                };
+                lines.push(Line::styled(text, style));
+            }
+            lines.push(Line::from(vec![
+                key("a"),
+                Span::raw(" add  "),
+                key("e"),
+                Span::raw(" change sign-in  "),
+                key("r"),
+                Span::raw(" sign in again  "),
+                key("d"),
+                Span::raw(" remove"),
+            ]));
+            lines.push(Line::from(vec![
+                key("s"),
+                Span::raw(" signature  "),
+                key("J K"),
+                Span::raw(" move  "),
+                Span::styled("j k", Style::new().fg(Color::Cyan)),
+                Span::raw(" pick  "),
+                Span::styled("Esc", Style::new().fg(Color::Cyan)),
+                Span::raw(" close"),
+            ]));
+            (" Accounts ".to_owned(), lines)
+        }
+        AccountsMode::Form {
+            editing,
+            tenant,
+            client_id,
+            field,
+        } => {
+            let room = usize::from(ACCOUNTS_WIDTH - 3).saturating_sub(LOGIN_LABELS[0].len());
+            let mut lines = Vec::new();
+            for (row, (label, input)) in LOGIN_LABELS.iter().zip([tenant, client_id]).enumerate() {
+                let (text, column) = typed(input, room);
+                let here = matches!(
+                    (row, field),
+                    (0, LoginField::Tenant) | (1, LoginField::ClientId)
+                );
+                if here {
+                    cursor = Some((label.len() + usize::from(column), row));
+                }
+                lines.push(Line::raw(format!("{label}{text}")));
+            }
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![
+                key("Enter"),
+                Span::raw(" sign in   "),
+                Span::styled("Tab", Style::new().fg(Color::Cyan)),
+                Span::raw(" next field   "),
+                Span::styled("Esc", Style::new().fg(Color::Cyan)),
+                Span::raw(" back"),
+            ]));
+            let title = match editing {
+                Some(address) => format!(" Sign in {} ", shown(address)),
+                None => " Add account ".to_owned(),
+            };
+            (title, lines)
+        }
+        AccountsMode::Waiting(message) => {
+            let lines = vec![
+                Line::raw(shown(message)),
+                Line::raw(""),
+                Line::from(vec![
+                    Span::styled("Esc", Style::new().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ]),
+            ];
+            (" Sign in ".to_owned(), lines)
+        }
+    };
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let rows = paragraph.line_count(ACCOUNTS_WIDTH - 2);
+    let height = u16::try_from(rows).unwrap_or(u16::MAX) + 2;
+    let area = frame.area().centered(
+        Constraint::Length(ACCOUNTS_WIDTH),
+        Constraint::Length(height),
+    );
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        paragraph.block(
+            Block::bordered()
+                .title(title)
+                .border_style(Style::new().fg(Color::Yellow)),
+        ),
+        area,
+    );
+    if let Some((column, row)) = cursor {
+        let column = u16::try_from(column).unwrap_or(u16::MAX);
+        let row = u16::try_from(row).unwrap_or(u16::MAX);
+        let x = area.x.saturating_add(1).saturating_add(column);
+        let y = area.y.saturating_add(1).saturating_add(row);
+        frame.set_cursor_position((x.min(area.right().saturating_sub(2)), y));
     }
 }
 
