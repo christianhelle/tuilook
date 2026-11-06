@@ -9,6 +9,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use jiff::{Timestamp, Zoned};
 use ratatui::{
+    DefaultTerminal,
     crossterm::{
         cursor::SetCursorStyle,
         event::{self, DisableMouseCapture, EnableMouseCapture},
@@ -16,6 +17,7 @@ use ratatui::{
     },
     layout::Rect,
 };
+use semver::Version;
 use tokio::sync::mpsc;
 use tuilook::accounts::{Account, Accounts};
 use tuilook::auth::{
@@ -27,11 +29,15 @@ use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
 use tuilook::model::MailBackend;
 use tuilook::store::Store;
 use tuilook::tui::{
+    account_manager::{AccountRequest, Login, Reload},
     app::AppState,
     demo,
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
-    run_loop::{UpdateNews, on_terminal_event, take_core_events, take_update},
+    run_loop::{
+        AccountNews, UpdateNews, on_terminal_event, take_account_news, take_core_events,
+        take_update,
+    },
     screen::Cursor,
     session, ui,
 };
@@ -140,44 +146,73 @@ fn main() -> Result<()> {
             }
             // The demo stays offline: nothing ever sends on this channel.
             let (_, updates) = mpsc::channel(1);
-            run_ui(
-                &runtime,
-                mailboxes,
-                None,
-                None,
-                sync_every(&cli),
-                updates,
-                None,
-            )
+            let mut services = Services::new(updates, default_login(&cli));
+            let ui = Ui {
+                accounts_file: None,
+                session: None,
+                sync_every: sync_every(&cli),
+            };
+            // Accounts are not changed in the demo, so it never reloads.
+            with_terminal(|terminal| {
+                run_ui(&runtime, terminal, mailboxes, &ui, &mut services).map(|_| ())
+            })
         }
         None => {
             let accounts = runtime.block_on(signed_in(&cli))?;
             if accounts.0.is_empty() {
                 bail!("not signed in; run `otlk login` first");
             }
-            let mailboxes = accounts
-                .0
-                .iter()
-                .map(|account| {
-                    Ok((
-                        account.address.clone(),
-                        graph_backend(account)?,
-                        cache_path(&account.address)?,
-                    ))
-                })
-                .collect::<Result<Vec<_>>>()?;
             let (news, updates) = mpsc::channel(4);
             watch_for_update(&runtime, &cli, news.clone());
-            run_ui(
-                &runtime,
-                mailboxes,
-                Some(&accounts_path()?),
-                Some(&session_path()?),
-                sync_every(&cli),
-                updates,
-                Some(install_on_request(&runtime, news)),
-            )
+            let (said, account_news) = mpsc::unbounded_channel();
+            let mut services = Services {
+                installer: Some(install_on_request(&runtime, news)),
+                signer: Some(sign_in_on_request(&runtime, said)),
+                account_news: Some(account_news),
+                ..Services::new(updates, default_login(&cli))
+            };
+            let ui = Ui {
+                accounts_file: Some(accounts_path()?),
+                session: Some(session_path()?),
+                sync_every: sync_every(&cli),
+            };
+            let signed_out = with_terminal(|terminal| {
+                loop {
+                    let accounts = Accounts::load(&accounts_path()?)?;
+                    if accounts.0.is_empty() {
+                        return Ok(true);
+                    }
+                    let mailboxes = accounts
+                        .0
+                        .iter()
+                        .map(|account| {
+                            Ok((
+                                account.address.clone(),
+                                graph_backend(account)?,
+                                cache_path(&account.address)?,
+                            ))
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    match run_ui(&runtime, terminal, mailboxes, &ui, &mut services)? {
+                        None => return Ok(false),
+                        Some(Reload::Keep) => {}
+                        Some(Reload::Remove(address)) => forget(&address)?,
+                    }
+                }
+            })?;
+            if signed_out {
+                println!("Signed out of every account; run `otlk login` to sign in again.");
+            }
+            Ok(())
         }
+    }
+}
+
+/// What a new account signs in with unless changed in the UI.
+fn default_login(cli: &Cli) -> Login {
+    Login {
+        tenant: cli.tenant.clone(),
+        client_id: cli.client_id.clone().unwrap_or_default(),
     }
 }
 
@@ -462,6 +497,45 @@ fn install_on_request(
     installer
 }
 
+/// Signs accounts in in the background each time the returned sender asks,
+/// and tells `news` how it went. A new request stops the one under way.
+fn sign_in_on_request(
+    runtime: &tokio::runtime::Runtime,
+    news: mpsc::UnboundedSender<AccountNews>,
+) -> mpsc::UnboundedSender<AccountRequest> {
+    let (signer, mut asked) = mpsc::unbounded_channel();
+    runtime.spawn(async move {
+        let mut running: Option<tokio::task::JoinHandle<()>> = None;
+        while let Some(request) = asked.recv().await {
+            if let Some(task) = running.take() {
+                task.abort();
+            }
+            let AccountRequest::SignIn { login, replacing } = request else {
+                continue;
+            };
+            let news = news.clone();
+            running = Some(tokio::spawn(async move {
+                let codes = news.clone();
+                let signed = sign_in(
+                    &login.tenant,
+                    &login.client_id,
+                    replacing.as_deref(),
+                    |code| {
+                        let _ = codes.send(AccountNews::Code(code.message.clone()));
+                    },
+                )
+                .await;
+                let said = match signed {
+                    Ok(address) => AccountNews::SignedIn { address, login },
+                    Err(e) => AccountNews::Failed(format!("{e:#}")),
+                };
+                let _ = news.send(said);
+            }));
+        }
+    });
+    signer
+}
+
 /// Tells the user whether a newer tuilook has been released.
 async fn check_update() -> Result<()> {
     let release = update::check(
@@ -512,83 +586,179 @@ fn remove_db(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Where the UI keeps what lasts beyond it, and how often it syncs.
+struct Ui {
+    /// Where accounts and their signatures are kept; without one, as in the
+    /// demo, signatures last until tuilook closes.
+    accounts_file: Option<PathBuf>,
+    /// Where the place the user was is kept between starts.
+    session: Option<PathBuf>,
+    sync_every: Option<Duration>,
+}
+
+/// What outlasts the UI when it starts again for accounts to change.
+struct Services {
+    updates: mpsc::Receiver<UpdateNews>,
+    installer: Option<mpsc::UnboundedSender<()>>,
+    signer: Option<mpsc::UnboundedSender<AccountRequest>>,
+    account_news: Option<mpsc::UnboundedReceiver<AccountNews>>,
+    default_login: Login,
+    /// A newer release found, and one installed, so far.
+    update: Option<Version>,
+    installed: Option<Version>,
+}
+
+impl Services {
+    fn new(updates: mpsc::Receiver<UpdateNews>, default_login: Login) -> Self {
+        Self {
+            updates,
+            installer: None,
+            signer: None,
+            account_news: None,
+            default_login,
+            update: None,
+            installed: None,
+        }
+    }
+}
+
+/// Runs `f` with the terminal taken over for the UI, and gives it back.
+fn with_terminal<T>(f: impl FnOnce(&mut DefaultTerminal) -> Result<T>) -> Result<T> {
+    let mut terminal = ratatui::init();
+    let result = execute!(io::stdout(), EnableMouseCapture)
+        .map_err(anyhow::Error::from)
+        .and_then(|()| f(&mut terminal));
+    let _ = execute!(io::stdout(), DisableMouseCapture);
+    ratatui::restore();
+    result
+}
+
 /// Renders from the caches at once while core syncs every account in the
 /// background. `accounts` holds each account's address, backend and cache.
-/// Their signatures are kept in `accounts_file`; without one, as in the
-/// demo, signatures last until tuilook closes.
+/// Returns how to start again when the UI closed for accounts to change.
 fn run_ui<B: MailBackend + Send + Sync + 'static>(
     runtime: &tokio::runtime::Runtime,
+    terminal: &mut DefaultTerminal,
     accounts: Vec<(String, B, PathBuf)>,
-    accounts_file: Option<&Path>,
-    session: Option<&Path>,
-    sync_every: Option<Duration>,
-    mut updates: mpsc::Receiver<UpdateNews>,
-    installer: Option<mpsc::UnboundedSender<()>>,
-) -> Result<()> {
-    let mut app = AppState::default();
-    let saved = match accounts_file {
+    ui: &Ui,
+    services: &mut Services,
+) -> Result<Option<Reload>> {
+    let mut app = AppState {
+        default_login: services.default_login.clone(),
+        update: services.update.clone(),
+        installed: services.installed.clone(),
+        ..AppState::default()
+    };
+    let saved = match &ui.accounts_file {
         Some(path) => Accounts::load(path)?,
         None => Accounts::default(),
     };
     let mut mailboxes = Vec::new();
     let mut events = Vec::new();
+    let mut engines = Vec::new();
     for (address, backend, path) in accounts {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (event_tx, event_rx) = mpsc::channel(32);
-        runtime.spawn(run_engine(
+        engines.push(runtime.spawn(run_engine(
             backend,
             Store::open(&path)?,
             command_rx,
             event_tx,
-        ));
+        )));
         let store = Store::open(&path)?;
-        let signature = saved.find(&address).map(|a| a.signature.clone());
-        app.signatures.push(signature.unwrap_or_default());
+        let account = saved.find(&address).ok();
+        app.signatures
+            .push(account.map(|a| a.signature.clone()).unwrap_or_default());
+        app.logins.push(account.map_or_else(
+            || services.default_login.clone(),
+            |a| Login {
+                tenant: a.tenant.clone(),
+                client_id: a.client_id.clone(),
+            },
+        ));
         app.accounts.push(address);
         mailboxes.push(Mailbox { store, commands });
         events.push(event_rx);
     }
-    let accounts_file = accounts_file.map(Path::to_path_buf);
-    let mut mailboxes = Mailboxes::new(mailboxes, accounts_file, Box::new(io::stdout()));
-    if let Some(installer) = installer {
+    let mut mailboxes = Mailboxes::new(mailboxes, ui.accounts_file.clone(), Box::new(io::stdout()));
+    if let Some(installer) = services.installer.clone() {
         mailboxes = mailboxes.with_installer(installer);
     }
-    app.sync.every = sync_every;
+    if let Some(signer) = services.signer.clone() {
+        mailboxes = mailboxes.with_signer(signer);
+    }
+    let result = drive(
+        &mut app,
+        &mut mailboxes,
+        &mut events,
+        terminal,
+        ui,
+        services,
+    );
+    if let Some(path) = &ui.session {
+        // Losing the place to start from next time is not worth failing over.
+        let _ = session::save(path, &session::Snapshot::of(&app));
+    }
+    services.update = app.update.clone();
+    services.installed = app.installed.clone();
+    // Each cache must be closed before an account's can be deleted.
+    drop(mailboxes);
+    for engine in &engines {
+        engine.abort();
+    }
+    for engine in engines {
+        let _ = runtime.block_on(engine);
+    }
+    result.map(|()| app.reload.take())
+}
+
+/// Starts syncing, shows where the user was, then draws and takes keys until
+/// the app quits.
+fn drive(
+    app: &mut AppState,
+    mailboxes: &mut Mailboxes,
+    events: &mut [mpsc::Receiver<tuilook::model::Event>],
+    terminal: &mut DefaultTerminal,
+    ui: &Ui,
+    services: &mut Services,
+) -> Result<()> {
+    app.sync.every = ui.sync_every;
     let effect = app.start_sync();
-    mailboxes.apply(&mut app, effect)?;
+    mailboxes.apply(app, effect)?;
     for account in 0..mailboxes.len() {
         let effect = app.set_account_folders(account, mailboxes.store(account).folders()?);
-        mailboxes.apply(&mut app, effect)?;
+        mailboxes.apply(app, effect)?;
     }
-    if let Some(snapshot) = session.and_then(session::load) {
+    if let Some(snapshot) = ui.session.as_deref().and_then(session::load) {
         let effect = app.restore(&snapshot);
-        mailboxes.apply(&mut app, effect)?;
+        mailboxes.apply(app, effect)?;
         let effect = snapshot
             .message
             .as_deref()
             .and_then(|id| app.select_message(id));
-        mailboxes.apply(&mut app, effect)?;
+        mailboxes.apply(app, effect)?;
     }
 
     app.clock = Some(Zoned::now());
     let mut keymap = Keymap::default();
-    let mut terminal = ratatui::init();
     let mut cursor = Cursor::Default;
     let result = (|| {
-        execute!(io::stdout(), EnableMouseCapture)?;
         while !app.should_quit {
             let now = Instant::now();
             app.expire_status(now);
             let effect = app.sync_if_due(now);
-            mailboxes.apply(&mut app, effect)?;
-            terminal.draw(|frame| ui::draw(frame, &app))?;
+            mailboxes.apply(app, effect)?;
+            terminal.draw(|frame| ui::draw(frame, app))?;
             let shape = app.cursor();
             if shape != cursor {
                 execute!(io::stdout(), cursor_style(shape))?;
                 cursor = shape;
             }
-            take_core_events(&mut app, &mut mailboxes, &mut events)?;
-            take_update(&mut app, &mut updates);
+            take_core_events(app, mailboxes, events)?;
+            take_update(app, &mut services.updates);
+            if let Some(news) = &mut services.account_news {
+                take_account_news(app, news);
+            }
             let ready = event::poll(Duration::from_millis(100))?;
             // The key and the drawing after it see the same time.
             app.clock = Some(Zoned::now());
@@ -597,19 +767,13 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
             }
             let size = terminal.size()?;
             let area = Rect::new(0, 0, size.width, size.height);
-            on_terminal_event(&mut app, &mut mailboxes, &mut keymap, area, event::read()?)?;
+            on_terminal_event(app, mailboxes, &mut keymap, area, event::read()?)?;
         }
         Ok(())
     })();
-    let _ = execute!(io::stdout(), DisableMouseCapture);
-    if let Some(path) = session {
-        // Losing the place to start from next time is not worth failing over.
-        let _ = session::save(path, &session::Snapshot::of(&app));
-    }
     if cursor != Cursor::Default {
         let _ = execute!(io::stdout(), cursor_style(Cursor::Default));
     }
-    ratatui::restore();
     result
 }
 
