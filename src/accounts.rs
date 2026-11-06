@@ -324,7 +324,9 @@ Engines"
     fn a_registry_keeps_its_accounts_in_its_folder() {
         let (dir, registry) = registry();
 
-        registry.change(|accounts| *accounts = self::accounts()).unwrap();
+        registry
+            .change(|accounts| *accounts = self::accounts())
+            .unwrap();
 
         assert_eq!(registry.file(), dir.path().join("accounts.json"));
         assert_eq!(registry.load().unwrap(), accounts());
@@ -343,7 +345,9 @@ Engines"
     #[test]
     fn forgetting_drops_the_account_and_its_cache() {
         let (dir, registry) = registry();
-        registry.change(|accounts| *accounts = self::accounts()).unwrap();
+        registry
+            .change(|accounts| *accounts = self::accounts())
+            .unwrap();
         let cache = registry.cache_path("me@outlook.com").unwrap();
         std::fs::write(&cache, "mail").unwrap();
 
@@ -357,7 +361,9 @@ Engines"
     #[test]
     fn forgetting_an_account_with_no_cache_still_drops_it() {
         let (_dir, registry) = registry();
-        registry.change(|accounts| *accounts = self::accounts()).unwrap();
+        registry
+            .change(|accounts| *accounts = self::accounts())
+            .unwrap();
 
         registry.forget("other@outlook.com").unwrap();
 
