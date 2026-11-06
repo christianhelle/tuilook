@@ -795,10 +795,10 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
         } if form.field == AppointmentField::Notes => Some(&form.notes),
         _ => None,
     };
-    let picking = app.viewer.mode() != VimMode::Normal;
+    let picking = app.reader.viewer.mode() != VimMode::Normal;
     let mode = match editing {
         Some(body) => Some(body.vim.mode),
-        None => (picking || app.focus == Pane::Reader).then(|| app.viewer.mode()),
+        None => (picking || app.focus == Pane::Reader).then(|| app.reader.viewer.mode()),
     };
     if let Some(mode) = mode {
         let color = match mode {
@@ -1735,7 +1735,7 @@ fn draw_reader(frame: &mut Frame, app: &AppState, area: Rect) {
     let Some(text) = reader_paragraph(app) else {
         return;
     };
-    let scroll = (app.reader_scroll.try_into().unwrap_or(u16::MAX), 0);
+    let scroll = (app.reader.scroll.try_into().unwrap_or(u16::MAX), 0);
     frame.render_widget(reader_numbers(app, body.width).scroll(scroll), gutter);
     frame.render_widget(text.scroll(scroll), body);
 }
@@ -1752,7 +1752,7 @@ fn reader_areas(inner: Rect, app: &AppState) -> [Rect; 2] {
 fn reader_numbers(app: &AppState, width: u16) -> Paragraph<'static> {
     let rows = app.reader_rows_at(width);
     let numbers = numbers::gutter_width(rows.len());
-    let (cursor, _) = app.viewer.cursor();
+    let (cursor, _) = app.reader.viewer.cursor();
     let lines: Vec<Line> = rows
         .iter()
         .enumerate()
@@ -1767,9 +1767,10 @@ fn reader_numbers(app: &AppState, width: u16) -> Paragraph<'static> {
 /// The selected message's headers and body, wrapped to the pane.
 fn reader_paragraph(app: &AppState) -> Option<Paragraph<'static>> {
     // The cursor shows as a selection of its own character.
-    let cursor = app.viewer.cursor();
+    let cursor = app.reader.viewer.cursor();
     let focused = app.focus == Pane::Reader;
     let selection = app
+        .reader
         .viewer
         .selection()
         .or_else(|| focused.then_some((cursor, cursor)));

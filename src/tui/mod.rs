@@ -26,6 +26,7 @@ pub mod mailboxes;
 pub mod mover;
 pub mod numbers;
 pub mod older;
+pub mod reader;
 pub mod rows;
 pub mod run_loop;
 pub mod screen;

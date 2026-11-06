@@ -67,7 +67,7 @@ impl AppState {
     /// several to save.
     pub(crate) fn ask_which_to_save(&mut self) -> Option<Effect> {
         let message = self.selected()?.id.clone();
-        match self.attachments.as_slice() {
+        match self.reader.attachments.as_slice() {
             [] => {
                 self.show_info("No files are attached to this mail");
                 None

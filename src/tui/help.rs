@@ -55,20 +55,20 @@ pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
         },
         Screen::Panes if picking => " y copy · Esc cancel",
         // First, as a narrow status bar cuts off the end.
-        Screen::Panes if app.focus == Pane::Reader && app.invite.is_some() => {
+        Screen::Panes if app.focus == Pane::Reader && app.reader.invite.is_some() => {
             " i respond · v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit"
         }
-        Screen::Panes if app.invite.is_some() => {
+        Screen::Panes if app.reader.invite.is_some() => {
             " i respond · ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit"
         }
         // Saving is offered only once the selected mail's files are known.
-        Screen::Panes if app.focus == Pane::Reader && !app.attachments.is_empty() => {
+        Screen::Panes if app.focus == Pane::Reader && !app.reader.attachments.is_empty() => {
             " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit · s save files"
         }
         Screen::Panes if app.focus == Pane::Reader => {
             " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit"
         }
-        Screen::Panes if !app.attachments.is_empty() => {
+        Screen::Panes if !app.reader.attachments.is_empty() => {
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit · s save files"
         }
         Screen::Panes => {
@@ -303,7 +303,7 @@ mod tests {
             };
             assert!(!key_hints(&app, false).contains("i respond"));
 
-            app.invite = Some(invite.clone());
+            app.reader.invite = Some(invite.clone());
             assert!(key_hints(&app, false).starts_with(" i respond"));
         }
     }

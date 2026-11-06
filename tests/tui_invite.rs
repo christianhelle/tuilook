@@ -76,7 +76,7 @@ async fn an_invite_is_shown_when_opened_and_answered_with_two_keys() {
     let opening = app.set_messages(vec![mail]);
     mailboxes.apply(&mut app, opening).unwrap();
     pump(&mut events, &mut mailboxes, &mut app, |app| {
-        app.invite.is_some()
+        app.reader.invite.is_some()
     })
     .await;
     let text = app.reader_text().unwrap().join("\n");

@@ -288,7 +288,7 @@ fn a_scrolled_reading_pane_starts_further_down() {
     let mut app = sample_app();
     let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
     app.body_loaded(MessageId("m1".to_owned()), body.join("\n"), vec![]);
-    app.reader_scroll = 5;
+    app.reader.scroll = 5;
 
     insta::assert_snapshot!(render(&app));
 }

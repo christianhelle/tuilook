@@ -9,7 +9,7 @@ use crate::model::{
     Action, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId, Invite, Message,
     MessageId, Rsvp, sort_messages,
 };
-use jiff::{SignedDuration, Timestamp, Zoned, tz::TimeZone};
+use jiff::{Timestamp, Zoned};
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     widgets::{Paragraph, Wrap},
@@ -18,19 +18,18 @@ use ratatui::{
 use crate::tui::{
     account_manager::{Login, Reload},
     agenda::CalendarView,
-    attachments::human_size,
     compose::{Compose, Request},
     dialog::{Dialog, Picker},
     files::{self, FilePicker},
     folder_pane::FolderPane,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
+    reader::{self, Reader},
     rows::row_target,
     screen::{Cursor, Screen},
     search::Search,
     signature::{self, SignatureEditor},
-    ui::shown,
-    viewer::{self, Viewer},
+    viewer,
     vim::Register,
 };
 
@@ -270,13 +269,8 @@ pub struct AppState {
     pub selected_group: Option<DateGroup>,
     /// Date groups whose messages are folded away, in every folder.
     pub collapsed_groups: BTreeSet<DateGroup>,
-    /// The selected message's body, once core has loaded it.
-    pub body: Option<String>,
-    /// The files attached to the selected message, once core has loaded
-    /// its body.
-    pub attachments: Vec<Attachment>,
-    /// What the selected message invites to, once core has said it does.
-    pub invite: Option<Invite>,
+    /// What the reading pane shows of the selected message, and where.
+    pub reader: Reader,
     pub status: Option<Status>,
     /// When the status was shown, to know when it has gone stale.
     pub status_since: Option<Instant>,
@@ -285,8 +279,6 @@ pub struct AppState {
     /// The folder the last attached file was picked in, to pick the next
     /// one from.
     pub attach_dir: Option<PathBuf>,
-    /// Lines of the reading pane scrolled out of view at the top.
-    pub reader_scroll: usize,
     /// Whether the focused pane fills the screen.
     pub zoomed: bool,
     pub folders_hidden: bool,
@@ -307,8 +299,6 @@ pub struct AppState {
     pub accounts: Vec<String>,
     /// Each account's signature, put below each new message it writes.
     pub signatures: Vec<String>,
-    /// The reading pane's cursor, which picks text to copy.
-    pub viewer: Viewer,
     /// The text last deleted or yanked, to put with `p`.
     pub register: Register,
     /// A search being typed, or whose results the message list shows.
@@ -339,29 +329,6 @@ pub struct AppState {
     pub reload: Option<Reload>,
 }
 
-/// When an invite is for, in `zone`. An all-day one ends at midnight, so on
-/// the morning after its last day.
-fn when(invite: &Invite, zone: &TimeZone) -> String {
-    let start = invite.start.to_zoned(zone.clone());
-    let end = invite.end.to_zoned(zone.clone());
-    let day = |at: &Zoned| at.strftime("%a %-d %b %Y").to_string();
-    if invite.all_day {
-        let last = invite.end.saturating_sub(SignedDuration::from_secs(1));
-        let last = last.unwrap_or(invite.end).to_zoned(zone.clone());
-        return if last.date() == start.date() {
-            format!("{}, all day", day(&start))
-        } else {
-            format!("{} to {}, all day", day(&start), day(&last))
-        };
-    }
-    let until = if end.date() == start.date() {
-        end.strftime("%H:%M").to_string()
-    } else {
-        end.strftime("%a %H:%M").to_string()
-    };
-    format!("{}, {}–{until}", day(&start), start.strftime("%H:%M"))
-}
-
 /// The answer a key gives in the invite prompt.
 fn answer_key(key: KeyEvent) -> Option<Rsvp> {
     match key.code {
@@ -372,51 +339,12 @@ fn answer_key(key: KeyEvent) -> Option<Rsvp> {
     }
 }
 
-/// How an answer to an invite reads once given.
-fn answered(answer: Rsvp) -> &'static str {
-    match answer {
-        Rsvp::Accept => "Accepted",
-        Rsvp::Tentative => "Tentative",
-        Rsvp::Decline => "Declined",
-    }
-}
-
 impl AppState {
     /// The lines of the reading pane, before wrapping: the selected
     /// message's headers and body.
     pub fn reader_text(&self) -> Option<Vec<String>> {
         let m = self.messages.get(self.selected_message)?;
-        let mut text = vec![
-            format!("From: {} <{}>", shown(&m.from_name), shown(&m.from_addr)),
-            format!("Subject: {}", shown(&m.subject)),
-            format!(
-                "Date: {}",
-                m.received_at
-                    .to_zoned(self.now().time_zone().clone())
-                    .strftime("%a %-d %b %Y, %H:%M")
-            ),
-        ];
-        for (index, a) in self.attachments.iter().enumerate() {
-            let label = if index == 0 { "Attached:" } else { "" };
-            let size = human_size(a.size);
-            text.push(format!("{label:<10}{} ({size})", shown(&a.name)));
-        }
-        if let Some(invite) = &self.invite {
-            text.push(format!(
-                "When:     {}",
-                when(invite, self.now().time_zone())
-            ));
-            if !invite.location.is_empty() {
-                text.push(format!("Where:    {}", shown(&invite.location)));
-            }
-            let answer = invite.answer.map_or("Not answered", answered);
-            text.push(format!("Answer:   {answer}"));
-        }
-        text.push(String::new());
-        // The preview stands in until core has loaded the body.
-        let body = self.body.as_deref().unwrap_or(&m.preview);
-        text.extend(shown(body).lines().map(str::to_owned));
-        Some(text)
+        Some(self.reader.text(m, self.now().time_zone()))
     }
 
     /// The rows each line of the reading pane takes once wrapped.
@@ -446,7 +374,7 @@ impl AppState {
         let bottom = top + rows.get(line).copied().unwrap_or(1);
         // A line taller than the pane shows from its top.
         let lowest = bottom.saturating_sub(self.viewport.reader).min(top);
-        self.reader_scroll = self.reader_scroll.max(lowest).min(top);
+        self.reader.scroll = self.reader.scroll.max(lowest).min(top);
     }
 
     /// Moves the reader's cursor onto the lines shown, as Vim does when
@@ -455,12 +383,12 @@ impl AppState {
         let Some(text) = self.reader_text() else {
             return;
         };
-        self.viewer.show(&text);
-        let top = self.reader_line_at(self.reader_scroll);
-        let last_row = self.reader_scroll + self.viewport.reader.saturating_sub(1);
+        self.reader.viewer.show(&text);
+        let top = self.reader_line_at(self.reader.scroll);
+        let last_row = self.reader.scroll + self.viewport.reader.saturating_sub(1);
         let bottom = self.reader_line_at(last_row).max(top);
-        let (line, column) = self.viewer.cursor();
-        self.viewer.move_to(line.clamp(top, bottom), column);
+        let (line, column) = self.reader.viewer.cursor();
+        self.reader.viewer.move_to(line.clamp(top, bottom), column);
     }
 
     /// The line of the reading pane shown on wrapped row `row`, or the
@@ -585,13 +513,14 @@ impl AppState {
         if self.focus == Pane::Reader
             && let Some(text) = self.reader_text()
         {
-            self.viewer.show(&text);
+            self.reader.viewer.show(&text);
             match self
+                .reader
                 .viewer
                 .key(key, self.viewport.reader, &mut self.register)
             {
                 viewer::Request::None => {
-                    let (line, _) = self.viewer.cursor();
+                    let (line, _) = self.reader.viewer.cursor();
                     self.show_reader_line(line);
                     return None;
                 }
@@ -1262,8 +1191,8 @@ impl AppState {
         if shown.id != message {
             return None;
         }
-        self.body = Some(text);
-        self.attachments = attachments;
+        self.reader.body = Some(text);
+        self.reader.attachments = attachments;
         if shown.is_read {
             return None;
         }
@@ -1274,7 +1203,7 @@ impl AppState {
 
     /// Asks how to answer the invite in the selected message, if it is one.
     fn ask_how_to_answer(&mut self) {
-        match (self.selected(), &self.invite) {
+        match (self.selected(), &self.reader.invite) {
             (Some(m), Some(invite)) => {
                 self.dialog = Some(Dialog::Invite {
                     message: m.id.clone(),
@@ -1289,7 +1218,7 @@ impl AppState {
     /// Shows an invite core loaded, unless the user has moved on.
     pub fn invite_loaded(&mut self, message: MessageId, invite: Invite) {
         if self.selected().is_some_and(|m| m.id == message) {
-            self.invite = Some(invite);
+            self.reader.invite = Some(invite);
         }
     }
 
@@ -1297,11 +1226,11 @@ impl AppState {
     /// it is still the selected message.
     pub fn invite_answered(&mut self, message: &MessageId, answer: Rsvp) {
         if self.selected().is_some_and(|m| m.id == *message)
-            && let Some(invite) = &mut self.invite
+            && let Some(invite) = &mut self.reader.invite
         {
             invite.answer = Some(answer);
         }
-        self.show_info(format!("Answered the invite: {}", answered(answer)));
+        self.show_info(format!("Answered the invite: {}", reader::answered(answer)));
     }
 
     /// The selected message; none while a date header is selected.
@@ -1432,11 +1361,7 @@ impl AppState {
 
     /// Drops the old body and asks for the newly selected one.
     fn selection_changed(&mut self) -> Option<Effect> {
-        self.body = None;
-        self.attachments.clear();
-        self.invite = None;
-        self.reader_scroll = 0;
-        self.viewer = Viewer::default();
+        self.reader = Reader::default();
         self.selected().map(|m| self.load_body(m.id.clone()))
     }
 
@@ -1487,7 +1412,7 @@ impl AppState {
                     .viewport
                     .reader_lines
                     .saturating_sub(self.viewport.reader);
-                self.reader_scroll = self.reader_scroll.saturating_add_signed(delta).min(max);
+                self.reader.scroll = self.reader.scroll.saturating_add_signed(delta).min(max);
                 self.keep_cursor_in_view();
                 None
             }
@@ -1631,10 +1556,10 @@ mod tests {
         assert_eq!(app.update(Action::SelectNext), None);
         app.update(Action::SelectNext);
         app.update(Action::SelectNext);
-        assert_eq!(app.reader_scroll, 2, "stops when the last line is in view");
+        assert_eq!(app.reader.scroll, 2, "stops when the last line is in view");
 
         app.update(Action::SelectPrev);
-        assert_eq!(app.reader_scroll, 1);
+        assert_eq!(app.reader.scroll, 1);
         assert_eq!(app.selected_message, 0);
     }
 
@@ -1643,13 +1568,13 @@ mod tests {
         let mut app = reading(10, 100);
 
         app.update(Action::PageDown);
-        assert_eq!(app.reader_scroll, 10);
+        assert_eq!(app.reader.scroll, 10);
         app.update(Action::HalfPageDown);
-        assert_eq!(app.reader_scroll, 15);
+        assert_eq!(app.reader.scroll, 15);
         app.update(Action::Bottom);
-        assert_eq!(app.reader_scroll, 90);
+        assert_eq!(app.reader.scroll, 90);
         app.update(Action::Top);
-        assert_eq!(app.reader_scroll, 0);
+        assert_eq!(app.reader.scroll, 0);
     }
 
     /// Types each character as a key into the app.
@@ -1664,11 +1589,11 @@ mod tests {
     #[test]
     fn keys_in_the_reader_move_its_cursor() {
         let mut app = reading(10, 5);
-        app.body = Some("Dear Charles,".to_owned());
+        app.reader.body = Some("Dear Charles,".to_owned());
 
         type_keys(&mut app, "jjjjw");
 
-        assert_eq!(app.viewer.cursor(), (4, 5));
+        assert_eq!(app.reader.viewer.cursor(), (4, 5));
     }
 
     #[test]
@@ -1683,7 +1608,7 @@ mod tests {
     #[test]
     fn v_in_the_reader_picks_from_the_cursor_and_y_copies_it() {
         let mut app = reading(10, 5);
-        app.body = Some("Dear Charles,".to_owned());
+        app.reader.body = Some("Dear Charles,".to_owned());
         app.clock = Some("2026-11-03T09:00:00+00:00[UTC]".parse().unwrap());
 
         let effect = type_keys(&mut app, "jjvjj$y");
@@ -1697,14 +1622,18 @@ Dear Charles,"
                     .to_owned()
             ))
         );
-        assert_eq!(app.viewer.mode(), VimMode::Normal, "copying stops picking");
+        assert_eq!(
+            app.reader.viewer.mode(),
+            VimMode::Normal,
+            "copying stops picking"
+        );
         assert_eq!(app.status, Some(Status::Info("Copied 3 lines".to_owned())));
     }
 
     #[test]
     fn text_yanked_in_the_reader_is_put_with_p_in_a_reply() {
         let mut app = reading(10, 5);
-        app.body = Some("Dear Charles,".to_owned());
+        app.reader.body = Some("Dear Charles,".to_owned());
         type_keys(&mut app, "Gyy");
 
         type_keys(&mut app, "r");
@@ -1726,15 +1655,15 @@ Dear Charles,"
         let mut app = reading(4, 23);
         app.viewport.reader_width = 80;
         let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
-        app.body = Some(body.join(
+        app.reader.body = Some(body.join(
             "
 ",
         ));
 
         type_keys(&mut app, "10j");
-        assert_eq!(app.reader_scroll, 7, "row 10 is the last in view");
+        assert_eq!(app.reader.scroll, 7, "row 10 is the last in view");
         type_keys(&mut app, "gg");
-        assert_eq!(app.reader_scroll, 0);
+        assert_eq!(app.reader.scroll, 0);
     }
 
     #[test]
@@ -1742,19 +1671,27 @@ Dear Charles,"
         let mut app = reading(4, 23);
         app.viewport.reader_width = 80;
         let body: Vec<String> = (1..=20).map(|i| format!("Line {i}")).collect();
-        app.body = Some(body.join(
+        app.reader.body = Some(body.join(
             "
 ",
         ));
         let wheel = |app: &mut AppState, mouse| app.on_mouse(mouse, hit(Pane::Reader, None));
 
         (0..3).for_each(|_| _ = wheel(&mut app, Mouse::ScrollDown));
-        assert_eq!(app.reader_scroll, 9);
-        assert_eq!(app.viewer.cursor(), (9, 0), "dragged down to the top line");
+        assert_eq!(app.reader.scroll, 9);
+        assert_eq!(
+            app.reader.viewer.cursor(),
+            (9, 0),
+            "dragged down to the top line"
+        );
         wheel(&mut app, Mouse::ScrollUp);
         wheel(&mut app, Mouse::ScrollUp);
-        assert_eq!(app.reader_scroll, 3);
-        assert_eq!(app.viewer.cursor(), (6, 0), "dragged up to the bottom line");
+        assert_eq!(app.reader.scroll, 3);
+        assert_eq!(
+            app.reader.viewer.cursor(),
+            (6, 0),
+            "dragged up to the bottom line"
+        );
     }
 
     #[test]
@@ -1765,8 +1702,8 @@ Dear Charles,"
         app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
 
         assert_eq!(app.selected_message, 1);
-        assert_eq!(app.viewer.cursor(), (0, 0));
-        assert_eq!(app.viewer.mode(), VimMode::Normal);
+        assert_eq!(app.reader.viewer.cursor(), (0, 0));
+        assert_eq!(app.reader.viewer.mode(), VimMode::Normal);
     }
 
     #[test]
@@ -1775,7 +1712,7 @@ Dear Charles,"
 
         app.update(Action::PageDown);
 
-        assert_eq!(app.reader_scroll, 0);
+        assert_eq!(app.reader.scroll, 0);
     }
 
     #[test]
@@ -1786,7 +1723,7 @@ Dear Charles,"
 
         app.update(Action::SelectNext);
 
-        assert_eq!(app.reader_scroll, 0);
+        assert_eq!(app.reader.scroll, 0);
     }
 
     #[test]
@@ -1886,7 +1823,7 @@ Dear Charles,"
         app.body_loaded(MessageId("m1".to_owned()), "first".to_owned(), vec![]);
 
         assert_eq!(app.update(Action::SelectNext), load_body("m2"));
-        assert_eq!(app.body, None);
+        assert_eq!(app.reader.body, None);
         assert_eq!(app.update(Action::SelectNext), None);
     }
 
@@ -1904,10 +1841,10 @@ Dear Charles,"
         app.update(Action::SelectNext);
 
         app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned(), vec![]);
-        assert_eq!(app.body, None);
+        assert_eq!(app.reader.body, None);
 
         app.body_loaded(MessageId("m2".to_owned()), "fresh".to_owned(), vec![]);
-        assert_eq!(app.body.as_deref(), Some("fresh"));
+        assert_eq!(app.reader.body.as_deref(), Some("fresh"));
     }
 
     #[test]
@@ -1952,10 +1889,10 @@ Dear Charles,"
         let mut app = in_message_list(&["m1", "m2"]);
 
         app.invite_loaded(MessageId("m1".to_owned()), invite());
-        assert_eq!(app.invite, Some(invite()));
+        assert_eq!(app.reader.invite, Some(invite()));
 
         app.update(Action::SelectNext);
-        assert_eq!(app.invite, None);
+        assert_eq!(app.reader.invite, None);
     }
 
     /// The reading pane's rows about `invite`, read in Copenhagen.
@@ -2145,7 +2082,7 @@ Dear Charles,"
 
         app.invite_answered(&m1, Rsvp::Tentative);
 
-        assert_eq!(app.invite.unwrap().answer, Some(Rsvp::Tentative));
+        assert_eq!(app.reader.invite.unwrap().answer, Some(Rsvp::Tentative));
         assert_eq!(
             app.status,
             Some(Status::Info("Answered the invite: Tentative".to_owned()))
@@ -2160,7 +2097,7 @@ Dear Charles,"
 
         app.invite_answered(&MessageId("m1".to_owned()), Rsvp::Decline);
 
-        assert_eq!(app.invite.unwrap().answer, None);
+        assert_eq!(app.reader.invite.unwrap().answer, None);
         assert_eq!(
             app.status,
             Some(Status::Info("Answered the invite: Declined".to_owned()))
@@ -2186,7 +2123,7 @@ Dear Charles,"
 
         app.invite_loaded(MessageId("m1".to_owned()), invite());
 
-        assert_eq!(app.invite, None);
+        assert_eq!(app.reader.invite, None);
     }
 
     #[test]
@@ -2223,7 +2160,7 @@ Dear Charles,"
 
         assert_eq!(effect, None);
         assert_eq!(app.selected_message, 2);
-        assert_eq!(app.body.as_deref(), Some("body"));
+        assert_eq!(app.reader.body.as_deref(), Some("body"));
     }
 
     #[test]
@@ -3252,13 +3189,13 @@ Ada"
         app.focus = Pane::Messages;
         app.set_messages(today_and_older(&["t1", "t2"], &["o1"]));
         app.update(Action::SelectNext);
-        app.body = Some("t2".to_owned());
+        app.reader.body = Some("t2".to_owned());
 
         app.update(Action::Collapse);
 
         assert!(app.collapsed_groups.contains(&DateGroup::Today));
         assert_eq!(app.selected_group, Some(DateGroup::Today));
-        assert_eq!(app.body, None, "the reader no longer shows t2");
+        assert_eq!(app.reader.body, None, "the reader no longer shows t2");
         assert_eq!(app.update(Action::SelectNext), None, "onto Older");
         assert_eq!(app.update(Action::SelectNext), load_body("o1"));
     }
@@ -3280,11 +3217,11 @@ Ada"
         let mut app = with_folders(&["a"]);
         app.set_messages(today_and_older(&["t1"], &["o1"]));
         app.focus = Pane::Reader;
-        app.reader_scroll = 5;
+        app.reader.scroll = 5;
 
         assert_eq!(app.update(Action::Expand), load_body("o1"));
         assert_eq!(app.focus, Pane::Reader);
-        assert_eq!(app.reader_scroll, 0);
+        assert_eq!(app.reader.scroll, 0);
     }
 
     #[test]
@@ -3303,10 +3240,10 @@ Ada"
         let mut app = with_folders(&["a"]);
         app.set_messages(today_and_older(&["t1"], &["o1"]));
         app.focus = Pane::Reader;
-        app.body = Some("t1".to_owned());
+        app.reader.body = Some("t1".to_owned());
 
         assert_eq!(app.update(Action::Collapse), None);
-        assert_eq!(app.body.as_deref(), Some("t1"), "still showing t1");
+        assert_eq!(app.reader.body.as_deref(), Some("t1"), "still showing t1");
         app.update(Action::Expand);
         assert_eq!(app.update(Action::Expand), None);
         assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("o1"));
