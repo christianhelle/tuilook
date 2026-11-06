@@ -5,7 +5,7 @@ use reqwest::Client;
 use semver::Version;
 use serde_json::json;
 use tempfile::TempDir;
-use tuilook::update::{Asset, Saved, available, check, latest};
+use tuilook::update::{Asset, Saved, available, check, download, latest};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -99,6 +99,49 @@ async fn the_latest_release_lists_its_archives() {
             url: "https://example.com/otlk.tar.gz".into(),
             digest: Some("sha256:abc".into()),
         })
+    );
+}
+
+fn asset_at(server: &MockServer, digest: &str) -> Asset {
+    Asset {
+        name: "otlk.tar.gz".into(),
+        url: format!("{}/download/otlk.tar.gz", server.uri()),
+        digest: Some(digest.into()),
+    }
+}
+
+async fn serving(body: &'static [u8]) -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/download/otlk.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(body))
+        .mount(&server)
+        .await;
+    server
+}
+
+/// The SHA-256 of `abc`.
+const ABC: &str = "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+#[tokio::test]
+async fn a_download_matching_its_digest_is_kept() {
+    let server = serving(b"abc").await;
+
+    let bytes = download(&Client::new(), &asset_at(&server, ABC))
+        .await
+        .unwrap();
+
+    assert_eq!(bytes, b"abc");
+}
+
+#[tokio::test]
+async fn a_download_not_matching_its_digest_is_refused() {
+    let server = serving(b"tampered").await;
+
+    assert!(
+        download(&Client::new(), &asset_at(&server, ABC))
+            .await
+            .is_err()
     );
 }
 

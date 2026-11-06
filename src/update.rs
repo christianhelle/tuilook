@@ -6,11 +6,12 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use jiff::{SignedDuration, Timestamp};
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// Where tuilook's releases are published.
 pub const GITHUB_API: &str = "https://api.github.com";
@@ -20,6 +21,9 @@ pub const TARGET: &str = env!("TUILOOK_TARGET");
 
 /// How long to wait for GitHub, which is never worth waiting long for.
 const TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long a download of a release may take.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// How long a check is good for before starting tuilook asks GitHub again.
 const CHECK_EVERY: SignedDuration = SignedDuration::from_hours(24);
@@ -127,6 +131,36 @@ pub fn managed_by_cargo(exe: &Path, cargo_bin: &Path) -> bool {
     let canonical = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
     exe.parent()
         .is_some_and(|dir| canonical(dir) == canonical(cargo_bin))
+}
+
+/// Fails unless `bytes` match GitHub's `digest` of them. An asset without a
+/// digest cannot be checked, so it is not trusted either.
+pub fn verify(bytes: &[u8], digest: Option<&str>) -> Result<()> {
+    let expected = digest
+        .and_then(|digest| digest.strip_prefix("sha256:"))
+        .context("GitHub gave no SHA-256 checksum for the download")?;
+    let actual: String = Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    if !actual.eq_ignore_ascii_case(expected) {
+        bail!("the download does not match its checksum; try again");
+    }
+    Ok(())
+}
+
+/// Downloads `asset` and checks it is what GitHub published.
+pub async fn download(client: &Client, asset: &Asset) -> Result<Vec<u8>> {
+    let bytes = client
+        .get(&asset.url)
+        .timeout(DOWNLOAD_TIMEOUT)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
+    verify(&bytes, asset.digest.as_deref())?;
+    Ok(bytes.to_vec())
 }
 
 /// Asks GitHub for the latest release. GitHub leaves out drafts and
@@ -292,6 +326,27 @@ mod tests {
 
         assert!(!managed_by_cargo(&local.join("otlk"), &bin));
         assert!(!managed_by_cargo(&bin.join("nested").join("otlk"), &bin));
+    }
+
+    /// The SHA-256 of `abc`.
+    const ABC: &str = "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+    #[test]
+    fn bytes_matching_their_digest_pass() {
+        assert!(verify(b"abc", Some(ABC)).is_ok());
+        let upper = format!("sha256:{}", ABC["sha256:".len()..].to_uppercase());
+        assert!(verify(b"abc", Some(&upper)).is_ok());
+    }
+
+    #[test]
+    fn bytes_not_matching_their_digest_fail() {
+        assert!(verify(b"abd", Some(ABC)).is_err());
+    }
+
+    #[test]
+    fn bytes_without_a_sha256_digest_fail() {
+        assert!(verify(b"abc", None).is_err());
+        assert!(verify(b"abc", Some("md5:900150983cd24fb0d6963f7d28e17f72")).is_err());
     }
 
     #[test]
