@@ -19,7 +19,8 @@ use ratatui::{
 use tokio::sync::mpsc;
 use tuilook::accounts::{Account, Accounts};
 use tuilook::auth::{
-    KeyringStore, MemoryStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider, http_client,
+    DeviceCode, KeyringStore, MemoryStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider,
+    http_client,
 };
 use tuilook::core::{run_engine, sync_folders, sync_messages};
 use tuilook::graph::{GRAPH_V1, GraphBackend, GraphClient};
@@ -209,30 +210,52 @@ fn backend_over(tokens: TokenProvider) -> GraphBackend<Arc<TokenProvider>> {
     GraphBackend::new(GraphClient::new(GRAPH_V1, Arc::new(tokens)))
 }
 
-/// Signs in, keeping the refresh token in memory until Graph says whose it is.
+/// Signs in from the command line.
 async fn login(cli: &Cli) -> Result<()> {
-    let mut accounts = signed_in(cli).await?;
-    let client_id = client_id(cli)?;
+    // Moves an older tuilook's sign-in first, so it is not lost.
+    signed_in(cli).await?;
+    let address = sign_in(&cli.tenant, &client_id(cli)?, None, |code| {
+        println!("{}", code.message)
+    })
+    .await?;
+    println!("Signed in as {address}.");
+    Ok(())
+}
+
+/// Signs in with a device code shown by `show_code`, keeping the refresh
+/// token in memory until Graph says whose it is, then saves the account
+/// and returns its address. With `expected`, signing in as anyone else
+/// changes nothing.
+async fn sign_in(
+    tenant: &str,
+    client_id: &str,
+    expected: Option<&str>,
+    show_code: impl FnOnce(&DeviceCode),
+) -> Result<String> {
     let memory = Arc::new(MemoryStore::default());
-    let tokens = TokenProvider::new(oauth(&cli.tenant, &client_id), memory.clone());
-    tokens.login(|code| println!("{}", code.message)).await?;
+    let tokens = TokenProvider::new(oauth(tenant, client_id), memory.clone());
+    tokens.login(show_code).await?;
     let address = backend_over(tokens)
         .address()
         .await?
         .context("Microsoft did not say which account signed in")?;
+    if let Some(expected) = expected.filter(|e| !e.eq_ignore_ascii_case(&address)) {
+        bail!("signed in as {address}, not {expected}");
+    }
     let refresh_token = memory
         .load()?
         .context("Microsoft did not let tuilook stay signed in (no refresh token)")?;
     KeyringStore::new(&address)?.save(&refresh_token)?;
+    let path = accounts_path()?;
+    let mut accounts = Accounts::load(&path)?;
     accounts.upsert(Account {
         address: address.clone(),
-        tenant: cli.tenant.clone(),
-        client_id,
+        tenant: tenant.to_owned(),
+        client_id: client_id.to_owned(),
         signature: String::new(),
     });
-    accounts.save(&accounts_path()?)?;
-    println!("Signed in as {address}.");
-    Ok(())
+    accounts.save(&path)?;
+    Ok(address)
 }
 
 async fn logout(cli: &Cli, query: Option<&str>) -> Result<()> {
