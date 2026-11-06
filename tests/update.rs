@@ -5,7 +5,7 @@ use reqwest::Client;
 use semver::Version;
 use serde_json::json;
 use tempfile::TempDir;
-use tuilook::update::{Saved, available, check, latest};
+use tuilook::update::{Asset, Saved, available, check, latest};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -70,6 +70,35 @@ async fn the_latest_release_is_read_from_its_tag() {
     assert_eq!(
         release.url,
         "https://github.com/christianhelle/tuilook/releases/tag/v0.1.5"
+    );
+}
+
+#[tokio::test]
+async fn the_latest_release_lists_its_archives() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(RELEASES))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tag_name": "v0.1.5",
+            "html_url": "https://github.com/christianhelle/tuilook/releases/tag/v0.1.5",
+            "assets": [{
+                "name": "otlk-v0.1.5-x86_64-unknown-linux-gnu.tar.gz",
+                "browser_download_url": "https://example.com/otlk.tar.gz",
+                "digest": "sha256:abc",
+            }],
+        })))
+        .mount(&server)
+        .await;
+
+    let release = latest(&Client::new(), &server.uri()).await.unwrap();
+
+    assert_eq!(
+        release.asset("x86_64-unknown-linux-gnu"),
+        Some(&Asset {
+            name: "otlk-v0.1.5-x86_64-unknown-linux-gnu.tar.gz".into(),
+            url: "https://example.com/otlk.tar.gz".into(),
+            digest: Some("sha256:abc".into()),
+        })
     );
 }
 

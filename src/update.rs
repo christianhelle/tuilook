@@ -27,6 +27,27 @@ pub struct Release {
     pub version: Version,
     /// The page to read about it and download it from.
     pub url: String,
+    /// The archives built for it, one per target.
+    pub assets: Vec<Asset>,
+}
+
+impl Release {
+    /// The archive built for `target`, if there is one.
+    pub fn asset(&self, target: &str) -> Option<&Asset> {
+        let name = asset_name(&self.version, target);
+        self.assets.iter().find(|asset| asset.name == name)
+    }
+}
+
+/// A file published with a release.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Asset {
+    pub name: String,
+    #[serde(rename = "browser_download_url")]
+    pub url: String,
+    /// GitHub's checksum of it, such as `sha256:…`.
+    #[serde(default)]
+    pub digest: Option<String>,
 }
 
 /// The part of GitHub's answer tuilook needs.
@@ -34,6 +55,19 @@ pub struct Release {
 struct GithubRelease {
     tag_name: String,
     html_url: String,
+    #[serde(default)]
+    assets: Vec<Asset>,
+}
+
+/// The name of the archive the release workflow builds of `version` for
+/// `target`: a zip on Windows, a gzipped tarball elsewhere.
+pub fn asset_name(version: &Version, target: &str) -> String {
+    let extension = if target.contains("windows") {
+        "zip"
+    } else {
+        "tar.gz"
+    };
+    format!("otlk-v{version}-{target}.{extension}")
 }
 
 /// The last check that worked, kept so that starting tuilook does not ask
@@ -93,6 +127,7 @@ pub async fn latest(client: &Client, base_url: &str) -> Result<Release> {
     Ok(Release {
         version,
         url: release.html_url,
+        assets: release.assets,
     })
 }
 
@@ -172,6 +207,51 @@ mod tests {
     #[test]
     fn the_running_version_is_the_packages() {
         assert_eq!(current().to_string(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn windows_archives_are_zips() {
+        assert_eq!(
+            asset_name(&version("0.1.5"), "x86_64-pc-windows-msvc"),
+            "otlk-v0.1.5-x86_64-pc-windows-msvc.zip"
+        );
+    }
+
+    #[test]
+    fn other_archives_are_tarballs() {
+        assert_eq!(
+            asset_name(&version("0.1.5"), "aarch64-apple-darwin"),
+            "otlk-v0.1.5-aarch64-apple-darwin.tar.gz"
+        );
+        assert_eq!(
+            asset_name(&version("0.2.0"), "x86_64-unknown-linux-gnu"),
+            "otlk-v0.2.0-x86_64-unknown-linux-gnu.tar.gz"
+        );
+    }
+
+    #[test]
+    fn a_release_finds_the_archive_for_a_target() {
+        let asset = |name: &str| Asset {
+            name: name.into(),
+            url: format!("https://example.com/{name}"),
+            digest: None,
+        };
+        let release = Release {
+            version: version("0.1.5"),
+            url: String::new(),
+            assets: vec![
+                asset("otlk-v0.1.5-x86_64-pc-windows-msvc.zip"),
+                asset("otlk-v0.1.5-x86_64-unknown-linux-gnu.tar.gz"),
+            ],
+        };
+
+        assert_eq!(
+            release
+                .asset("x86_64-unknown-linux-gnu")
+                .map(|a| &a.name[..]),
+            Some("otlk-v0.1.5-x86_64-unknown-linux-gnu.tar.gz")
+        );
+        assert_eq!(release.asset("aarch64-apple-darwin"), None);
     }
 
     #[test]
