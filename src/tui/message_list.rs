@@ -209,3 +209,90 @@ impl MessageList {
         self.marked = self.messages.iter().map(|m| m.id.clone()).collect();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use jiff::Timestamp;
+
+    use super::*;
+
+    fn now() -> Zoned {
+        "2026-11-06T12:00:00Z"
+            .parse::<Timestamp>()
+            .unwrap()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+    }
+
+    /// Mail from today, then mail from long ago.
+    fn list(today: &[&str], older: &[&str]) -> MessageList {
+        let today = today.iter().map(|id| Message {
+            received_at: now().timestamp(),
+            ..crate::core::fake::message(id)
+        });
+        let older = older.iter().map(|id| crate::core::fake::message(id));
+        let mut list = MessageList::default();
+        list.replace(today.chain(older).collect(), &now());
+        list
+    }
+
+    fn id(id: &str) -> MessageId {
+        MessageId(id.to_owned())
+    }
+
+    fn selected(list: &MessageList) -> Option<&str> {
+        list.selected().map(|m| m.id.0.as_str())
+    }
+
+    #[test]
+    fn folding_leaves_the_cursor_on_the_header_and_unfolding_keeps_it() {
+        let mut list = list(&["t1", "t2"], &["o1"]);
+        list.selected = 1;
+
+        assert_eq!(list.fold(&now()), Some(true));
+        assert_eq!(selected(&list), None);
+        assert_eq!(list.header, Some(DateGroup::Today));
+        assert_eq!(list.rows(&now()).len(), 3);
+
+        assert_eq!(list.unfold(), Some(true));
+        assert_eq!(list.unfold(), Some(false));
+        assert_eq!(list.header, Some(DateGroup::Today));
+    }
+
+    #[test]
+    fn dropping_the_selected_message_selects_the_next() {
+        let mut list = list(&["t1", "t2", "t3"], &[]);
+        list.selected = 1;
+        list.marked.insert(id("t2"));
+
+        assert!(list.drop(&[id("t2")], &now()));
+
+        assert_eq!(selected(&list), Some("t3"));
+        assert!(list.marked.is_empty());
+        assert!(!list.drop(&[id("t1")], &now()));
+        assert_eq!(selected(&list), Some("t3"));
+    }
+
+    #[test]
+    fn a_refresh_keeps_the_selected_message_and_marks_still_listed() {
+        let mut list = list(&["t1", "t2"], &[]);
+        list.selected = 1;
+        list.mark_all();
+        let messages = list.messages[1..].to_vec();
+
+        assert!(!list.refresh(messages, &now()));
+
+        assert_eq!(selected(&list), Some("t2"));
+        assert_eq!(list.to_act_on(), [id("t2")]);
+    }
+
+    #[test]
+    fn pinning_moves_the_message_and_the_cursor_with_it() {
+        let mut list = list(&["t1", "t2"], &[]);
+        list.selected = 1;
+
+        list.set_pinned(&[id("t2")], true, &now());
+
+        assert_eq!(list.messages[0].id, id("t2"));
+        assert_eq!(selected(&list), Some("t2"));
+    }
+}
