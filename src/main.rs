@@ -259,7 +259,7 @@ async fn sign_in(
 }
 
 async fn logout(cli: &Cli, query: Option<&str>) -> Result<()> {
-    let mut accounts = signed_in(cli).await?;
+    let accounts = signed_in(cli).await?;
     let account = match (query, &accounts.0[..]) {
         (Some(query), _) => accounts.find(query)?.clone(),
         (None, [only]) => only.clone(),
@@ -269,15 +269,23 @@ async fn logout(cli: &Cli, query: Option<&str>) -> Result<()> {
         }
         (None, _) => bail!("signed in to several accounts; say which: `otlk logout <address>`"),
     };
-    KeyringStore::new(&account.address)?.clear()?;
-    accounts.remove(&account.address);
-    accounts.save(&accounts_path()?)?;
-    match std::fs::remove_dir_all(account_dir(&account.address)?) {
-        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
-        _ => {}
-    }
+    forget(&account.address)?;
     println!("Signed out of {}.", account.address);
     Ok(())
+}
+
+/// Forgets the account at `address`: its sign-in, its place in the list and
+/// its cached mail. Its cache must be closed.
+fn forget(address: &str) -> Result<()> {
+    KeyringStore::new(address)?.clear()?;
+    let path = accounts_path()?;
+    let mut accounts = Accounts::load(&path)?;
+    accounts.remove(address);
+    accounts.save(&path)?;
+    match std::fs::remove_dir_all(account_dir(address)?) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+        _ => Ok(()),
+    }
 }
 
 /// The signed-in accounts, after moving a sign-in from an older tuilook.
