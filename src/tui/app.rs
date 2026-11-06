@@ -7,7 +7,7 @@ use std::{
 use crate::core::Command;
 use crate::model::{
     Action, AppointmentId, Attachment, ComposeKind, Draft, Folder, FolderId, Invite, Message,
-    MessageId, Rsvp, sort_messages,
+    MessageId, Rsvp,
 };
 use jiff::{Timestamp, Zoned};
 use ratatui::{
@@ -22,7 +22,7 @@ use crate::tui::{
     dialog::{Dialog, Picker},
     files::{self, FilePicker},
     folder_pane::FolderPane,
-    groups::{self, DateGroup, MessageRow},
+    groups::{DateGroup, MessageRow},
     keymap::Keymap,
     message_list::MessageList,
     reader::{self, Reader},
@@ -673,16 +673,10 @@ impl AppState {
             }
             Action::ToggleFavorite => {}
             Action::ToggleMark if self.focus == Pane::Messages => {
-                if let Some(id) = self.selected().map(|m| m.id.clone())
-                    && !self.mail.marked.remove(&id)
-                {
-                    self.mail.marked.insert(id);
-                }
+                self.mail.toggle_mark();
                 return self.move_selection(1);
             }
-            Action::MarkAll if self.focus == Pane::Messages => {
-                self.mail.marked = self.mail.messages.iter().map(|m| m.id.clone()).collect();
-            }
+            Action::MarkAll if self.focus == Pane::Messages => self.mail.mark_all(),
             Action::ClearMarks if self.mail.marked.is_empty() => return self.leave_search(),
             Action::ClearMarks => self.mail.marked.clear(),
             Action::ToggleMark | Action::MarkAll => {}
@@ -746,10 +740,7 @@ impl AppState {
 
     /// Shows a newly loaded folder's messages, selecting the first.
     pub fn set_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
-        self.mail.marked.clear();
-        self.mail.messages = messages;
-        self.mail.selected = 0;
-        self.settle_selection();
+        self.mail.replace(messages, &self.now());
         self.selection_changed()
     }
 
@@ -875,35 +866,10 @@ impl AppState {
     /// Shows the current folder's messages after a sync, keeping the
     /// selected message when it is still there.
     pub fn refresh_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
-        let header = self.mail.header;
-        let selected = self.selected().map(|m| m.id.clone());
-        self.mail
-            .marked
-            .retain(|id| messages.iter().any(|m| &m.id == id));
-        if let Some(group) = header {
-            // A selected header stays selected while its group has mail.
-            let now = self.now();
-            let first =
-                (0..messages.len()).find(|&i| groups::group_at(&messages, i, &now) == Some(group));
-            if let Some(index) = first {
-                self.mail.messages = messages;
-                self.mail.selected = index;
-                return None;
-            }
-        }
-        match selected.and_then(|id| messages.iter().position(|m| m.id == id)) {
-            Some(index) => {
-                self.mail.messages = messages;
-                self.mail.selected = index;
-                self.settle_selection();
-                None
-            }
-            None => {
-                let marked = std::mem::take(&mut self.mail.marked);
-                let effect = self.set_messages(messages);
-                self.mail.marked = marked;
-                effect
-            }
+        if self.mail.refresh(messages, &self.now()) {
+            self.selection_changed()
+        } else {
+            None
         }
     }
 
@@ -930,20 +896,10 @@ impl AppState {
     /// Drops messages that left the list. The selection stays on the same
     /// row, so the message after a dropped one is selected next.
     fn drop_messages(&mut self, ids: &[MessageId]) -> Option<Effect> {
-        let selected = self.selected().map(|m| m.id.clone());
-        let gone = |m: &Message| ids.contains(&m.id);
-        let before = self.mail.messages.iter().take(self.mail.selected);
-        let index = before.filter(|m| !gone(m)).count();
-        self.mail.messages.retain(|m| !gone(m));
-        self.mail.selected = index.min(self.mail.messages.len().saturating_sub(1));
-        self.settle_selection();
-        for id in ids {
-            self.mail.marked.remove(id);
-        }
-        if self.selected().map(|m| &m.id) == selected.as_ref() {
-            None
-        } else {
+        if self.mail.drop(ids, &self.now()) {
             self.selection_changed()
+        } else {
+            None
         }
     }
 
@@ -961,22 +917,7 @@ impl AppState {
             .iter()
             .filter(|m| acting(m))
             .all(|m| m.pinned);
-        let selected = self.selected().map(|m| m.id.clone());
-        for m in self
-            .mail
-            .messages
-            .iter_mut()
-            .filter(|m| ids.contains(&m.id))
-        {
-            m.pinned = pinned;
-        }
-        sort_messages(&mut self.mail.messages);
-        if let Some(index) =
-            selected.and_then(|id| self.mail.messages.iter().position(|m| m.id == id))
-        {
-            self.mail.selected = index;
-        }
-        self.settle_selection();
+        self.mail.set_pinned(&ids, pinned, &self.now());
         Some(self.each_account(ids, |ids| Command::SetPinned { ids, pinned }))
     }
 
@@ -1007,15 +948,7 @@ impl AppState {
 
     /// The marked messages in list order, or else the selected one.
     pub fn to_act_on(&self) -> Vec<MessageId> {
-        if self.mail.marked.is_empty() {
-            return self.selected().map(|m| m.id.clone()).into_iter().collect();
-        }
-        let marked = self
-            .mail
-            .messages
-            .iter()
-            .filter(|m| self.mail.marked.contains(&m.id));
-        marked.map(|m| m.id.clone()).collect()
+        self.mail.to_act_on()
     }
 
     /// Messages `account` sent within [`PACE_WINDOW`] before `now`.
@@ -1252,38 +1185,23 @@ impl AppState {
 
     /// The selected message; none while a date header is selected.
     pub(crate) fn selected(&self) -> Option<&Message> {
-        if self.mail.header.is_some() {
-            return None;
-        }
-        self.mail.messages.get(self.mail.selected)
+        self.mail.selected()
     }
 
     /// The message list's rows as they are now: date headers, and the
     /// messages of the groups not folded away.
     pub fn message_rows(&self) -> Vec<MessageRow> {
-        groups::message_rows(&self.mail.messages, &self.mail.folded, &self.now())
+        self.mail.rows(&self.now())
     }
 
-    /// The row of `rows` the cursor is on: the selected header, or the
-    /// selected message, or the header of the group it is folded in.
+    /// The row of `rows` the cursor is on.
     pub fn selected_row(&self, rows: &[MessageRow]) -> Option<usize> {
-        let group = self
-            .mail
-            .header
-            .or_else(|| self.group_at(self.mail.selected))?;
-        rows.iter().position(|row| match *row {
-            MessageRow::Message(index) => self.mail.header.is_none() && index == self.mail.selected,
-            MessageRow::Header {
-                group: header,
-                collapsed,
-                ..
-            } => header == group && (self.mail.header.is_some() || collapsed),
-        })
+        self.mail.selected_row(rows, &self.now())
     }
 
     /// The date group of the message at `index`.
     pub(crate) fn group_at(&self, index: usize) -> Option<DateGroup> {
-        groups::group_at(&self.mail.messages, index, &self.now())
+        self.mail.group_at(index, &self.now())
     }
 
     /// A click on row `index` of the message list selects it, and on a date
@@ -1302,8 +1220,7 @@ impl AppState {
     /// → in the message list: unfolds the selected date group, or if it
     /// already is, moves to its first message.
     fn expand_group(&mut self) -> Option<Effect> {
-        let group = self.mail.header?;
-        if self.mail.folded.remove(&group) {
+        if self.mail.unfold()? {
             return None;
         }
         self.move_selection(1)
@@ -1312,17 +1229,7 @@ impl AppState {
     /// ← in the message list: folds the group of the selected message or
     /// header, leaving the cursor on its header.
     fn collapse_group(&mut self) -> Option<Effect> {
-        let group = self
-            .mail
-            .header
-            .or_else(|| self.group_at(self.mail.selected))?;
-        self.mail.folded.insert(group);
-        let moved = self.mail.header.replace(group).is_none();
-        self.select_row(MessageRow::Header {
-            group,
-            count: 0,
-            collapsed: true,
-        });
+        let moved = self.mail.fold(&self.now())?;
         moved.then(|| self.selection_changed()).flatten()
     }
 
@@ -1343,37 +1250,13 @@ impl AppState {
 
     /// Enter or a click on a date header: folds or unfolds its group.
     pub(crate) fn toggle_group(&mut self) -> Option<Effect> {
-        let group = self.mail.header?;
-        if !self.mail.folded.remove(&group) {
-            self.mail.folded.insert(group);
-        }
+        self.mail.toggle_fold();
         None
     }
 
     /// Puts the cursor on `row`: a header, or a message.
     pub(crate) fn select_row(&mut self, row: MessageRow) {
-        match row {
-            MessageRow::Header { group, .. } => {
-                self.mail.header = Some(group);
-                if let Some(first) =
-                    (0..self.mail.messages.len()).find(|&i| self.group_at(i) == Some(group))
-                {
-                    self.mail.selected = first;
-                }
-            }
-            MessageRow::Message(index) => {
-                self.mail.header = None;
-                self.mail.selected = index;
-            }
-        }
-    }
-
-    /// Selects the selected message's row, or its group's header when the
-    /// group is folded away.
-    fn settle_selection(&mut self) {
-        self.mail.header = self
-            .group_at(self.mail.selected)
-            .filter(|group| self.mail.folded.contains(group));
+        self.mail.select_row(row, &self.now());
     }
 
     /// Drops the old body and asks for the newly selected one.
