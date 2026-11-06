@@ -3,6 +3,7 @@
 
 use crate::core::{Command, calendar_window};
 use crate::model::Appointment;
+use jiff::Timestamp;
 
 use crate::tui::{
     agenda::{self, Agenda},
@@ -38,24 +39,50 @@ impl AppState {
             )),
             form: None,
         };
-        Some(Effect::LoadAgenda {
+        // Opened laid out beyond the calendar kept around today, that
+        // stretch is asked for too.
+        let window = self.calendar_window();
+        let fetch = self.screen.agenda_mut()?.take_moved(window).flatten();
+        let mut commands = vec![Command::SyncCalendar];
+        commands.extend(fetch.map(|(from, to)| Command::SyncCalendarBetween { from, to }));
+        self.show_calendar(account, commands)
+    }
+
+    /// The stretch around today whose calendar is cached, by the app's clock.
+    fn calendar_window(&self) -> (Timestamp, Timestamp) {
+        calendar_window(self.now().timestamp())
+    }
+
+    /// Shows `account`'s cached calendar in its open agenda, with all it
+    /// lays out, then has its core do `commands`.
+    fn show_calendar(&self, account: usize, commands: Vec<Command>) -> Option<Effect> {
+        let window = self.calendar_window();
+        let load = self
+            .screen
+            .agenda()
+            .map_or(window, |agenda| agenda.loaded_span(window));
+        Some(Effect::ShowCalendar {
             account,
-            sync: true,
+            load,
+            commands,
         })
     }
 
     /// A key for the open agenda.
     pub(crate) fn agenda_key(&mut self, key: KeyEvent) -> Option<Effect> {
-        let window = calendar_window(self.now().timestamp());
+        let window = self.calendar_window();
         let agenda = self.screen.agenda_mut()?;
         let account = agenda.account;
         let request = agenda.key(key);
         self.calendar_view = agenda.view();
         match request {
             agenda::Request::None => {
-                return agenda
-                    .take_moved(window)
-                    .map(|fetch| Effect::ShowCalendarRange { account, fetch });
+                let fetch = agenda.take_moved(window)?;
+                let commands = fetch
+                    .map(|(from, to)| Command::SyncCalendarBetween { from, to })
+                    .into_iter()
+                    .collect();
+                return self.show_calendar(account, commands);
             }
             agenda::Request::Close => self.screen.close_agenda(),
             agenda::Request::Help => self.dialog = Some(Dialog::Help),
@@ -128,14 +155,11 @@ impl AppState {
     pub fn appointment_saved(&mut self) -> Option<Effect> {
         self.screen.close_appointment();
         self.show_info("Saved");
-        let window = calendar_window(self.now().timestamp());
+        let window = self.calendar_window();
         let agenda = self.screen.agenda_mut()?;
         let account = agenda.account;
-        let fetch = agenda.take_changed(window)?;
-        Some(Effect::ShowCalendarRange {
-            account,
-            fetch: Some(fetch),
-        })
+        let (from, to) = agenda.take_changed(window)?;
+        self.show_calendar(account, vec![Command::SyncCalendarBetween { from, to }])
     }
 
     /// Lets the appointment being saved be saved again: core could not.
@@ -167,13 +191,8 @@ impl AppState {
         if self.status == Some(Status::Busy(SYNCING.to_owned())) {
             self.show_info("Up to date");
         }
-        self.screen
-            .agenda()
-            .filter(|a| a.account == account)
-            .map(|_| Effect::LoadAgenda {
-                account,
-                sync: false,
-            })
+        self.screen.agenda().filter(|a| a.account == account)?;
+        self.show_calendar(account, Vec::new())
     }
 }
 
@@ -358,11 +377,8 @@ mod tests {
         let mut app = in_three_agendas();
 
         assert_eq!(
-            press(&mut app, KeyCode::Tab),
-            Some(Effect::LoadAgenda {
-                account: 1,
-                sync: true,
-            })
+            asked(press(&mut app, KeyCode::Tab)),
+            Some((1, vec![Command::SyncCalendar]))
         );
 
         let agenda = app.screen.agenda().unwrap();
@@ -420,8 +436,29 @@ mod tests {
         effect
     }
 
-    fn range(from: &str, to: &str) -> (Timestamp, Timestamp) {
-        (at(from), at(to))
+    fn between(from: &str, to: &str) -> Command {
+        Command::SyncCalendarBetween {
+            from: at(from),
+            to: at(to),
+        }
+    }
+
+    /// The account whose calendar `effect` shows, and what it asks of core.
+    fn asked(effect: Option<Effect>) -> Option<(usize, Vec<Command>)> {
+        match effect? {
+            Effect::ShowCalendar {
+                account, commands, ..
+            } => Some((account, commands)),
+            other => panic!("not showing the calendar: {other:?}"),
+        }
+    }
+
+    /// The stretch `effect` loads from the cache.
+    fn loaded(effect: &Option<Effect>) -> (Timestamp, Timestamp) {
+        match effect {
+            Some(Effect::ShowCalendar { load, .. }) => *load,
+            other => panic!("not showing the calendar: {other:?}"),
+        }
     }
 
     #[test]
@@ -431,21 +468,18 @@ mod tests {
         // 1 February 2027: the first week in that month, past 90 days from today.
         let effect = weeks_on(&mut app, 13);
         assert_eq!(
-            effect,
-            Some(Effect::ShowCalendarRange {
-                account: 0,
-                fetch: Some(range("2027-02-01T00:00:00Z", "2027-03-01T00:00:00Z")),
-            })
+            asked(effect),
+            Some((
+                0,
+                vec![between("2027-02-01T00:00:00Z", "2027-03-01T00:00:00Z")]
+            ))
         );
 
         // In the same month: load what the cache has, without asking again.
-        assert_eq!(
-            press(&mut app, KeyCode::PageDown),
-            Some(Effect::ShowCalendarRange {
-                account: 0,
-                fetch: None,
-            })
-        );
+        let effect = press(&mut app, KeyCode::PageDown);
+        let (from, _) = calendar_window(at("2026-11-02T08:00:00Z"));
+        assert_eq!(loaded(&effect), (from, at("2027-02-15T00:00:00Z")));
+        assert_eq!(asked(effect), Some((0, vec![])));
     }
 
     #[test]
@@ -488,11 +522,11 @@ mod tests {
         ctrl_s(&mut app);
 
         assert_eq!(
-            app.appointment_saved(),
-            Some(Effect::ShowCalendarRange {
-                account: 0,
-                fetch: Some(range("2027-02-01T00:00:00Z", "2027-03-01T00:00:00Z")),
-            })
+            asked(app.appointment_saved()),
+            Some((
+                0,
+                vec![between("2027-02-01T00:00:00Z", "2027-03-01T00:00:00Z")]
+            ))
         );
     }
 
@@ -544,13 +578,7 @@ mod tests {
     fn a_deleted_appointment_shows_the_agenda_again() {
         let mut app = in_agenda();
 
-        assert_eq!(
-            app.appointment_deleted(0),
-            Some(Effect::LoadAgenda {
-                account: 0,
-                sync: false,
-            })
-        );
+        assert_eq!(asked(app.appointment_deleted(0)), Some((0, vec![])));
         assert_eq!(app.status, Some(Status::Info("Deleted".to_owned())));
     }
 }

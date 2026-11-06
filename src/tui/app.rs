@@ -66,17 +66,12 @@ pub enum Effect {
     },
     /// Put text on the clipboard.
     Copy(String),
-    /// Show `account`'s cached calendar in its open agenda, then ask for
-    /// it to be synced when `sync`.
-    LoadAgenda {
+    /// Show `account`'s calendar cached between `load`'s ends in its open
+    /// agenda, then have its core do each of `commands`.
+    ShowCalendar {
         account: usize,
-        sync: bool,
-    },
-    /// Show `account`'s cached calendar in its open agenda, with all it lays
-    /// out, then ask the server for the stretch `fetch`, if any.
-    ShowCalendarRange {
-        account: usize,
-        fetch: Option<(Timestamp, Timestamp)>,
+        load: (Timestamp, Timestamp),
+        commands: Vec<Command>,
     },
     /// Replace tuilook with its latest release.
     InstallUpdate,
@@ -905,9 +900,9 @@ impl AppState {
             | Effect::CancelSignIn
             | Effect::MoveAccount { .. }
             | Effect::RemoveAccount(_) => self.current_account(),
-            Effect::SaveSignature { account, .. }
-            | Effect::LoadAgenda { account, .. }
-            | Effect::ShowCalendarRange { account, .. } => *account,
+            Effect::SaveSignature { account, .. } | Effect::ShowCalendar { account, .. } => {
+                *account
+            }
         }
     }
 

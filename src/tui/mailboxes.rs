@@ -12,7 +12,7 @@ use anyhow::Result;
 use tokio::sync::mpsc;
 
 use crate::accounts::Registry;
-use crate::core::{Command, calendar_window};
+use crate::core::Command;
 use crate::model::{Event, FolderId, Message};
 use crate::store::Store;
 use crate::tui::{
@@ -309,28 +309,14 @@ impl Mailboxes {
                     self.clipboard.flush()?;
                     None
                 }
-                Effect::LoadAgenda { account, sync } => {
-                    let window = calendar_window(jiff::Timestamp::now());
-                    // Opened laid out beyond the calendar kept around today.
-                    let fetch = app
-                        .screen
-                        .agenda_mut()
-                        .filter(|_| sync)
-                        .and_then(|agenda| agenda.take_moved(window))
-                        .flatten();
-                    load_calendar(app, store, account, window)?;
-                    if sync {
-                        commands.send(Command::SyncCalendar)?;
-                    }
-                    if let Some((from, to)) = fetch {
-                        commands.send(Command::SyncCalendarBetween { from, to })?;
-                    }
-                    None
-                }
-                Effect::ShowCalendarRange { account, fetch } => {
-                    load_calendar(app, store, account, calendar_window(jiff::Timestamp::now()))?;
-                    if let Some((from, to)) = fetch {
-                        commands.send(Command::SyncCalendarBetween { from, to })?;
+                Effect::ShowCalendar {
+                    account,
+                    load: (from, to),
+                    commands: work,
+                } => {
+                    app.appointments_loaded(account, store.appointments_between(from, to)?);
+                    for command in work {
+                        commands.send(command)?;
                     }
                     None
                 }
@@ -338,22 +324,6 @@ impl Mailboxes {
         }
         Ok(())
     }
-}
-
-/// Shows `account`'s cached calendar in its open agenda: what is kept around
-/// today in `window`, and anything laid out beyond it.
-fn load_calendar(
-    app: &mut AppState,
-    store: &Store,
-    account: usize,
-    window: (jiff::Timestamp, jiff::Timestamp),
-) -> Result<()> {
-    let (from, to) = app
-        .screen
-        .agenda()
-        .map_or(window, |agenda| agenda.loaded_span(window));
-    app.appointments_loaded(account, store.appointments_between(from, to)?);
-    Ok(())
 }
 
 /// Why accounts cannot be changed, as in the demo.
