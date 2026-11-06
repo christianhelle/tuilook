@@ -19,7 +19,7 @@ use ratatui::{
 };
 use semver::Version;
 use tokio::sync::mpsc;
-use tuilook::accounts::{Account, Accounts};
+use tuilook::accounts::{Account, Accounts, Registry};
 use tuilook::auth::{
     DeviceCode, KeyringStore, MemoryStore, OAuthClient, OAuthConfig, SecretStore, TokenProvider,
     http_client,
@@ -171,14 +171,15 @@ fn main() -> Result<()> {
                 account_news: Some(account_news),
                 ..Services::new(updates, default_login(&cli))
             };
+            let registry = registry()?;
             let ui = Ui {
-                accounts_file: Some(accounts_path()?),
+                accounts_file: Some(registry.file()),
                 session: Some(session_path()?),
                 sync_every: sync_every(&cli),
             };
             let signed_out = with_terminal(|terminal| {
                 loop {
-                    let accounts = Accounts::load(&accounts_path()?)?;
+                    let accounts = registry.load()?;
                     if accounts.0.is_empty() {
                         return Ok(true);
                     }
@@ -189,7 +190,7 @@ fn main() -> Result<()> {
                             Ok((
                                 account.address.clone(),
                                 graph_backend(account)?,
-                                cache_path(&account.address)?,
+                                registry.cache_path(&account.address)?,
                             ))
                         })
                         .collect::<Result<Vec<_>>>()?;
@@ -281,15 +282,14 @@ async fn sign_in(
         .load()?
         .context("Microsoft did not let tuilook stay signed in (no refresh token)")?;
     KeyringStore::new(&address)?.save(&refresh_token)?;
-    let path = accounts_path()?;
-    let mut accounts = Accounts::load(&path)?;
-    accounts.upsert(Account {
-        address: address.clone(),
-        tenant: tenant.to_owned(),
-        client_id: client_id.to_owned(),
-        signature: String::new(),
-    });
-    accounts.save(&path)?;
+    registry()?.change(|accounts| {
+        accounts.upsert(Account {
+            address: address.clone(),
+            tenant: tenant.to_owned(),
+            client_id: client_id.to_owned(),
+            signature: String::new(),
+        })
+    })?;
     Ok(address)
 }
 
@@ -313,25 +313,18 @@ async fn logout(cli: &Cli, query: Option<&str>) -> Result<()> {
 /// its cached mail. Its cache must be closed.
 fn forget(address: &str) -> Result<()> {
     KeyringStore::new(address)?.clear()?;
-    let path = accounts_path()?;
-    let mut accounts = Accounts::load(&path)?;
-    accounts.remove(address);
-    accounts.save(&path)?;
-    match std::fs::remove_dir_all(account_dir(address)?) {
-        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
-        _ => Ok(()),
-    }
+    Ok(registry()?.forget(address)?)
 }
 
 /// The signed-in accounts, after moving a sign-in from an older tuilook.
 async fn signed_in(cli: &Cli) -> Result<Accounts> {
-    let path = accounts_path()?;
-    if path.exists() {
-        return Ok(Accounts::load(&path)?);
+    let registry = registry()?;
+    if registry.file().exists() {
+        return Ok(registry.load()?);
     }
     let accounts = migrate_legacy(cli).await?;
     if !accounts.0.is_empty() {
-        accounts.save(&path)?;
+        accounts.save(&registry.file())?;
         KeyringStore::new(LEGACY_ACCOUNT)?.clear()?;
     }
     Ok(accounts)
@@ -356,7 +349,7 @@ async fn migrate_legacy(cli: &Cli) -> Result<Accounts> {
     let refresh_token = memory.load()?.unwrap_or(refresh_token);
     KeyringStore::new(&address)?.save(&refresh_token)?;
     let old = data_dir()?.join("cache.db");
-    let new = cache_path(&address)?;
+    let new = registry()?.cache_path(&address)?;
     for suffix in ["", "-wal", "-shm"] {
         let mut from = old.as_os_str().to_owned();
         from.push(suffix);
@@ -382,7 +375,7 @@ async fn sync_once(cli: &Cli) -> Result<()> {
     }
     for account in &accounts.0 {
         let backend = graph_backend(account)?;
-        let mut store = Store::open(&cache_path(&account.address)?)?;
+        let mut store = Store::open(&registry()?.cache_path(&account.address)?)?;
         let address = &account.address;
         sync_folders(&backend, &mut store)
             .await
@@ -410,19 +403,9 @@ fn data_dir() -> Result<PathBuf> {
     Ok(dirs.data_dir().to_owned())
 }
 
-fn accounts_path() -> Result<PathBuf> {
-    Ok(data_dir()?.join("accounts.json"))
-}
-
-/// Where an account's cached mail is kept.
-fn account_dir(address: &str) -> Result<PathBuf> {
-    Ok(data_dir()?.join(address))
-}
-
-fn cache_path(address: &str) -> Result<PathBuf> {
-    let dir = account_dir(address)?;
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir.join("cache.db"))
+/// The accounts signed in to, and where each one's mail is cached.
+fn registry() -> Result<Registry> {
+    Ok(Registry::at(data_dir()?))
 }
 
 fn cache_dir() -> Result<PathBuf> {
