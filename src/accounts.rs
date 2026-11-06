@@ -1,6 +1,9 @@
 //! The accounts signed in to, and how each one signs in again.
 
-use std::{io, path::Path};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -103,6 +106,58 @@ impl Accounts {
                 query.to_owned(),
                 matches.iter().map(|a| a.address.clone()).collect(),
             )),
+        }
+    }
+}
+
+/// Where tuilook keeps the accounts signed in to, and each account's cache
+/// in a folder named after its address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Registry {
+    root: PathBuf,
+}
+
+impl Registry {
+    pub fn at(root: PathBuf) -> Self {
+        Self { root }
+    }
+
+    /// The file listing the accounts.
+    pub fn file(&self) -> PathBuf {
+        self.root.join("accounts.json")
+    }
+
+    pub fn load(&self) -> io::Result<Accounts> {
+        Accounts::load(&self.file())
+    }
+
+    /// Changes the saved accounts with `f`, reading them first so changes
+    /// made since, such as a sign-in from another otlk, are kept.
+    pub fn change(&self, f: impl FnOnce(&mut Accounts)) -> io::Result<()> {
+        let mut accounts = self.load()?;
+        f(&mut accounts);
+        accounts.save(&self.file())
+    }
+
+    /// The folder `address`'s cached mail is kept in.
+    pub fn account_dir(&self, address: &str) -> PathBuf {
+        self.root.join(address)
+    }
+
+    /// Where `address`'s cached mail is kept, making its folder if need be.
+    pub fn cache_path(&self, address: &str) -> io::Result<PathBuf> {
+        let dir = self.account_dir(address);
+        std::fs::create_dir_all(&dir)?;
+        Ok(dir.join("cache.db"))
+    }
+
+    /// Drops the account at `address` from the list and deletes its cached
+    /// mail, which must be closed. Its sign-in is the caller's to clear.
+    pub fn forget(&self, address: &str) -> io::Result<()> {
+        self.change(|accounts| accounts.remove(address))?;
+        match std::fs::remove_dir_all(self.account_dir(address)) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
         }
     }
 }
@@ -257,5 +312,55 @@ Engines"
 
         assert_eq!(accounts.0.len(), 2);
         assert!(accounts.find("me@outlook.com").is_err());
+    }
+
+    fn registry() -> (tempfile::TempDir, Registry) {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = Registry::at(dir.path().to_owned());
+        (dir, registry)
+    }
+
+    #[test]
+    fn a_registry_keeps_its_accounts_in_its_folder() {
+        let (dir, registry) = registry();
+
+        registry.change(|accounts| *accounts = self::accounts()).unwrap();
+
+        assert_eq!(registry.file(), dir.path().join("accounts.json"));
+        assert_eq!(registry.load().unwrap(), accounts());
+    }
+
+    #[test]
+    fn each_account_caches_in_a_folder_of_its_own() {
+        let (dir, registry) = registry();
+
+        let path = registry.cache_path("me@outlook.com").unwrap();
+
+        assert_eq!(path, dir.path().join("me@outlook.com").join("cache.db"));
+        assert!(dir.path().join("me@outlook.com").is_dir());
+    }
+
+    #[test]
+    fn forgetting_drops_the_account_and_its_cache() {
+        let (dir, registry) = registry();
+        registry.change(|accounts| *accounts = self::accounts()).unwrap();
+        let cache = registry.cache_path("me@outlook.com").unwrap();
+        std::fs::write(&cache, "mail").unwrap();
+
+        registry.forget("me@outlook.com").unwrap();
+
+        assert!(registry.load().unwrap().find("me@outlook.com").is_err());
+        assert_eq!(registry.load().unwrap().0.len(), 2);
+        assert!(!dir.path().join("me@outlook.com").exists());
+    }
+
+    #[test]
+    fn forgetting_an_account_with_no_cache_still_drops_it() {
+        let (_dir, registry) = registry();
+        registry.change(|accounts| *accounts = self::accounts()).unwrap();
+
+        registry.forget("other@outlook.com").unwrap();
+
+        assert_eq!(registry.load().unwrap().0.len(), 2);
     }
 }
