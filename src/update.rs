@@ -240,6 +240,76 @@ pub async fn check(
     Ok(release)
 }
 
+/// What updating did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Outcome {
+    /// The running version is already the latest.
+    UpToDate(Version),
+    /// This version replaced the running binary, and runs from the next start.
+    Installed(Version),
+}
+
+/// Asks GitHub for the latest release, remembering the answer at `path`, and
+/// when it is newer than `current`, downloads the archive built for `target`
+/// and returns its version and binary.
+pub async fn fetch_newer(
+    client: &Client,
+    base_url: &str,
+    path: &Path,
+    current: &Version,
+    target: &str,
+    now: Timestamp,
+) -> Result<Option<(Version, Vec<u8>)>> {
+    let release = check(client, base_url, path, now).await?;
+    if !newer(current, &release.version) {
+        return Ok(None);
+    }
+    let asset = release.asset(target).with_context(|| {
+        format!(
+            "tuilook {} has no build for {target}; see {}",
+            release.version, release.url
+        )
+    })?;
+    let archive = download(client, asset).await?;
+    let binary = extract(&archive, &asset.name, binary_name(target))?;
+    Ok(Some((release.version, binary)))
+}
+
+/// Puts `binary` in place of the running `exe`. It is written next to it
+/// first, so the swap never crosses file systems.
+pub fn replace_running(exe: &Path, binary: &[u8]) -> Result<()> {
+    let staged = exe.with_file_name(".otlk-update");
+    std::fs::write(&staged, binary)
+        .with_context(|| format!("could not write to {}", staged.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))?;
+    }
+    let replaced = self_replace::self_replace(&staged)
+        .with_context(|| format!("could not replace {}", exe.display()));
+    let _ = std::fs::remove_file(&staged);
+    replaced
+}
+
+/// Replaces the running tuilook with the latest release, unless it already
+/// is the latest or Cargo installed it. `path` keeps the answer, as a check
+/// does.
+pub async fn update_running(client: &Client, base_url: &str, path: &Path) -> Result<Outcome> {
+    let exe = std::env::current_exe().context("could not find the running otlk")?;
+    if cargo_bin().is_some_and(|bin| managed_by_cargo(&exe, &bin)) {
+        bail!("Cargo installed otlk; update it with `cargo install tuilook --locked`");
+    }
+    let current = current();
+    match fetch_newer(client, base_url, path, &current, TARGET, Timestamp::now()).await? {
+        None => Ok(Outcome::UpToDate(current)),
+        Some((version, binary)) => {
+            replace_running(&exe, &binary)?;
+            Ok(Outcome::Installed(version))
+        }
+    }
+}
+
 /// The newer version to tell the user about, if any, asking GitHub only when
 /// the check saved at `path` has gone stale. Nothing here is worth interrupting
 /// the user's mail for, so a failed check goes unmentioned and the last answer

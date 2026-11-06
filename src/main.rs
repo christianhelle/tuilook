@@ -108,6 +108,8 @@ enum CliCommand {
     Sync,
     /// Ask GitHub whether a newer tuilook has been released.
     CheckUpdate,
+    /// Replace this otlk with the latest release.
+    Update,
 }
 
 fn main() -> Result<()> {
@@ -128,6 +130,7 @@ fn main() -> Result<()> {
         }
         Some(CliCommand::Sync) => runtime.block_on(sync_once(&cli)),
         Some(CliCommand::CheckUpdate) => runtime.block_on(check_update()),
+        Some(CliCommand::Update) => runtime.block_on(update_otlk()),
         None if cli.demo => {
             let mut mailboxes = Vec::new();
             for (index, (address, backend)) in demo::accounts().into_iter().enumerate() {
@@ -412,6 +415,21 @@ async fn check_update() -> Result<()> {
     Ok(())
 }
 
+/// Replaces this otlk with the latest release.
+async fn update_otlk() -> Result<()> {
+    let outcome = update::update_running(&http_client(), update::GITHUB_API, &update_check_path()?)
+        .await
+        .context("could not update")?;
+    match outcome {
+        update::Outcome::UpToDate(current) => println!("tuilook {current} is up to date."),
+        update::Outcome::Installed(version) => println!(
+            "Updated tuilook {} to {version}; it runs from the next start.",
+            update::current()
+        ),
+    }
+    Ok(())
+}
+
 /// Deletes a SQLite database along with its WAL files.
 fn remove_db(path: &Path) -> Result<()> {
     for suffix in ["", "-wal", "-shm"] {
@@ -574,6 +592,13 @@ mod tests {
         let cli = Cli::try_parse_from(["otlk", "--no-update-check"]).unwrap();
 
         assert!(cli.no_update_check);
+    }
+
+    #[test]
+    fn update_is_a_command() {
+        let cli = Cli::try_parse_from(["otlk", "update"]).unwrap();
+
+        assert!(matches!(cli.command, Some(CliCommand::Update)));
     }
 
     #[test]

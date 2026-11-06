@@ -4,8 +4,9 @@ use jiff::{SignedDuration, Timestamp};
 use reqwest::Client;
 use semver::Version;
 use serde_json::json;
+use sha2::Digest;
 use tempfile::TempDir;
-use tuilook::update::{Asset, Saved, available, check, download, latest};
+use tuilook::update::{Asset, Saved, available, check, download, fetch_newer, latest};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -143,6 +144,107 @@ async fn a_download_not_matching_its_digest_is_refused() {
             .await
             .is_err()
     );
+}
+
+const LINUX: &str = "x86_64-unknown-linux-gnu";
+
+/// GitHub with release `tag` of a tarball holding `binary` for Linux.
+async fn github_with_build(tag: &str, binary: &[u8]) -> MockServer {
+    let mut tarball = tar::Builder::new(flate2::write::GzEncoder::new(
+        Vec::new(),
+        flate2::Compression::fast(),
+    ));
+    let mut header = tar::Header::new_gnu();
+    header.set_size(binary.len() as u64);
+    header.set_mode(0o755);
+    header.set_cksum();
+    tarball
+        .append_data(&mut header, format!("otlk-{tag}-{LINUX}/otlk"), binary)
+        .unwrap();
+    let tarball = tarball.into_inner().unwrap().finish().unwrap();
+    let digest: String = sha2::Sha256::digest(&tarball)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+
+    let server = MockServer::start().await;
+    let name = format!("otlk-{tag}-{LINUX}.tar.gz");
+    Mock::given(method("GET"))
+        .and(path(RELEASES))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tag_name": tag,
+            "html_url": "https://github.com/christianhelle/tuilook/releases",
+            "assets": [{
+                "name": name,
+                "browser_download_url": format!("{}/download/{name}", server.uri()),
+                "digest": format!("sha256:{digest}"),
+            }],
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/download/{name}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(tarball))
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn a_newer_release_is_fetched_for_the_target() {
+    let server = github_with_build("v0.1.6", b"new otlk").await;
+    let (_dir, file) = saved_file();
+
+    let fetched = fetch_newer(
+        &Client::new(),
+        &server.uri(),
+        &file,
+        &version("0.1.5"),
+        LINUX,
+        now(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(fetched, Some((version("0.1.6"), b"new otlk".to_vec())));
+    assert_eq!(Saved::load(&file).map(|s| s.latest), Some(version("0.1.6")));
+}
+
+#[tokio::test]
+async fn nothing_is_fetched_when_up_to_date() {
+    let server = github_with_build("v0.1.5", b"same otlk").await;
+    let (_dir, file) = saved_file();
+
+    let fetched = fetch_newer(
+        &Client::new(),
+        &server.uri(),
+        &file,
+        &version("0.1.5"),
+        LINUX,
+        now(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(fetched, None);
+}
+
+#[tokio::test]
+async fn a_release_without_a_build_for_the_target_is_an_error() {
+    let server = github_with_build("v0.1.6", b"new otlk").await;
+    let (_dir, file) = saved_file();
+
+    let fetched = fetch_newer(
+        &Client::new(),
+        &server.uri(),
+        &file,
+        &version("0.1.5"),
+        "riscv64gc-unknown-linux-gnu",
+        now(),
+    )
+    .await;
+
+    assert!(fetched.is_err());
 }
 
 #[tokio::test]
