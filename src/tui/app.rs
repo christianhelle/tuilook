@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeSet, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -18,15 +18,13 @@ use ratatui::{
 use crate::tui::{
     account_manager::{Login, Reload},
     agenda::CalendarView,
-    attachments::{self, human_size},
+    attachments::human_size,
     compose::{Compose, Request},
-    dialog::Dialog,
+    dialog::{Dialog, Picker},
     files::{self, FilePicker},
-    folder_edit,
     folder_pane::FolderPane,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
-    mover,
     rows::row_target,
     screen::{Cursor, Screen},
     search::Search,
@@ -644,43 +642,37 @@ impl AppState {
                 self.cancelled(confirm);
                 None
             }
-            Dialog::Name(mut prompt) => {
-                let request = prompt.key(key);
-                if request == folder_edit::Request::None {
-                    self.dialog = Some(Dialog::Name(prompt));
-                }
+            Dialog::Name(prompt) => {
+                let request = self.picked(prompt, key);
                 self.name_requested(request)
             }
-            Dialog::Move(mut mover) => {
-                let request = mover.key(key);
-                if request == mover::Request::None {
-                    self.dialog = Some(Dialog::Move(mover));
-                }
+            Dialog::Move(mover) => {
+                let request = self.picked(mover, key);
                 self.move_requested(request)
             }
-            Dialog::Attachments(mut picker) => {
-                let request = picker.key(key);
-                if request == attachments::Request::None {
-                    self.dialog = Some(Dialog::Attachments(picker));
-                }
+            Dialog::Attachments(picker) => {
+                let request = self.picked(picker, key);
                 self.save_requested(request)
             }
             Dialog::Accounts(manager) => self.accounts_key(manager, key),
-            Dialog::Files(mut picker) => {
-                let request = picker.key(key);
-                match request {
-                    files::Request::None => self.dialog = Some(Dialog::Files(picker)),
-                    files::Request::Close => {}
-                    files::Request::Pick(file) => {
-                        self.attach_dir = Some(picker.dir);
-                        if let Some(compose) = self.screen.compose_mut() {
-                            compose.attach(file);
-                        }
+            Dialog::Files(picker) => {
+                if let files::Request::Pick(file) = self.picked(picker, key) {
+                    self.attach_dir = file.parent().map(Path::to_path_buf);
+                    if let Some(compose) = self.screen.compose_mut() {
+                        compose.attach(file);
                     }
                 }
                 None
             }
         }
+    }
+
+    /// Hands `key` to the open `picker`, keeping it open unless the key
+    /// closed it, and returns what it asks for.
+    fn picked<P: Picker>(&mut self, picker: P, key: KeyEvent) -> P::Request {
+        let (open, request) = picker.step(key);
+        self.dialog = open;
+        request
     }
 
     /// Handles the mouse at `hit`. A click focuses the pane and selects the

@@ -1,9 +1,15 @@
 //! The dialog shown over the panes, which takes every key until it closes.
 
+use ratatui::crossterm::event::KeyEvent;
+
 use crate::model::{Invite, MessageId};
 use crate::tui::{
-    account_manager::AccountManager, app::Confirm, attachments::AttachmentPicker,
-    files::FilePicker, folder_edit::NamePrompt, mover::MovePicker,
+    account_manager::AccountManager,
+    app::Confirm,
+    attachments::{self, AttachmentPicker},
+    files::{self, FilePicker},
+    folder_edit::{self, NamePrompt},
+    mover::{self, MovePicker},
 };
 
 /// At most one dialog is open at a time. A dialog owns its state and answers
@@ -46,3 +52,42 @@ impl Dialog {
         }
     }
 }
+
+/// A dialog that answers each key with a request of its own, and stays
+/// open until it asks for something other than [`Picker::NONE`].
+pub trait Picker: Sized {
+    type Request: PartialEq;
+    /// The request that leaves the dialog open, asking for nothing.
+    const NONE: Self::Request;
+    fn key(&mut self, key: KeyEvent) -> Self::Request;
+    /// The dialog showing it.
+    fn shown(self) -> Dialog;
+
+    /// Hands `key` over: the dialog to keep open, unless the key closed
+    /// it, and what it asks for.
+    fn step(mut self, key: KeyEvent) -> (Option<Dialog>, Self::Request) {
+        let request = Picker::key(&mut self, key);
+        let open = (request == Self::NONE).then(|| self.shown());
+        (open, request)
+    }
+}
+
+macro_rules! picker {
+    ($picker:ty, $module:ident, $variant:ident) => {
+        impl Picker for $picker {
+            type Request = $module::Request;
+            const NONE: Self::Request = $module::Request::None;
+            fn key(&mut self, key: KeyEvent) -> Self::Request {
+                <$picker>::key(self, key)
+            }
+            fn shown(self) -> Dialog {
+                Dialog::$variant(self)
+            }
+        }
+    };
+}
+
+picker!(NamePrompt, folder_edit, Name);
+picker!(MovePicker, mover, Move);
+picker!(AttachmentPicker, attachments, Attachments);
+picker!(FilePicker, files, Files);
