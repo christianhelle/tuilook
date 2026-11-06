@@ -164,16 +164,48 @@ pub enum Status {
     Error(String),
     /// Work in progress, shown until its outcome replaces it.
     Busy(String),
+    /// Work whose end is waited for to say how it went, shown until then.
+    Waiting(Job),
+}
+
+/// Work the status line waits for the end of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Job {
+    /// Syncing mail, asked for with F5.
+    Sync,
+    /// Syncing the calendar, asked for with F5 in the agenda.
+    CalendarSync,
+    /// Fetching a page of older mail.
+    LoadOlder,
+}
+
+impl Job {
+    /// What the status line says while it runs.
+    pub fn says(self) -> &'static str {
+        match self {
+            Job::Sync => "Syncing…",
+            Job::CalendarSync => "Syncing the calendar…",
+            Job::LoadOlder => "Loading older mail…",
+        }
+    }
 }
 
 impl Status {
+    /// What the status line says.
+    pub fn text(&self) -> &str {
+        match self {
+            Status::Info(text) | Status::Error(text) | Status::Busy(text) => text,
+            Status::Waiting(job) => job.says(),
+        }
+    }
+
     /// How long it stays before the key hints come back, if it goes by itself.
     fn lasts(&self) -> Option<Duration> {
         match self {
             Status::Info(_) => Some(Duration::from_secs(4)),
             // Errors stay longer, to be read.
             Status::Error(_) => Some(Duration::from_secs(8)),
-            Status::Busy(_) => None,
+            Status::Busy(_) | Status::Waiting(_) => None,
         }
     }
 }
@@ -763,10 +795,10 @@ impl AppState {
             Action::RespondToInvite => self.ask_how_to_answer(),
             Action::Refresh if self.sync.running => {
                 self.sync.forced = true;
-                self.show_busy("Syncing…");
+                self.show_waiting(Job::Sync);
             }
             Action::Refresh => {
-                self.show_busy("Syncing…");
+                self.show_waiting(Job::Sync);
                 let effect = self.start_sync();
                 self.sync.forced = true;
                 return effect;
@@ -1160,7 +1192,7 @@ impl AppState {
             self.sync.due_by(now + every);
         }
         // An F5 waiting for this gets an answer, unless an error took its place.
-        if self.status == Some(Status::Busy("Syncing…".to_owned())) {
+        if self.waiting_on(Job::Sync) {
             self.show_info("Up to date");
         }
     }
@@ -1193,6 +1225,17 @@ impl AppState {
 
     pub fn show_busy(&mut self, message: impl Into<String>) {
         self.show(Status::Busy(message.into()));
+    }
+
+    /// Says `job` is under way until [`AppState::waiting_on`] it says it is over.
+    pub fn show_waiting(&mut self, job: Job) {
+        self.show(Status::Waiting(job));
+    }
+
+    /// Whether the status line still waits for `job`: no outcome or other
+    /// news has taken its place.
+    pub fn waiting_on(&self, job: Job) -> bool {
+        self.status == Some(Status::Waiting(job))
     }
 
     fn show(&mut self, status: Status) {
@@ -3014,7 +3057,7 @@ Ada"
         let mut app = AppState::default();
 
         assert_eq!(app.update(Action::Refresh), Some(Effect::Sync));
-        assert_eq!(app.status, Some(Status::Busy("Syncing…".to_owned())));
+        assert_eq!(app.status, Some(Status::Waiting(Job::Sync)));
         assert_eq!(app.update(Action::Refresh), None, "already syncing");
 
         app.sync_finished(Instant::now());

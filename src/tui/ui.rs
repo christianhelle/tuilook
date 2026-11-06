@@ -12,7 +12,7 @@ use ratatui::{
 use crate::tui::{
     account_manager::{AccountManager, Field as LoginField, Mode as AccountsMode},
     agenda::{Agenda, CalendarView, Row as AgendaRow},
-    app::{AppState, Confirm, Hit, PACE_WINDOW, Pane, Status, Viewport},
+    app::{AppState, Confirm, Hit, Job, PACE_WINDOW, Pane, Status, Viewport},
     appointment_form::{AppointmentForm, Field as AppointmentField},
     attachments::{AttachmentPicker, human_size},
     calendar_grid,
@@ -26,7 +26,6 @@ use crate::tui::{
     input::TextInput,
     mover::MovePicker,
     numbers,
-    older::LOADING_OLDER,
     rows::Row,
     screen::Screen,
     signature::SignatureEditor,
@@ -822,7 +821,7 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
         Some(Status::Error(error)) => {
             Span::styled(format!(" {error}"), Style::new().fg(Color::Red))
         }
-        Some(Status::Info(info) | Status::Busy(info)) => Span::raw(format!(" {info}")),
+        Some(status) => Span::raw(format!(" {}", status.text())),
         None => Span::raw(help::key_hints(app, picking)),
     });
     (Line::from(spans), None)
@@ -1653,7 +1652,7 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
         let empty = if query.is_some() {
             "Nothing found"
         } else if app.loading_older.is_some() {
-            LOADING_OLDER
+            Job::LoadOlder.says()
         } else {
             "No messages"
         };

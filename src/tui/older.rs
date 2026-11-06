@@ -7,13 +7,10 @@ use crate::model::FolderId;
 use jiff::Timestamp;
 
 use crate::tui::{
-    app::{AppState, Effect, Status},
+    app::{AppState, Effect, Job},
     groups::MessageRow,
     rows::Row,
 };
-
-/// Shown while older mail is fetched.
-pub const LOADING_OLDER: &str = "Loading older mail…";
 
 impl AppState {
     /// Asks for the next page of older mail when the list shows its last
@@ -52,7 +49,7 @@ impl AppState {
             .last()
             .map_or_else(Timestamp::now, |m| m.received_at);
         self.loading_older = Some(key);
-        self.show_busy(LOADING_OLDER);
+        self.show_waiting(Job::LoadOlder);
         Some(Effect::core(
             self.folder_pane.folder_home(&folder),
             Command::LoadOlder {
@@ -73,7 +70,7 @@ impl AppState {
         if !more {
             self.no_older.insert(key);
         }
-        if self.status == Some(Status::Busy(LOADING_OLDER.to_owned())) {
+        if self.waiting_on(Job::LoadOlder) {
             self.status = None;
             self.status_since = None;
         }
@@ -85,7 +82,10 @@ mod tests {
     use crate::model::{Action, Folder, Message};
 
     use super::*;
-    use crate::tui::{app::Pane, rows::unread_row};
+    use crate::tui::{
+        app::{Pane, Status},
+        rows::unread_row,
+    };
 
     fn folder(id: &str, unread: u32, total: u32) -> Folder {
         Folder {
@@ -139,7 +139,7 @@ mod tests {
                 ..
             })
         ));
-        assert_eq!(app.status, Some(Status::Busy(LOADING_OLDER.to_owned())));
+        assert_eq!(app.status, Some(Status::Waiting(Job::LoadOlder)));
         assert_eq!(app.older_wanted(), None, "one page at a time");
     }
 

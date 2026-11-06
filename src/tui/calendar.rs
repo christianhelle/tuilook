@@ -7,15 +7,12 @@ use jiff::Timestamp;
 
 use crate::tui::{
     agenda::{self, Agenda},
-    app::{AppState, Confirm, Effect, Status},
+    app::{AppState, Confirm, Effect, Job},
     appointment_form::{self, AppointmentForm},
     dialog::Dialog,
     screen::Screen,
 };
 use ratatui::crossterm::event::KeyEvent;
-
-/// Shown from F5 in the agenda until the calendar has synced.
-const SYNCING: &str = "Syncing the calendar…";
 
 impl AppState {
     /// Opens the agenda of the account being looked at, from the cache,
@@ -93,7 +90,7 @@ impl AppState {
             }
             agenda::Request::Refresh => {
                 let command = agenda.refresh(window);
-                self.show_busy(SYNCING);
+                self.show_waiting(Job::CalendarSync);
                 return Some(Effect::core(account, command));
             }
             agenda::Request::New => {
@@ -188,7 +185,7 @@ impl AppState {
     /// again.
     pub fn calendar_synced(&mut self, account: usize) -> Option<Effect> {
         // An F5 waiting for this gets an answer, unless an error took its place.
-        if self.status == Some(Status::Busy(SYNCING.to_owned())) {
+        if self.waiting_on(Job::CalendarSync) {
             self.show_info("Up to date");
         }
         self.screen.agenda().filter(|a| a.account == account)?;
@@ -202,7 +199,12 @@ mod tests {
     use ratatui::crossterm::event::{KeyCode, KeyModifiers};
 
     use crate::model::{Action, AppointmentId};
-    use crate::tui::{agenda::CalendarView, app::Confirm, appointment_form::Field, keymap::Keymap};
+    use crate::tui::{
+        agenda::CalendarView,
+        app::{Confirm, Status},
+        appointment_form::Field,
+        keymap::Keymap,
+    };
 
     use super::*;
 
@@ -418,10 +420,7 @@ mod tests {
             press(&mut app, KeyCode::F(5)),
             Some(Effect::core(0, Command::SyncCalendar))
         );
-        assert_eq!(
-            app.status,
-            Some(Status::Busy("Syncing the calendar…".to_owned()))
-        );
+        assert_eq!(app.status, Some(Status::Waiting(Job::CalendarSync)));
         app.calendar_synced(0);
 
         assert_eq!(app.status, Some(Status::Info("Up to date".to_owned())));
@@ -507,10 +506,7 @@ mod tests {
                 }
             ))
         );
-        assert_eq!(
-            app.status,
-            Some(Status::Busy("Syncing the calendar…".to_owned()))
-        );
+        assert_eq!(app.status, Some(Status::Waiting(Job::CalendarSync)));
     }
 
     #[test]
