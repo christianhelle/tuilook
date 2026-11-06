@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it up or down, or remove it with its cached mail, without `otlk login` or
   `otlk logout`.
 
+### Changed
+
+- Internal restructuring, with no change in behaviour: one account registry
+  now handles signing in, forgetting and caching for both the command line and
+  the mail client. The calendar works out what to load and fetch by the app's
+  own clock. The status line waits for jobs by kind rather than by their text.
+  The reading pane and the message list each live in a module of their own,
+  with tests of their own.
+
 ## [0.1.5] - 2026-11-06
 
 ### Added
