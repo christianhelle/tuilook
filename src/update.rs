@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 /// Where tuilook's releases are published.
 pub const GITHUB_API: &str = "https://api.github.com";
 
+/// The target triple this tuilook was built for, as release archives name it.
+pub const TARGET: &str = env!("TUILOOK_TARGET");
+
 /// How long to wait for GitHub, which is never worth waiting long for.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -169,6 +172,11 @@ mod tests {
     #[test]
     fn the_running_version_is_the_packages() {
         assert_eq!(current().to_string(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn the_target_is_a_triple() {
+        assert!(TARGET.split('-').count() >= 3, "{TARGET}");
     }
 
     #[test]
