@@ -2,11 +2,13 @@
 //! it stays with whichever way tuilook was installed.
 
 use std::{
+    io::{Cursor, Read},
     path::{Path, PathBuf},
     time::Duration,
 };
 
 use anyhow::{Context, Result, bail};
+use flate2::read::GzDecoder;
 use jiff::{SignedDuration, Timestamp};
 use reqwest::Client;
 use semver::Version;
@@ -161,6 +163,42 @@ pub async fn download(client: &Client, asset: &Asset) -> Result<Vec<u8>> {
         .await?;
     verify(&bytes, asset.digest.as_deref())?;
     Ok(bytes.to_vec())
+}
+
+/// The name of tuilook's binary built for `target`.
+pub fn binary_name(target: &str) -> &'static str {
+    if target.contains("windows") {
+        "otlk.exe"
+    } else {
+        "otlk"
+    }
+}
+
+/// Takes the file called `binary` out of the release archive `asset_name`,
+/// which is a zip or a gzipped tarball, wherever it is in it.
+pub fn extract(archive: &[u8], asset_name: &str, binary: &str) -> Result<Vec<u8>> {
+    let is_binary = |path: &Path| path.file_name().is_some_and(|name| name == binary);
+    let mut contents = Vec::new();
+    if asset_name.ends_with(".zip") {
+        let mut zip = zip::ZipArchive::new(Cursor::new(archive))?;
+        for index in 0..zip.len() {
+            let mut file = zip.by_index(index)?;
+            if file.is_file() && is_binary(Path::new(&*file.name()?)) {
+                file.read_to_end(&mut contents)?;
+                return Ok(contents);
+            }
+        }
+    } else {
+        let mut tar = tar::Archive::new(GzDecoder::new(archive));
+        for entry in tar.entries()? {
+            let mut entry = entry?;
+            if entry.header().entry_type().is_file() && is_binary(&entry.path()?) {
+                entry.read_to_end(&mut contents)?;
+                return Ok(contents);
+            }
+        }
+    }
+    bail!("{asset_name} has no {binary} in it")
 }
 
 /// Asks GitHub for the latest release. GitHub leaves out drafts and
@@ -347,6 +385,73 @@ mod tests {
     fn bytes_without_a_sha256_digest_fail() {
         assert!(verify(b"abc", None).is_err());
         assert!(verify(b"abc", Some("md5:900150983cd24fb0d6963f7d28e17f72")).is_err());
+    }
+
+    fn zip_of(files: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, contents) in files {
+            zip.start_file(*name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(contents).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    fn tarball_of(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        let mut tar = tar::Builder::new(gz);
+        for (name, contents) in files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(contents.len() as u64);
+            header.set_mode(0o755);
+            header.set_cksum();
+            tar.append_data(&mut header, name, *contents).unwrap();
+        }
+        tar.into_inner().unwrap().finish().unwrap()
+    }
+
+    #[test]
+    fn the_binary_is_named_for_its_target() {
+        assert_eq!(binary_name("x86_64-pc-windows-msvc"), "otlk.exe");
+        assert_eq!(binary_name("aarch64-apple-darwin"), "otlk");
+    }
+
+    #[test]
+    fn the_binary_comes_out_of_a_zip() {
+        let archive = zip_of(&[
+            ("otlk-v0.1.5-x86_64-pc-windows-msvc/README.md", b"readme"),
+            ("otlk-v0.1.5-x86_64-pc-windows-msvc/otlk.exe", b"binary"),
+        ]);
+
+        let binary = extract(&archive, "otlk-v0.1.5-x.zip", "otlk.exe").unwrap();
+
+        assert_eq!(binary, b"binary");
+    }
+
+    #[test]
+    fn the_binary_comes_out_of_a_tarball() {
+        let archive = tarball_of(&[
+            ("otlk-v0.1.5-aarch64-apple-darwin/LICENSE", b"license"),
+            ("otlk-v0.1.5-aarch64-apple-darwin/otlk", b"binary"),
+        ]);
+
+        let binary = extract(&archive, "otlk-v0.1.5-x.tar.gz", "otlk").unwrap();
+
+        assert_eq!(binary, b"binary");
+    }
+
+    #[test]
+    fn an_archive_without_the_binary_is_an_error() {
+        let archive = tarball_of(&[("otlk-v0.1.5/README.md", b"readme")]);
+
+        assert!(extract(&archive, "otlk-v0.1.5-x.tar.gz", "otlk").is_err());
+    }
+
+    #[test]
+    fn a_corrupt_archive_is_an_error() {
+        assert!(extract(b"nope", "otlk.zip", "otlk.exe").is_err());
+        assert!(extract(b"nope", "otlk.tar.gz", "otlk").is_err());
     }
 
     #[test]
