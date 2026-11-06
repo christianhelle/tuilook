@@ -1,5 +1,6 @@
 //! The tuilook terminal UI.
 
+pub mod account_manager;
 pub mod agenda;
 pub mod app;
 pub mod appointment_form;
