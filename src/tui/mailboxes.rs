@@ -11,7 +11,7 @@ use std::{
 use anyhow::Result;
 use tokio::sync::mpsc;
 
-use crate::accounts::Accounts;
+use crate::accounts::Registry;
 use crate::core::{Command, calendar_window};
 use crate::model::{Event, FolderId, Message};
 use crate::store::Store;
@@ -33,8 +33,8 @@ pub struct Mailbox {
 /// Every account's mailbox, in the order of the app's accounts.
 pub struct Mailboxes {
     mailboxes: Vec<Mailbox>,
-    /// Where signatures are kept, if anywhere.
-    accounts_file: Option<PathBuf>,
+    /// Where accounts and their signatures are kept, if anywhere.
+    registry: Option<Registry>,
     /// Where copied text goes, as an OSC 52 sequence: the terminal.
     clipboard: Box<dyn Write>,
     /// Asks for tuilook to be updated, where it can be.
@@ -46,12 +46,12 @@ pub struct Mailboxes {
 impl Mailboxes {
     pub fn new(
         mailboxes: Vec<Mailbox>,
-        accounts_file: Option<PathBuf>,
+        registry: Option<Registry>,
         clipboard: Box<dyn Write>,
     ) -> Self {
         Self {
             mailboxes,
-            accounts_file,
+            registry,
             clipboard,
             installer: None,
             signer: None,
@@ -243,8 +243,9 @@ impl Mailboxes {
                 }
                 Effect::Search(query) => app.search_results(search_all(mailboxes, &query)?),
                 Effect::SaveSignature { account, text } => {
-                    let saved = self.accounts_file.as_deref().map_or(Ok(()), |path| {
-                        save_signature(path, &app.accounts[account], &text)
+                    let address = &app.accounts[account];
+                    let saved = self.registry.as_ref().map_or(Ok(()), |registry| {
+                        registry.change(|accounts| accounts.set_signature(address, &text))
                     });
                     if let Err(e) = saved {
                         app.show_error(format!("Could not save the signature: {e}"));
@@ -279,9 +280,11 @@ impl Mailboxes {
                     None
                 }
                 Effect::MoveAccount { address, delta } => {
-                    match self.accounts_file.as_deref() {
-                        Some(path) => {
-                            if let Err(e) = move_account(path, &address, delta) {
+                    match &self.registry {
+                        Some(registry) => {
+                            let moved =
+                                registry.change(|accounts| accounts.move_by(&address, delta));
+                            if let Err(e) = moved {
                                 app.show_error(format!("Could not move the account: {e}"));
                             }
                         }
@@ -293,7 +296,7 @@ impl Mailboxes {
                     None
                 }
                 Effect::RemoveAccount(address) => {
-                    if self.accounts_file.is_some() {
+                    if self.registry.is_some() {
                         app.reload_accounts(Reload::Remove(address));
                     } else {
                         app.show_info(NOT_HERE);
@@ -355,21 +358,6 @@ fn load_calendar(
 
 /// Why accounts cannot be changed, as in the demo.
 const NOT_HERE: &str = "accounts are not changed here";
-
-/// Moves the account at `address` `delta` places later in the saved list.
-fn move_account(path: &Path, address: &str, delta: isize) -> std::io::Result<()> {
-    let mut accounts = Accounts::load(path)?;
-    accounts.move_by(address, delta);
-    accounts.save(path)
-}
-
-/// Keeps `signature` for `address`, reading the accounts again so a sign-in
-/// since tuilook started is not lost.
-fn save_signature(path: &Path, address: &str, signature: &str) -> std::io::Result<()> {
-    let mut accounts = Accounts::load(path)?;
-    accounts.set_signature(address, signature);
-    accounts.save(path)
-}
 
 /// Every account's cached messages matching `query`, with the account each
 /// is in, newest first.

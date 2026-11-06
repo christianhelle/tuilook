@@ -148,7 +148,7 @@ fn main() -> Result<()> {
             let (_, updates) = mpsc::channel(1);
             let mut services = Services::new(updates, default_login(&cli));
             let ui = Ui {
-                accounts_file: None,
+                registry: None,
                 session: None,
                 sync_every: sync_every(&cli),
             };
@@ -173,7 +173,7 @@ fn main() -> Result<()> {
             };
             let registry = registry()?;
             let ui = Ui {
-                accounts_file: Some(registry.file()),
+                registry: Some(registry.clone()),
                 session: Some(session_path()?),
                 sync_every: sync_every(&cli),
             };
@@ -573,7 +573,7 @@ fn remove_db(path: &Path) -> Result<()> {
 struct Ui {
     /// Where accounts and their signatures are kept; without one, as in the
     /// demo, signatures last until tuilook closes.
-    accounts_file: Option<PathBuf>,
+    registry: Option<Registry>,
     /// Where the place the user was is kept between starts.
     session: Option<PathBuf>,
     sync_every: Option<Duration>,
@@ -632,8 +632,8 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
         installed: services.installed.clone(),
         ..AppState::default()
     };
-    let saved = match &ui.accounts_file {
-        Some(path) => Accounts::load(path)?,
+    let saved = match &ui.registry {
+        Some(registry) => registry.load()?,
         None => Accounts::default(),
     };
     let mut mailboxes = Vec::new();
@@ -663,7 +663,7 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
         mailboxes.push(Mailbox { store, commands });
         events.push(event_rx);
     }
-    let mut mailboxes = Mailboxes::new(mailboxes, ui.accounts_file.clone(), Box::new(io::stdout()));
+    let mut mailboxes = Mailboxes::new(mailboxes, ui.registry.clone(), Box::new(io::stdout()));
     if let Some(installer) = services.installer.clone() {
         mailboxes = mailboxes.with_installer(installer);
     }
