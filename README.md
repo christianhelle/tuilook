@@ -146,6 +146,25 @@ address can be left out:
 otlk logout me@outlook.com
 ```
 
+### Managing accounts in the mail client
+
+Press `M` to list the accounts without leaving tuilook:
+
+| Keys | What they do |
+| --- | --- |
+| `a` | Add an account: confirm or change the tenant and client ID, then sign in with the device code shown |
+| `e` | Sign the picked account in with another tenant or client ID |
+| `r` | Sign the picked account in again, as when its sign-in has expired |
+| `d` | Remove the picked account, its sign-in and its cached mail, after asking |
+| `s` | Write the picked account's signature |
+| `J` `K` | Move the picked account down or up the folder pane |
+| `j` `k` | Pick an account |
+| `Esc` | Close; while signing in, stop waiting |
+
+Signing in again or with another tenant must be done as the same account.
+Accounts added, signed in again or moved show in the folder pane once the
+dialog closes; a removed account goes at once.
+
 ### Work or school accounts
 
 Microsoft only lets a program read mail if it is registered with Microsoft

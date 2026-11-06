@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   download the latest release for your system, check its digest and put it in
   place of the running `otlk`; it runs from the next start. A tuilook installed
   with Cargo is left to `cargo install tuilook --locked`.
+- Accounts are managed from the mail client. `M` lists them, to add one, sign
+  one in again or with another tenant or client ID, write its signature, move
+  it up or down, or remove it with its cached mail, without `otlk login` or
+  `otlk logout`.
 
 ## [0.1.5] - 2026-11-06
 
