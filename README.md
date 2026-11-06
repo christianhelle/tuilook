@@ -291,6 +291,7 @@ there next time.
 | `L` | Move the reading pane below the messages, or back right of them |
 | `F5` or `Ctrl-R` | Sync every folder now |
 | `?` | Show the keys |
+| `U` | Update tuilook to its latest release |
 | `q` or `Ctrl-C` | Quit |
 
 Subfolders start collapsed. A collapsed folder shows the unread count of
@@ -595,8 +596,23 @@ otlk sync
 
 When the mail client starts, tuilook asks GitHub for its latest release, at most
 once a day. If there is a newer one, the status line shows `update` and its
-version until you quit. tuilook never installs anything itself, so update the
-way you [installed](#install) it.
+version until you quit.
+
+Press `U` to update. tuilook asks first, then downloads the release built for
+your system from GitHub, checks it against GitHub's SHA-256 digest and puts it
+in place of the running `otlk`. The status line then shows `restart for` and
+the version, which runs from the next time you start tuilook. To update without
+opening the mail client:
+
+```bash
+otlk update
+```
+
+If you installed tuilook with Cargo, update it the same way instead:
+
+```bash
+cargo install tuilook --locked
+```
 
 To ask at any time, and get a link to the release:
 
@@ -605,8 +621,9 @@ otlk check-update
 ```
 
 To stop the check at start, pass `--no-update-check` or set
-`TUILOOK_NO_UPDATE_CHECK=1`. tuilook then only contacts GitHub when you run
-`otlk check-update`. `otlk --demo` never checks.
+`TUILOOK_NO_UPDATE_CHECK=1`. tuilook then only contacts GitHub when you press
+`U` or run `otlk check-update` or `otlk update`. `otlk --demo` never checks or
+updates.
 
 ## Options
 
@@ -626,6 +643,7 @@ To stop the check at start, pass `--no-update-check` or set
 | `otlk accounts` | List the signed-in accounts |
 | `otlk sync` | Sync every account's folders once, without the UI |
 | `otlk check-update` | Ask GitHub whether a newer tuilook has been released |
+| `otlk update` | Replace `otlk` with the latest release |
 
 ## Where tuilook keeps things
 

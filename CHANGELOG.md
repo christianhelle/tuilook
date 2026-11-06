@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- tuilook updates itself. Press `U` in the mail client, or run `otlk update`, to
+  download the latest release for your system, check its digest and put it in
+  place of the running `otlk`; it runs from the next start. A tuilook installed
+  with Cargo is left to `cargo install tuilook --locked`.
+
 ## [0.1.5] - 2026-11-06
 
 ### Added

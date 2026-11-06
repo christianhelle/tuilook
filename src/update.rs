@@ -1,5 +1,5 @@
-//! Whether a newer tuilook has been released. This only ever tells: installing
-//! it stays with whichever way tuilook was installed.
+//! Whether a newer tuilook has been released, and putting it in place of the
+//! running one. A tuilook Cargo installed is left for Cargo to update.
 
 use std::{
     io::{Cursor, Read},
