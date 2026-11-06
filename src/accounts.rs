@@ -69,6 +69,18 @@ impl Accounts {
         }
     }
 
+    /// Moves the account at `address` `delta` places later, or earlier when
+    /// negative, stopping at either end.
+    pub fn move_by(&mut self, address: &str, delta: isize) {
+        let Some(from) = self.0.iter().position(|a| same(&a.address, address)) else {
+            return;
+        };
+        let last = self.0.len() - 1;
+        let to = from.saturating_add_signed(delta).min(last);
+        let account = self.0.remove(from);
+        self.0.insert(to, account);
+    }
+
     pub fn remove(&mut self, address: &str) {
         self.0.retain(|a| !same(&a.address, address));
     }
@@ -211,6 +223,30 @@ Engines"
             accounts().find("nobody"),
             Err(FindError::NoMatch("nobody".to_owned()))
         );
+    }
+
+    #[test]
+    fn moves_an_account_up_or_down() {
+        let mut accounts = accounts();
+
+        accounts.move_by("OTHER@outlook.com", -1);
+
+        let order: Vec<_> = accounts.0.iter().map(|a| a.address.as_str()).collect();
+        assert_eq!(
+            order,
+            ["me@outlook.com", "other@outlook.com", "me@work.example"]
+        );
+    }
+
+    #[test]
+    fn moving_past_either_end_stays_there() {
+        let mut accounts = accounts();
+
+        accounts.move_by("me@outlook.com", -1);
+        accounts.move_by("other@outlook.com", 5);
+        accounts.move_by("nobody@outlook.com", 1);
+
+        assert_eq!(accounts, self::accounts());
     }
 
     #[test]
