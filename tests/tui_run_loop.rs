@@ -13,7 +13,10 @@ use tuilook::tui::{
     app::{AppState, Pane, Status},
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
-    run_loop::{UpdateNews, on_terminal_event, take_core_events, take_update},
+    run_loop::{
+        AccountNews, UpdateNews, on_terminal_event, take_account_news, take_core_events,
+        take_update,
+    },
 };
 
 const AREA: Rect = Rect::new(0, 0, 100, 30);
@@ -211,4 +214,36 @@ fn what_each_core_reported_is_shown() {
     take_core_events(&mut s.app, &mut s.mailboxes, &mut events).unwrap();
 
     assert_eq!(s.app.status, Some(Status::Error("offline".to_owned())));
+}
+
+#[test]
+fn signing_in_shows_the_code_then_the_account() {
+    use tuilook::model::Action;
+    use tuilook::tui::{account_manager::Login, dialog::Dialog};
+    let mut app = AppState {
+        accounts: vec!["me@outlook.com".to_owned()],
+        ..AppState::default()
+    };
+    app.update(Action::ManageAccounts);
+    app.on_key(KeyEvent::from(KeyCode::Char('a')), &mut Keymap::default());
+    app.on_key(KeyEvent::from(KeyCode::Enter), &mut Keymap::default());
+    let (news, mut received) = mpsc::unbounded_channel();
+
+    news.send(AccountNews::Code("Enter ABC".to_owned()))
+        .unwrap();
+    news.send(AccountNews::SignedIn {
+        address: "new@outlook.com".to_owned(),
+        login: Login::default(),
+    })
+    .unwrap();
+    take_account_news(&mut app, &mut received);
+
+    let Some(Dialog::Accounts(manager)) = &app.dialog else {
+        panic!("no accounts dialog");
+    };
+    assert_eq!(manager.accounts.len(), 2);
+    assert_eq!(
+        app.status,
+        Some(Status::Info("Signed in as new@outlook.com".to_owned()))
+    );
 }

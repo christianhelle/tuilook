@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 
 use crate::model::Event;
 use crate::tui::{
+    account_manager::Login,
     app::{AppState, Mouse},
     keymap::Keymap,
     mailboxes::Mailboxes,
@@ -63,6 +64,29 @@ pub fn take_update(app: &mut AppState, updates: &mut mpsc::Receiver<UpdateNews>)
                 app.show_info("tuilook is up to date");
             }
             UpdateNews::Failed(reason) => app.show_error(format!("Could not update: {reason}")),
+        }
+    }
+}
+
+/// What signing an account in comes to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccountNews {
+    /// What Microsoft says to do to sign in.
+    Code(String),
+    /// Signed in as `address` with `login`, and saved.
+    SignedIn { address: String, login: Login },
+    /// Signing in failed, for this reason.
+    Failed(String),
+}
+
+/// Shows what signing accounts in has come to since the last call, without
+/// waiting for more.
+pub fn take_account_news(app: &mut AppState, news: &mut mpsc::UnboundedReceiver<AccountNews>) {
+    while let Ok(said) = news.try_recv() {
+        match said {
+            AccountNews::Code(message) => app.sign_in_code(message),
+            AccountNews::SignedIn { address, login } => app.signed_in(address, login),
+            AccountNews::Failed(reason) => app.sign_in_failed(&reason),
         }
     }
 }
