@@ -194,7 +194,7 @@ pub const HELP: [(&str, &str); 22] = [
     ("F5  Ctrl-R", "Sync every folder now"),
     ("/", "Search every folder (Esc goes back)"),
     ("S  C", "Write this account's signature, show its calendar"),
-    ("?  q  Ctrl-C", "Show this help, quit"),
+    ("?  U  q  Ctrl-C", "Show this help, update tuilook, quit"),
     ("", "Press any key to close"),
 ];
 

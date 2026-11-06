@@ -36,6 +36,8 @@ pub struct Mailboxes {
     accounts_file: Option<PathBuf>,
     /// Where copied text goes, as an OSC 52 sequence: the terminal.
     clipboard: Box<dyn Write>,
+    /// Asks for tuilook to be updated, where it can be.
+    installer: Option<mpsc::UnboundedSender<()>>,
 }
 
 impl Mailboxes {
@@ -48,7 +50,15 @@ impl Mailboxes {
             mailboxes,
             accounts_file,
             clipboard,
+            installer: None,
         }
+    }
+
+    /// Has an update installed by asking `installer`. Without one, as in
+    /// the demo, tuilook is not updated.
+    pub fn with_installer(mut self, installer: mpsc::UnboundedSender<()>) -> Self {
+        self.installer = Some(installer);
+        self
     }
 
     pub fn len(&self) -> usize {
@@ -227,6 +237,16 @@ impl Mailboxes {
                     });
                     if let Err(e) = saved {
                         app.show_error(format!("Could not save the signature: {e}"));
+                    }
+                    None
+                }
+                Effect::InstallUpdate => {
+                    let asked = self
+                        .installer
+                        .as_ref()
+                        .is_some_and(|installer| installer.send(()).is_ok());
+                    if !asked {
+                        app.show_info("tuilook is not updated from here");
                     }
                     None
                 }

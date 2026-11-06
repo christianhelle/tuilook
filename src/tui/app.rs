@@ -77,6 +77,8 @@ pub enum Effect {
         account: usize,
         fetch: Option<(Timestamp, Timestamp)>,
     },
+    /// Replace tuilook with its latest release.
+    InstallUpdate,
 }
 
 impl Effect {
@@ -112,6 +114,9 @@ pub enum Confirm {
     },
     /// Close the appointment being written, losing the changes.
     DiscardAppointment,
+    /// Replace tuilook with its latest release: `version`, when a check has
+    /// found it.
+    Update { version: Option<semver::Version> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -741,6 +746,10 @@ impl AppState {
                 return effect;
             }
             Action::Help => self.dialog = Some(Dialog::Help),
+            Action::Update => {
+                let version = self.update.clone();
+                self.dialog = Some(Dialog::Confirm(Confirm::Update { version }));
+            }
             Action::Search => self.start_search(),
             Action::Calendar => return self.open_calendar(),
             Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
@@ -853,9 +862,11 @@ impl AppState {
             Effect::LoadFolder(id) | Effect::LoadUnread(id) => self.folder_pane.folder_home(id),
             Effect::Core { account, .. } => *account,
             Effect::SaveAttachments { message: id, .. } => self.message_account(id),
-            Effect::Cores(_) | Effect::Sync | Effect::Search(_) | Effect::Copy(_) => {
-                self.current_account()
-            }
+            Effect::Cores(_)
+            | Effect::Sync
+            | Effect::Search(_)
+            | Effect::Copy(_)
+            | Effect::InstallUpdate => self.current_account(),
             Effect::SaveSignature { account, .. }
             | Effect::LoadAgenda { account, .. }
             | Effect::ShowCalendarRange { account, .. } => *account,
@@ -1064,6 +1075,10 @@ impl AppState {
                 let account = self.screen.compose()?.account;
                 self.show_busy("Sending…");
                 Some(Effect::core(account, Command::Send(draft)))
+            }
+            Confirm::Update { .. } => {
+                self.show_busy("Updating tuilook…");
+                Some(Effect::InstallUpdate)
             }
         }
     }
@@ -2570,6 +2585,44 @@ Ada"
         assert_eq!(draft.to, ["grace@example.com"]);
         assert_eq!(draft.body, "\n\nAda");
         assert_eq!(*account, 1);
+    }
+
+    #[test]
+    fn updating_asks_first_naming_the_release_found() {
+        let mut app = AppState::default();
+        let version = semver::Version::new(0, 2, 0);
+        app.update = Some(version.clone());
+
+        assert_eq!(key(&mut app, KeyCode::Char('U')), None);
+        assert_eq!(
+            app.confirm(),
+            Some(&Confirm::Update {
+                version: Some(version)
+            })
+        );
+        assert_eq!(
+            key(&mut app, KeyCode::Char('y')),
+            Some(Effect::InstallUpdate)
+        );
+        assert_eq!(app.status, Some(Status::Busy("Updating tuilook…".into())));
+    }
+
+    #[test]
+    fn updating_without_a_release_found_still_asks() {
+        let mut app = AppState::default();
+
+        key(&mut app, KeyCode::Char('U'));
+
+        assert_eq!(app.confirm(), Some(&Confirm::Update { version: None }));
+    }
+
+    #[test]
+    fn updating_can_be_cancelled() {
+        let mut app = AppState::default();
+        key(&mut app, KeyCode::Char('U'));
+
+        assert_eq!(key(&mut app, KeyCode::Esc), None);
+        assert_eq!(app.confirm(), None);
     }
 
     #[test]

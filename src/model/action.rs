@@ -63,6 +63,8 @@ pub enum Action {
     Compose,
     /// Write the signature of the account being looked at.
     EditSignature,
+    /// Replace tuilook with its latest release, after asking.
+    Update,
     /// Answer the selected message's sender.
     Reply,
     /// Answer the sender and everyone else on the selected message.

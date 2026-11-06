@@ -249,7 +249,41 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
             "Discard appointment",
             "Close the appointment and lose your changes?",
         ),
+        Confirm::Update { version } => draw_confirm_update(frame, version.as_ref()),
     }
+}
+
+/// Asks whether to replace tuilook with `version`, or with whatever GitHub
+/// has when no check has found one.
+fn draw_confirm_update(frame: &mut Frame, version: Option<&semver::Version>) {
+    let question = match version {
+        Some(version) => format!("Download tuilook {version} and install it?"),
+        None => "Download tuilook's latest release and install it?".to_owned(),
+    };
+    let lines = vec![
+        Line::raw(question),
+        Line::raw("It runs from the next time you start otlk."),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("y / Enter", Style::new().fg(Color::Yellow)),
+            Span::raw(" update   "),
+            Span::styled("Esc", Style::new().fg(Color::Cyan)),
+            Span::raw(" or any other key cancel"),
+        ]),
+    ];
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let area = frame
+        .area()
+        .centered(Constraint::Length(60), Constraint::Length(height));
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title("Update tuilook")
+                .border_style(Style::new().fg(Color::Yellow)),
+        ),
+        area,
+    );
 }
 
 /// Folders the move dialog lists at most at once.

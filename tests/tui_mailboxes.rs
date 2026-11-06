@@ -507,3 +507,44 @@ fn tab_in_the_agenda_shows_the_next_accounts_cached_calendar_and_syncs_it() {
     assert!(sent(&mut commands[0]).is_empty());
     assert_eq!(sent(&mut commands[1]), [Command::SyncCalendar]);
 }
+
+/// One empty mailbox, kept alive by the `TempDir`.
+fn one_mailbox() -> (tempfile::TempDir, Mailboxes) {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    let mailbox = Mailbox {
+        store: Store::open(&dir.path().join("cache.db")).unwrap(),
+        commands: tx,
+    };
+    let mailboxes = Mailboxes::new(vec![mailbox], None, Box::new(io::sink()));
+    (dir, mailboxes)
+}
+
+#[test]
+fn installing_an_update_asks_the_installer() {
+    let (_dir, mailboxes) = one_mailbox();
+    let (installer, mut asked) = mpsc::unbounded_channel();
+    let mut mailboxes = mailboxes.with_installer(installer);
+    let mut app = AppState::default();
+
+    mailboxes
+        .apply(&mut app, Some(Effect::InstallUpdate))
+        .unwrap();
+
+    assert_eq!(asked.try_recv(), Ok(()));
+}
+
+#[test]
+fn without_an_installer_nothing_is_installed() {
+    let (_dir, mut mailboxes) = one_mailbox();
+    let mut app = AppState::default();
+
+    mailboxes
+        .apply(&mut app, Some(Effect::InstallUpdate))
+        .unwrap();
+
+    assert_eq!(
+        app.status,
+        Some(Status::Info("tuilook is not updated from here".into()))
+    );
+}
