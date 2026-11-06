@@ -611,7 +611,10 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     let mut spans = Vec::new();
     // First, as key hints are cut off on narrow terminals and statuses come
     // and go.
-    if let Some(version) = &app.update {
+    if let Some(version) = &app.installed {
+        let badge = Style::new().fg(Color::Black).bg(Color::Green);
+        spans.push(Span::styled(format!(" restart for {version} "), badge));
+    } else if let Some(version) = &app.update {
         let badge = Style::new().fg(Color::Black).bg(Color::Yellow);
         spans.push(Span::styled(format!(" update {version} "), badge));
     }

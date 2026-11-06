@@ -111,6 +111,16 @@ fn a_newer_release_shows_in_the_status_line() {
 }
 
 #[test]
+fn an_installed_release_asks_for_a_restart_in_the_status_line() {
+    let mut app = sample_app();
+    app.installed = Some(semver::Version::new(0, 2, 0));
+
+    let screen = render(&app);
+
+    assert!(screen.contains(" restart for 0.2.0 "), "{screen}");
+}
+
+#[test]
 fn pinned_mail_sits_above_the_date_groups() {
     let mut app = sample_app();
     let mut pinned = message("m3", "Linus", "Release checklist", "Tag it on Friday");

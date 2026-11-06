@@ -32,11 +32,38 @@ pub fn take_core_events(
     Ok(())
 }
 
-/// Shows the newer release a check has found, if it has. Never waits for one,
-/// so a slow network cannot hold up the UI.
-pub fn take_update(app: &mut AppState, updates: &mut mpsc::Receiver<Version>) {
-    if let Ok(version) = updates.try_recv() {
-        app.update = Some(version);
+/// What checking for and installing a newer tuilook comes to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdateNews {
+    /// A check found this newer release.
+    Available(Version),
+    /// This release replaced the running binary.
+    Installed(Version),
+    /// Asked to update, the running release turned out to be the latest.
+    UpToDate,
+    /// Updating failed, for this reason.
+    Failed(String),
+}
+
+/// Shows what checking for and installing updates has come to since the
+/// last call. Never waits for news, so a slow network cannot hold up the UI.
+pub fn take_update(app: &mut AppState, updates: &mut mpsc::Receiver<UpdateNews>) {
+    while let Ok(news) = updates.try_recv() {
+        match news {
+            UpdateNews::Available(version) => app.update = Some(version),
+            UpdateNews::Installed(version) => {
+                app.update = None;
+                app.show_info(format!(
+                    "Installed tuilook {version}; restart otlk to use it"
+                ));
+                app.installed = Some(version);
+            }
+            UpdateNews::UpToDate => {
+                app.update = None;
+                app.show_info("tuilook is up to date");
+            }
+            UpdateNews::Failed(reason) => app.show_error(format!("Could not update: {reason}")),
+        }
     }
 }
 

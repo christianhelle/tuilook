@@ -16,7 +16,6 @@ use ratatui::{
     },
     layout::Rect,
 };
-use semver::Version;
 use tokio::sync::mpsc;
 use tuilook::accounts::{Account, Accounts};
 use tuilook::auth::{
@@ -31,7 +30,7 @@ use tuilook::tui::{
     demo,
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
-    run_loop::{on_terminal_event, take_core_events, take_update},
+    run_loop::{UpdateNews, on_terminal_event, take_core_events, take_update},
     screen::Cursor,
     session, ui,
 };
@@ -140,7 +139,15 @@ fn main() -> Result<()> {
             }
             // The demo stays offline: nothing ever sends on this channel.
             let (_, updates) = mpsc::channel(1);
-            run_ui(&runtime, mailboxes, None, None, sync_every(&cli), updates)
+            run_ui(
+                &runtime,
+                mailboxes,
+                None,
+                None,
+                sync_every(&cli),
+                updates,
+                None,
+            )
         }
         None => {
             let accounts = runtime.block_on(signed_in(&cli))?;
@@ -158,13 +165,16 @@ fn main() -> Result<()> {
                     ))
                 })
                 .collect::<Result<Vec<_>>>()?;
+            let (news, updates) = mpsc::channel(4);
+            watch_for_update(&runtime, &cli, news.clone());
             run_ui(
                 &runtime,
                 mailboxes,
                 Some(&accounts_path()?),
                 Some(&session_path()?),
                 sync_every(&cli),
-                watch_for_update(&runtime, &cli),
+                updates,
+                Some(install_on_request(&runtime, news)),
             )
         }
     }
@@ -366,16 +376,19 @@ fn update_check_path() -> Result<PathBuf> {
     Ok(cache_dir()?.join("update-check.json"))
 }
 
-/// Looks for a newer tuilook in the background, unless told not to. The
-/// receiver gets it if there is one.
-fn watch_for_update(runtime: &tokio::runtime::Runtime, cli: &Cli) -> mpsc::Receiver<Version> {
-    let (updates, received) = mpsc::channel(1);
+/// Looks for a newer tuilook in the background, unless told not to, and
+/// tells `updates` if there is one.
+fn watch_for_update(
+    runtime: &tokio::runtime::Runtime,
+    cli: &Cli,
+    updates: mpsc::Sender<UpdateNews>,
+) {
     if cli.no_update_check {
-        return received;
+        return;
     }
     // With nowhere to remember checks, tuilook would ask GitHub on every start.
     let Ok(path) = update_check_path() else {
-        return received;
+        return;
     };
     runtime.spawn(async move {
         let update = update::available(
@@ -387,10 +400,35 @@ fn watch_for_update(runtime: &tokio::runtime::Runtime, cli: &Cli) -> mpsc::Recei
         )
         .await;
         if let Some(version) = update {
-            let _ = updates.send(version).await;
+            let _ = updates.send(UpdateNews::Available(version)).await;
         }
     });
-    received
+}
+
+/// Replaces the running otlk with the latest release in the background
+/// each time the returned sender asks, and tells `news` how it went.
+fn install_on_request(
+    runtime: &tokio::runtime::Runtime,
+    news: mpsc::Sender<UpdateNews>,
+) -> mpsc::UnboundedSender<()> {
+    let (installer, mut asked) = mpsc::unbounded_channel();
+    runtime.spawn(async move {
+        while asked.recv().await.is_some() {
+            let outcome = match update_check_path() {
+                Ok(path) => update::update_running(&http_client(), update::GITHUB_API, &path).await,
+                Err(e) => Err(e),
+            };
+            let said = match outcome {
+                Ok(update::Outcome::Installed(version)) => UpdateNews::Installed(version),
+                Ok(update::Outcome::UpToDate(_)) => UpdateNews::UpToDate,
+                Err(e) => UpdateNews::Failed(format!("{e:#}")),
+            };
+            if news.send(said).await.is_err() {
+                break;
+            }
+        }
+    });
+    installer
 }
 
 /// Tells the user whether a newer tuilook has been released.
@@ -453,7 +491,8 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
     accounts_file: Option<&Path>,
     session: Option<&Path>,
     sync_every: Option<Duration>,
-    mut updates: mpsc::Receiver<Version>,
+    mut updates: mpsc::Receiver<UpdateNews>,
+    installer: Option<mpsc::UnboundedSender<()>>,
 ) -> Result<()> {
     let mut app = AppState::default();
     let saved = match accounts_file {
@@ -480,6 +519,9 @@ fn run_ui<B: MailBackend + Send + Sync + 'static>(
     }
     let accounts_file = accounts_file.map(Path::to_path_buf);
     let mut mailboxes = Mailboxes::new(mailboxes, accounts_file, Box::new(io::stdout()));
+    if let Some(installer) = installer {
+        mailboxes = mailboxes.with_installer(installer);
+    }
     app.sync.every = sync_every;
     let effect = app.start_sync();
     mailboxes.apply(&mut app, effect)?;

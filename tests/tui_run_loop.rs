@@ -13,7 +13,7 @@ use tuilook::tui::{
     app::{AppState, Pane, Status},
     keymap::Keymap,
     mailboxes::{Mailbox, Mailboxes},
-    run_loop::{on_terminal_event, take_core_events, take_update},
+    run_loop::{UpdateNews, on_terminal_event, take_core_events, take_update},
 };
 
 const AREA: Rect = Rect::new(0, 0, 100, 30);
@@ -67,10 +67,64 @@ fn a_newer_release_reaches_the_app() {
     let (updates, mut received) = mpsc::channel(1);
     let version = semver::Version::new(0, 2, 0);
 
-    updates.try_send(version.clone()).unwrap();
+    updates
+        .try_send(UpdateNews::Available(version.clone()))
+        .unwrap();
     take_update(&mut app, &mut received);
 
     assert_eq!(app.update, Some(version));
+}
+
+#[test]
+fn an_installed_release_asks_for_a_restart() {
+    let mut app = AppState::default();
+    let version = semver::Version::new(0, 2, 0);
+    app.update = Some(version.clone());
+    let (updates, mut received) = mpsc::channel(1);
+
+    updates
+        .try_send(UpdateNews::Installed(version.clone()))
+        .unwrap();
+    take_update(&mut app, &mut received);
+
+    assert_eq!(app.update, None);
+    assert_eq!(app.installed, Some(version));
+    assert_eq!(
+        app.status,
+        Some(Status::Info(
+            "Installed tuilook 0.2.0; restart otlk to use it".into()
+        ))
+    );
+}
+
+#[test]
+fn updating_the_latest_release_says_so() {
+    let mut app = AppState::default();
+    let (updates, mut received) = mpsc::channel(1);
+
+    updates.try_send(UpdateNews::UpToDate).unwrap();
+    take_update(&mut app, &mut received);
+
+    assert_eq!(
+        app.status,
+        Some(Status::Info("tuilook is up to date".into()))
+    );
+}
+
+#[test]
+fn a_failed_update_says_why() {
+    let mut app = AppState::default();
+    let (updates, mut received) = mpsc::channel(1);
+
+    updates
+        .try_send(UpdateNews::Failed("offline".into()))
+        .unwrap();
+    take_update(&mut app, &mut received);
+
+    assert_eq!(
+        app.status,
+        Some(Status::Error("Could not update: offline".into()))
+    );
 }
 
 #[test]

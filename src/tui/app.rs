@@ -282,6 +282,9 @@ pub struct AppState {
     pub clock: Option<Zoned>,
     /// A newer tuilook that has been released, once a check has found one.
     pub update: Option<semver::Version>,
+    /// The tuilook installed in place of the running one, which runs from
+    /// the next start.
+    pub installed: Option<semver::Version>,
 }
 
 /// When an invite is for, in `zone`. An all-day one ends at midnight, so on
