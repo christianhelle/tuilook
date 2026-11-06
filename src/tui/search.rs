@@ -200,7 +200,7 @@ mod tests {
         let mut app = searched();
 
         assert_eq!(app.results_query(), Some("x"));
-        assert_eq!(app.messages, [message("r1"), message("r2")]);
+        assert_eq!(app.mail.messages, [message("r1"), message("r2")]);
 
         assert_eq!(press(&mut app, KeyCode::Esc), load_folder("a"));
         assert_eq!(app.search, None);
@@ -243,7 +243,7 @@ mod tests {
         app.update(Action::MarkAll);
 
         assert_eq!(press(&mut app, KeyCode::Esc), None);
-        assert!(app.marked.is_empty());
+        assert!(app.mail.marked.is_empty());
         assert_eq!(press(&mut app, KeyCode::Esc), load_folder("a"));
         assert_eq!(app.search, None);
     }

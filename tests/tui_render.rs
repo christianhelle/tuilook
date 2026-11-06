@@ -125,7 +125,7 @@ fn pinned_mail_sits_above_the_date_groups() {
     let mut app = sample_app();
     let mut pinned = message("m3", "Linus", "Release checklist", "Tag it on Friday");
     pinned.pinned = true;
-    let mut messages = app.messages.clone();
+    let mut messages = app.mail.messages.clone();
     messages.insert(0, pinned);
     app.set_messages(messages);
 
@@ -135,7 +135,7 @@ fn pinned_mail_sits_above_the_date_groups() {
 #[test]
 fn flagged_mail_shows_a_flag_after_the_sender() {
     let mut app = sample_app();
-    app.messages[1].flagged = true;
+    app.mail.messages[1].flagged = true;
 
     insta::assert_snapshot!(render(&app));
 }
@@ -146,7 +146,7 @@ fn pinned_mail_shows_a_pin_right_of_its_flag() {
     let mut pinned = message("m3", "Linus", "Release checklist", "Tag it on Friday");
     pinned.pinned = true;
     pinned.flagged = true;
-    let mut messages = app.messages.clone();
+    let mut messages = app.mail.messages.clone();
     messages.insert(0, pinned);
     app.set_messages(messages);
 

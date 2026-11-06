@@ -36,15 +36,16 @@ impl AppState {
             return None;
         }
         let (held, shown) = if unread_only {
-            let unread = self.messages.iter().filter(|m| !m.is_read).count();
+            let unread = self.mail.messages.iter().filter(|m| !m.is_read).count();
             (row.unread, unread)
         } else {
-            (row.total, self.messages.len())
+            (row.total, self.mail.messages.len())
         };
         if usize::try_from(held).unwrap_or(usize::MAX) <= shown {
             return None;
         }
         let before = self
+            .mail
             .messages
             .last()
             .map_or_else(Timestamp::now, |m| m.received_at);

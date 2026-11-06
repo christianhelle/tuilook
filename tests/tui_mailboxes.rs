@@ -133,7 +133,7 @@ fn loading_a_folder_shows_its_messages_from_the_cache() {
         )
         .unwrap();
 
-    assert_eq!(s.app.messages, [message("m1", "Hello")]);
+    assert_eq!(s.app.mail.messages, [message("m1", "Hello")]);
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn a_sync_goes_to_every_account_and_its_calendar() {
 fn deleting_search_results_asks_each_account_to_delete_its_own() {
     let mut s = setup(&[&[message("a1", "lunch")], &[message("b1", "lunch")]]);
     search(&mut s.app, &mut s.mailboxes, "lunch");
-    assert_eq!(s.app.messages.len(), 2);
+    assert_eq!(s.app.mail.messages.len(), 2);
 
     s.app.dialog = Some(Dialog::Confirm(Confirm::Delete {
         ids: ids(&["a1", "b1"]),
@@ -200,7 +200,7 @@ fn a_folder_synced_while_results_are_shown_searches_again() {
         .unwrap();
 
     assert_eq!(app.results_query(), Some("lunch"));
-    assert_eq!(app.messages.len(), 2);
+    assert_eq!(app.mail.messages.len(), 2);
 }
 
 #[test]

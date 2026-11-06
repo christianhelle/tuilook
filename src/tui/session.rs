@@ -41,8 +41,9 @@ impl Snapshot {
             focus: app.focus,
             folder: app.folder_pane.current_folder().map(|id| id.0.clone()),
             message: app
+                .mail
                 .messages
-                .get(app.selected_message)
+                .get(app.mail.selected)
                 .map(|m| m.id.0.clone()),
             zoomed: app.zoomed,
             folders_hidden: app.folders_hidden,
@@ -70,7 +71,7 @@ impl Snapshot {
                 .iter()
                 .map(|id| id.0.clone())
                 .collect(),
-            collapsed_groups: app.collapsed_groups.iter().copied().collect(),
+            collapsed_groups: app.mail.folded.iter().copied().collect(),
         }
     }
 }
@@ -102,7 +103,7 @@ impl AppState {
             .expanded
             .extend(snapshot.expanded.iter().cloned().map(FolderId));
         self.folder_pane.favorites = snapshot.favorites.iter().cloned().map(FolderId).collect();
-        self.collapsed_groups = snapshot.collapsed_groups.iter().copied().collect();
+        self.mail.folded = snapshot.collapsed_groups.iter().copied().collect();
         self.rebuild_folders();
         let effect = self.restore_folder(snapshot);
         // Accounts folded at quit stay folded, unless the folder is in one.
@@ -123,15 +124,15 @@ impl AppState {
     /// of its group when that is folded.
     pub fn select_message(&mut self, id: &str) -> Option<Effect> {
         let id = MessageId(id.to_owned());
-        let index = self.messages.iter().position(|m| m.id == id)?;
+        let index = self.mail.messages.iter().position(|m| m.id == id)?;
         let folded = self
             .group_at(index)
-            .filter(|group| self.collapsed_groups.contains(group));
-        if index == self.selected_message && folded == self.selected_group {
+            .filter(|group| self.mail.folded.contains(group));
+        if index == self.mail.selected && folded == self.mail.header {
             return None;
         }
-        self.selected_message = index;
-        self.selected_group = folded;
+        self.mail.selected = index;
+        self.mail.header = folded;
         folded.is_none().then(|| self.load_body(id))
     }
 }
@@ -212,8 +213,8 @@ mod tests {
 
         assert_eq!(app.select_message("m2"), None);
 
-        assert_eq!(app.selected_group, Some(DateGroup::Older));
-        assert_eq!(app.selected_message, 1);
+        assert_eq!(app.mail.header, Some(DateGroup::Older));
+        assert_eq!(app.mail.selected, 1);
     }
 
     #[test]

@@ -123,7 +123,8 @@ impl AppState {
         };
         // Moving mail to the folder it is all in already does nothing.
         let mut from = ids.iter().map(|id| {
-            self.messages
+            self.mail
+                .messages
                 .iter()
                 .find(|m| &m.id == id)
                 .map(|m| &m.folder_id)
@@ -321,7 +322,7 @@ mod tests {
             &FolderId("Archive".to_owned()),
         );
 
-        assert_eq!(app.messages.len(), 1);
+        assert_eq!(app.mail.messages.len(), 1);
         assert_eq!(app.selected().unwrap().id, MessageId("m2".to_owned()));
     }
 }

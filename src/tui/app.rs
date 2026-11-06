@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::HashSet,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -24,6 +24,7 @@ use crate::tui::{
     folder_pane::FolderPane,
     groups::{self, DateGroup, MessageRow},
     keymap::Keymap,
+    message_list::MessageList,
     reader::{self, Reader},
     rows::row_target,
     screen::{Cursor, Screen},
@@ -262,13 +263,8 @@ pub struct AppState {
     pub focus: Pane,
     pub should_quit: bool,
     pub folder_pane: FolderPane,
-    pub messages: Vec<Message>,
-    pub selected_message: usize,
-    /// The date group whose header is selected, instead of a message. The
-    /// selected message is then the group's first.
-    pub selected_group: Option<DateGroup>,
-    /// Date groups whose messages are folded away, in every folder.
-    pub collapsed_groups: BTreeSet<DateGroup>,
+    /// The messages listed, and which is selected, folded or marked.
+    pub mail: MessageList,
     /// What the reading pane shows of the selected message, and where.
     pub reader: Reader,
     pub status: Option<Status>,
@@ -286,8 +282,6 @@ pub struct AppState {
     pub reader_below: bool,
     /// How the calendar was last laid out, to open it the same way.
     pub calendar_view: CalendarView,
-    /// Messages picked for acting on together, such as deleting.
-    pub marked: BTreeSet<MessageId>,
     /// The dialog over the panes, which takes every key.
     pub dialog: Option<Dialog>,
     /// Which account sent recent messages, and when, to notice a burst.
@@ -343,7 +337,7 @@ impl AppState {
     /// The lines of the reading pane, before wrapping: the selected
     /// message's headers and body.
     pub fn reader_text(&self) -> Option<Vec<String>> {
-        let m = self.messages.get(self.selected_message)?;
+        let m = self.mail.messages.get(self.mail.selected)?;
         Some(self.reader.text(m, self.now().time_zone()))
     }
 
@@ -663,7 +657,7 @@ impl AppState {
             Action::HalfPageUp => return self.move_selection(-self.page() / 2),
             Action::Top => return self.move_selection(-isize::MAX),
             Action::Bottom => return self.move_selection(isize::MAX),
-            Action::Open if self.focus == Pane::Messages && self.selected_group.is_some() => {
+            Action::Open if self.focus == Pane::Messages && self.mail.header.is_some() => {
                 return self.toggle_group();
             }
             Action::Open => self.open(),
@@ -680,17 +674,17 @@ impl AppState {
             Action::ToggleFavorite => {}
             Action::ToggleMark if self.focus == Pane::Messages => {
                 if let Some(id) = self.selected().map(|m| m.id.clone())
-                    && !self.marked.remove(&id)
+                    && !self.mail.marked.remove(&id)
                 {
-                    self.marked.insert(id);
+                    self.mail.marked.insert(id);
                 }
                 return self.move_selection(1);
             }
             Action::MarkAll if self.focus == Pane::Messages => {
-                self.marked = self.messages.iter().map(|m| m.id.clone()).collect();
+                self.mail.marked = self.mail.messages.iter().map(|m| m.id.clone()).collect();
             }
-            Action::ClearMarks if self.marked.is_empty() => return self.leave_search(),
-            Action::ClearMarks => self.marked.clear(),
+            Action::ClearMarks if self.mail.marked.is_empty() => return self.leave_search(),
+            Action::ClearMarks => self.mail.marked.clear(),
             Action::ToggleMark | Action::MarkAll => {}
             Action::TogglePin if self.focus != Pane::Folders => return self.toggle_pin(),
             Action::TogglePin => {}
@@ -752,9 +746,9 @@ impl AppState {
 
     /// Shows a newly loaded folder's messages, selecting the first.
     pub fn set_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
-        self.marked.clear();
-        self.messages = messages;
-        self.selected_message = 0;
+        self.mail.marked.clear();
+        self.mail.messages = messages;
+        self.mail.selected = 0;
         self.settle_selection();
         self.selection_changed()
     }
@@ -881,9 +875,10 @@ impl AppState {
     /// Shows the current folder's messages after a sync, keeping the
     /// selected message when it is still there.
     pub fn refresh_messages(&mut self, messages: Vec<Message>) -> Option<Effect> {
-        let header = self.selected_group;
+        let header = self.mail.header;
         let selected = self.selected().map(|m| m.id.clone());
-        self.marked
+        self.mail
+            .marked
             .retain(|id| messages.iter().any(|m| &m.id == id));
         if let Some(group) = header {
             // A selected header stays selected while its group has mail.
@@ -891,22 +886,22 @@ impl AppState {
             let first =
                 (0..messages.len()).find(|&i| groups::group_at(&messages, i, &now) == Some(group));
             if let Some(index) = first {
-                self.messages = messages;
-                self.selected_message = index;
+                self.mail.messages = messages;
+                self.mail.selected = index;
                 return None;
             }
         }
         match selected.and_then(|id| messages.iter().position(|m| m.id == id)) {
             Some(index) => {
-                self.messages = messages;
-                self.selected_message = index;
+                self.mail.messages = messages;
+                self.mail.selected = index;
                 self.settle_selection();
                 None
             }
             None => {
-                let marked = std::mem::take(&mut self.marked);
+                let marked = std::mem::take(&mut self.mail.marked);
                 let effect = self.set_messages(messages);
-                self.marked = marked;
+                self.mail.marked = marked;
                 effect
             }
         }
@@ -937,13 +932,13 @@ impl AppState {
     fn drop_messages(&mut self, ids: &[MessageId]) -> Option<Effect> {
         let selected = self.selected().map(|m| m.id.clone());
         let gone = |m: &Message| ids.contains(&m.id);
-        let before = self.messages.iter().take(self.selected_message);
+        let before = self.mail.messages.iter().take(self.mail.selected);
         let index = before.filter(|m| !gone(m)).count();
-        self.messages.retain(|m| !gone(m));
-        self.selected_message = index.min(self.messages.len().saturating_sub(1));
+        self.mail.messages.retain(|m| !gone(m));
+        self.mail.selected = index.min(self.mail.messages.len().saturating_sub(1));
         self.settle_selection();
         for id in ids {
-            self.marked.remove(id);
+            self.mail.marked.remove(id);
         }
         if self.selected().map(|m| &m.id) == selected.as_ref() {
             None
@@ -960,14 +955,26 @@ impl AppState {
             return None;
         }
         let acting = |m: &Message| ids.contains(&m.id);
-        let pinned = !self.messages.iter().filter(|m| acting(m)).all(|m| m.pinned);
+        let pinned = !self
+            .mail
+            .messages
+            .iter()
+            .filter(|m| acting(m))
+            .all(|m| m.pinned);
         let selected = self.selected().map(|m| m.id.clone());
-        for m in self.messages.iter_mut().filter(|m| ids.contains(&m.id)) {
+        for m in self
+            .mail
+            .messages
+            .iter_mut()
+            .filter(|m| ids.contains(&m.id))
+        {
             m.pinned = pinned;
         }
-        sort_messages(&mut self.messages);
-        if let Some(index) = selected.and_then(|id| self.messages.iter().position(|m| m.id == id)) {
-            self.selected_message = index;
+        sort_messages(&mut self.mail.messages);
+        if let Some(index) =
+            selected.and_then(|id| self.mail.messages.iter().position(|m| m.id == id))
+        {
+            self.mail.selected = index;
         }
         self.settle_selection();
         Some(self.each_account(ids, |ids| Command::SetPinned { ids, pinned }))
@@ -982,11 +989,17 @@ impl AppState {
         }
         let acting = |m: &Message| ids.contains(&m.id);
         let flagged = !self
+            .mail
             .messages
             .iter()
             .filter(|m| acting(m))
             .all(|m| m.flagged);
-        for m in self.messages.iter_mut().filter(|m| ids.contains(&m.id)) {
+        for m in self
+            .mail
+            .messages
+            .iter_mut()
+            .filter(|m| ids.contains(&m.id))
+        {
             m.flagged = flagged;
         }
         Some(self.each_account(ids, |ids| Command::SetFlagged { ids, flagged }))
@@ -994,10 +1007,14 @@ impl AppState {
 
     /// The marked messages in list order, or else the selected one.
     pub fn to_act_on(&self) -> Vec<MessageId> {
-        if self.marked.is_empty() {
+        if self.mail.marked.is_empty() {
             return self.selected().map(|m| m.id.clone()).into_iter().collect();
         }
-        let marked = self.messages.iter().filter(|m| self.marked.contains(&m.id));
+        let marked = self
+            .mail
+            .messages
+            .iter()
+            .filter(|m| self.mail.marked.contains(&m.id));
         marked.map(|m| m.id.clone()).collect()
     }
 
@@ -1184,10 +1201,10 @@ impl AppState {
         text: String,
         attachments: Vec<Attachment>,
     ) -> Option<Effect> {
-        if self.selected_group.is_some() {
+        if self.mail.header.is_some() {
             return None;
         }
-        let shown = self.messages.get_mut(self.selected_message)?;
+        let shown = self.mail.messages.get_mut(self.mail.selected)?;
         if shown.id != message {
             return None;
         }
@@ -1235,39 +1252,38 @@ impl AppState {
 
     /// The selected message; none while a date header is selected.
     pub(crate) fn selected(&self) -> Option<&Message> {
-        if self.selected_group.is_some() {
+        if self.mail.header.is_some() {
             return None;
         }
-        self.messages.get(self.selected_message)
+        self.mail.messages.get(self.mail.selected)
     }
 
     /// The message list's rows as they are now: date headers, and the
     /// messages of the groups not folded away.
     pub fn message_rows(&self) -> Vec<MessageRow> {
-        groups::message_rows(&self.messages, &self.collapsed_groups, &self.now())
+        groups::message_rows(&self.mail.messages, &self.mail.folded, &self.now())
     }
 
     /// The row of `rows` the cursor is on: the selected header, or the
     /// selected message, or the header of the group it is folded in.
     pub fn selected_row(&self, rows: &[MessageRow]) -> Option<usize> {
         let group = self
-            .selected_group
-            .or_else(|| self.group_at(self.selected_message))?;
+            .mail
+            .header
+            .or_else(|| self.group_at(self.mail.selected))?;
         rows.iter().position(|row| match *row {
-            MessageRow::Message(index) => {
-                self.selected_group.is_none() && index == self.selected_message
-            }
+            MessageRow::Message(index) => self.mail.header.is_none() && index == self.mail.selected,
             MessageRow::Header {
                 group: header,
                 collapsed,
                 ..
-            } => header == group && (self.selected_group.is_some() || collapsed),
+            } => header == group && (self.mail.header.is_some() || collapsed),
         })
     }
 
     /// The date group of the message at `index`.
     pub(crate) fn group_at(&self, index: usize) -> Option<DateGroup> {
-        groups::group_at(&self.messages, index, &self.now())
+        groups::group_at(&self.mail.messages, index, &self.now())
     }
 
     /// A click on row `index` of the message list selects it, and on a date
@@ -1286,8 +1302,8 @@ impl AppState {
     /// → in the message list: unfolds the selected date group, or if it
     /// already is, moves to its first message.
     fn expand_group(&mut self) -> Option<Effect> {
-        let group = self.selected_group?;
-        if self.collapsed_groups.remove(&group) {
+        let group = self.mail.header?;
+        if self.mail.folded.remove(&group) {
             return None;
         }
         self.move_selection(1)
@@ -1297,10 +1313,11 @@ impl AppState {
     /// header, leaving the cursor on its header.
     fn collapse_group(&mut self) -> Option<Effect> {
         let group = self
-            .selected_group
-            .or_else(|| self.group_at(self.selected_message))?;
-        self.collapsed_groups.insert(group);
-        let moved = self.selected_group.replace(group).is_none();
+            .mail
+            .header
+            .or_else(|| self.group_at(self.mail.selected))?;
+        self.mail.folded.insert(group);
+        let moved = self.mail.header.replace(group).is_none();
         self.select_row(MessageRow::Header {
             group,
             count: 0,
@@ -1326,9 +1343,9 @@ impl AppState {
 
     /// Enter or a click on a date header: folds or unfolds its group.
     pub(crate) fn toggle_group(&mut self) -> Option<Effect> {
-        let group = self.selected_group?;
-        if !self.collapsed_groups.remove(&group) {
-            self.collapsed_groups.insert(group);
+        let group = self.mail.header?;
+        if !self.mail.folded.remove(&group) {
+            self.mail.folded.insert(group);
         }
         None
     }
@@ -1337,16 +1354,16 @@ impl AppState {
     pub(crate) fn select_row(&mut self, row: MessageRow) {
         match row {
             MessageRow::Header { group, .. } => {
-                self.selected_group = Some(group);
+                self.mail.header = Some(group);
                 if let Some(first) =
-                    (0..self.messages.len()).find(|&i| self.group_at(i) == Some(group))
+                    (0..self.mail.messages.len()).find(|&i| self.group_at(i) == Some(group))
                 {
-                    self.selected_message = first;
+                    self.mail.selected = first;
                 }
             }
             MessageRow::Message(index) => {
-                self.selected_group = None;
-                self.selected_message = index;
+                self.mail.header = None;
+                self.mail.selected = index;
             }
         }
     }
@@ -1354,9 +1371,9 @@ impl AppState {
     /// Selects the selected message's row, or its group's header when the
     /// group is folded away.
     fn settle_selection(&mut self) {
-        self.selected_group = self
-            .group_at(self.selected_message)
-            .filter(|group| self.collapsed_groups.contains(group));
+        self.mail.header = self
+            .group_at(self.mail.selected)
+            .filter(|group| self.mail.folded.contains(group));
     }
 
     /// Drops the old body and asks for the newly selected one.
@@ -1368,7 +1385,7 @@ impl AppState {
     fn open(&mut self) {
         match self.focus {
             Pane::Folders if !self.folder_pane.folders.is_empty() => self.focus = Pane::Messages,
-            Pane::Messages if !self.messages.is_empty() => self.focus = Pane::Reader,
+            Pane::Messages if !self.mail.messages.is_empty() => self.focus = Pane::Reader,
             _ => {}
         }
     }
@@ -1542,7 +1559,7 @@ mod tests {
                 .parse()
                 .unwrap(),
         );
-        app.messages[0].received_at = "2026-10-31T23:30:00Z".parse().unwrap();
+        app.mail.messages[0].received_at = "2026-10-31T23:30:00Z".parse().unwrap();
 
         let text = app.reader_text().unwrap();
 
@@ -1560,7 +1577,7 @@ mod tests {
 
         app.update(Action::SelectPrev);
         assert_eq!(app.reader.scroll, 1);
-        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.mail.selected, 0);
     }
 
     #[test]
@@ -1701,7 +1718,7 @@ Dear Charles,"
 
         app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
 
-        assert_eq!(app.selected_message, 1);
+        assert_eq!(app.mail.selected, 1);
         assert_eq!(app.reader.viewer.cursor(), (0, 0));
         assert_eq!(app.reader.viewer.mode(), VimMode::Normal);
     }
@@ -1750,7 +1767,7 @@ Dear Charles,"
         assert_eq!(app.update(Action::HalfPageDown), load_body("m2"));
         assert_eq!(app.update(Action::PageDown), load_body("m6"));
         assert_eq!(app.update(Action::PageDown), None);
-        assert_eq!(app.selected_message, 6);
+        assert_eq!(app.mail.selected, 6);
     }
 
     #[test]
@@ -1760,7 +1777,7 @@ Dear Charles,"
         assert_eq!(app.update(Action::Bottom), load_body("m2"));
         assert_eq!(app.update(Action::Bottom), None);
         assert_eq!(app.update(Action::Top), None, "the date header is first");
-        assert_eq!(app.selected_group, Some(DateGroup::Older));
+        assert_eq!(app.mail.header, Some(DateGroup::Older));
         assert_eq!(app.update(Action::SelectNext), load_body("m0"));
     }
 
@@ -1779,11 +1796,11 @@ Dear Charles,"
         app.update(Action::SelectNext);
         app.update(Action::SelectNext);
         app.update(Action::SelectNext);
-        assert_eq!(app.selected_message, 2);
+        assert_eq!(app.mail.selected, 2);
         assert_eq!(app.folder_pane.selected, 0);
 
         app.update(Action::SelectPrev);
-        assert_eq!(app.selected_message, 1);
+        assert_eq!(app.mail.selected, 1);
     }
 
     #[test]
@@ -1855,7 +1872,7 @@ Dear Charles,"
         let effect = app.body_loaded(m1.clone(), "body".to_owned(), vec![]);
 
         assert_eq!(effect, Some(Effect::core(0, Command::MarkRead(m1.clone()))));
-        assert!(app.messages[0].is_read);
+        assert!(app.mail.messages[0].is_read);
         assert_eq!(app.body_loaded(m1, "again".to_owned(), vec![]), None);
     }
 
@@ -1868,7 +1885,7 @@ Dear Charles,"
             app.body_loaded(MessageId("m1".to_owned()), "stale".to_owned(), vec![]),
             None
         );
-        assert!(!app.messages[0].is_read);
+        assert!(!app.mail.messages[0].is_read);
     }
 
     fn invite() -> Invite {
@@ -2159,7 +2176,7 @@ Dear Charles,"
         let effect = app.refresh_messages(vec![message("m0"), message("m1"), message("m2")]);
 
         assert_eq!(effect, None);
-        assert_eq!(app.selected_message, 2);
+        assert_eq!(app.mail.selected, 2);
         assert_eq!(app.reader.body.as_deref(), Some("body"));
     }
 
@@ -2171,7 +2188,7 @@ Dear Charles,"
         let effect = app.refresh_messages(vec![message("m1")]);
 
         assert_eq!(effect, load_body("m1"));
-        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.mail.selected, 0);
     }
 
     #[test]
@@ -2181,8 +2198,8 @@ Dear Charles,"
 
         app.set_messages(vec![message("m9")]);
 
-        assert_eq!(app.selected_message, 0);
-        assert_eq!(app.messages, [message("m9")]);
+        assert_eq!(app.mail.selected, 0);
+        assert_eq!(app.mail.messages, [message("m9")]);
     }
 
     #[test]
@@ -2250,8 +2267,8 @@ Dear Charles,"
                 }
             ))
         );
-        assert_eq!(app.messages[0].id.0, "m1");
-        assert!(app.messages[0].pinned);
+        assert_eq!(app.mail.messages[0].id.0, "m1");
+        assert!(app.mail.messages[0].pinned);
         assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
         assert!(matches!(
             app.message_rows()[0],
@@ -2273,15 +2290,15 @@ Dear Charles,"
                 }
             ))
         );
-        assert!(app.messages.iter().all(|m| !m.pinned));
+        assert!(app.mail.messages.iter().all(|m| !m.pinned));
         assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
     }
 
     #[test]
     fn p_pins_every_marked_message_unless_all_are_pinned() {
         let mut app = in_message_list(&["m0", "m1", "m2"]);
-        app.messages[0].pinned = true;
-        app.marked = message_ids(&["m0", "m1"]).into_iter().collect();
+        app.mail.messages[0].pinned = true;
+        app.mail.marked = message_ids(&["m0", "m1"]).into_iter().collect();
 
         let effect = app.update(Action::TogglePin);
 
@@ -2314,7 +2331,7 @@ Dear Charles,"
                 }
             ))
         );
-        assert!(app.messages[1].flagged);
+        assert!(app.mail.messages[1].flagged);
         assert_eq!(app.selected().map(|m| m.id.0.as_str()), Some("m1"));
 
         let effect = app.update(Action::ToggleFlag);
@@ -2329,14 +2346,14 @@ Dear Charles,"
                 }
             ))
         );
-        assert!(app.messages.iter().all(|m| !m.flagged));
+        assert!(app.mail.messages.iter().all(|m| !m.flagged));
     }
 
     #[test]
     fn toggling_the_flag_flags_every_marked_message_unless_all_are_flagged() {
         let mut app = in_message_list(&["m0", "m1", "m2"]);
-        app.messages[0].flagged = true;
-        app.marked = message_ids(&["m0", "m1"]).into_iter().collect();
+        app.mail.messages[0].flagged = true;
+        app.mail.marked = message_ids(&["m0", "m1"]).into_iter().collect();
 
         let effect = app.update(Action::ToggleFlag);
 
@@ -2406,7 +2423,7 @@ Dear Charles,"
         assert_eq!(key(&mut app, KeyCode::Char('j')), None);
 
         assert_eq!(app.confirm(), None);
-        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.mail.selected, 0);
     }
 
     #[test]
@@ -2449,8 +2466,8 @@ Dear Charles,"
         let effect = app.messages_deleted(&message_ids(&["m0"]));
 
         assert_eq!(effect, None);
-        assert_eq!(app.selected_message, 1);
-        assert_eq!(ids(&app.marked), ["m1", "m2"]);
+        assert_eq!(app.mail.selected, 1);
+        assert_eq!(ids(&app.mail.marked), ["m1", "m2"]);
     }
 
     #[test]
@@ -2470,7 +2487,7 @@ Dear Charles,"
 
         assert_eq!(key(&mut app, KeyCode::Char('j')), None);
         assert_eq!(app.dialog, None);
-        assert_eq!(app.selected_message, 0, "the key only closed the help");
+        assert_eq!(app.mail.selected, 0, "the key only closed the help");
     }
 
     fn ctrl_s(app: &mut AppState) -> Option<Effect> {
@@ -2481,7 +2498,7 @@ Dear Charles,"
     #[test]
     fn r_replies_to_the_selected_message_and_keys_go_to_the_message() {
         let mut app = in_message_list(&["m0", "m1"]);
-        app.messages[1].from_addr = "grace@example.com".to_owned();
+        app.mail.messages[1].from_addr = "grace@example.com".to_owned();
         app.update(Action::SelectNext);
 
         key(&mut app, KeyCode::Char('r'));
@@ -2504,7 +2521,7 @@ Dear Charles,"
                 })
             ))
         );
-        assert_eq!(app.selected_message, 1, "j and k were typed, not moved");
+        assert_eq!(app.mail.selected, 1, "j and k were typed, not moved");
         assert_eq!(app.status, Some(Status::Busy("Sending…".to_owned())));
     }
 
@@ -2722,7 +2739,7 @@ Ada"
     /// A reply ready to send, after `sends` messages went out just now.
     fn replying_after(sends: usize) -> AppState {
         let mut app = in_message_list(&["m0"]);
-        app.messages[0].from_addr = "ada@example.com".to_owned();
+        app.mail.messages[0].from_addr = "ada@example.com".to_owned();
         for _ in 0..sends {
             app.mail_sent(Instant::now());
         }
@@ -2861,7 +2878,7 @@ Ada"
         assert_eq!(effect, load_body("m3"));
         assert_eq!(app.focus, Pane::Reader);
         app.on_mouse(Mouse::ScrollUp, hit(Pane::Messages, Some(0)));
-        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.mail.selected, 0);
     }
 
     #[test]
@@ -2875,7 +2892,7 @@ Ada"
         );
 
         assert_eq!(app.dialog, None);
-        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.mail.selected, 0);
     }
 
     #[test]
@@ -2885,7 +2902,7 @@ Ada"
 
         app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(2)));
 
-        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.mail.selected, 0);
     }
 
     #[test]
@@ -2897,7 +2914,7 @@ Ada"
             app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(1))),
             None
         );
-        assert_eq!(app.selected_message, 0);
+        assert_eq!(app.mail.selected, 0);
     }
 
     fn after(app: &AppState, seconds: u64) -> Instant {
@@ -3040,7 +3057,7 @@ Ada"
         assert_eq!(app.focus, Pane::Folders);
     }
 
-    fn ids(marked: &BTreeSet<MessageId>) -> Vec<&str> {
+    fn ids(marked: &std::collections::BTreeSet<MessageId>) -> Vec<&str> {
         marked.iter().map(|id| id.0.as_str()).collect()
     }
 
@@ -3050,11 +3067,11 @@ Ada"
 
         assert_eq!(app.update(Action::ToggleMark), load_body("m1"));
         app.update(Action::ToggleMark);
-        assert_eq!(ids(&app.marked), ["m0", "m1"]);
+        assert_eq!(ids(&app.mail.marked), ["m0", "m1"]);
 
         app.update(Action::SelectPrev);
         app.update(Action::ToggleMark);
-        assert_eq!(ids(&app.marked), ["m0"], "a second Space unmarks");
+        assert_eq!(ids(&app.mail.marked), ["m0"], "a second Space unmarks");
     }
 
     #[test]
@@ -3062,9 +3079,9 @@ Ada"
         let mut app = in_message_list(&["m0", "m1"]);
 
         app.update(Action::MarkAll);
-        assert_eq!(ids(&app.marked), ["m0", "m1"]);
+        assert_eq!(ids(&app.mail.marked), ["m0", "m1"]);
         app.update(Action::ClearMarks);
-        assert!(app.marked.is_empty());
+        assert!(app.mail.marked.is_empty());
     }
 
     #[test]
@@ -3073,10 +3090,10 @@ Ada"
         app.update(Action::MarkAll);
 
         app.refresh_messages(vec![message("m1"), message("m2")]);
-        assert_eq!(ids(&app.marked), ["m1", "m2"]);
+        assert_eq!(ids(&app.mail.marked), ["m1", "m2"]);
 
         app.set_messages(vec![message("x")]);
-        assert!(app.marked.is_empty());
+        assert!(app.mail.marked.is_empty());
     }
 
     #[test]
@@ -3087,7 +3104,7 @@ Ada"
         app.update(Action::ToggleMark);
         app.update(Action::MarkAll);
 
-        assert!(app.marked.is_empty());
+        assert!(app.mail.marked.is_empty());
     }
 
     #[test]
@@ -3149,7 +3166,7 @@ Ada"
         );
 
         assert_eq!(app.update(Action::SelectNext), None);
-        assert_eq!(app.selected_group, Some(DateGroup::Older));
+        assert_eq!(app.mail.header, Some(DateGroup::Older));
         assert_eq!(app.selected(), None);
         assert_eq!(app.update(Action::SelectNext), load_body("o1"));
     }
@@ -3158,14 +3175,14 @@ Ada"
     fn moving_skips_the_mail_of_folded_groups() {
         let mut app = with_folders(&["a"]);
         app.focus = Pane::Messages;
-        app.collapsed_groups.insert(DateGroup::Today);
+        app.mail.folded.insert(DateGroup::Today);
 
         assert_eq!(
             app.set_messages(today_and_older(&["t1", "t2"], &["o1"])),
             None,
             "the folded group's header is selected"
         );
-        assert_eq!(app.selected_group, Some(DateGroup::Today));
+        assert_eq!(app.mail.header, Some(DateGroup::Today));
         app.update(Action::SelectNext);
         assert_eq!(app.update(Action::SelectNext), load_body("o1"));
     }
@@ -3179,8 +3196,8 @@ Ada"
 
         app.refresh_messages(today_and_older(&["t0", "t1"], &["o1"]));
 
-        assert_eq!(app.selected_group, Some(DateGroup::Older));
-        assert_eq!(app.selected_message, 2);
+        assert_eq!(app.mail.header, Some(DateGroup::Older));
+        assert_eq!(app.mail.selected, 2);
     }
 
     #[test]
@@ -3193,8 +3210,8 @@ Ada"
 
         app.update(Action::Collapse);
 
-        assert!(app.collapsed_groups.contains(&DateGroup::Today));
-        assert_eq!(app.selected_group, Some(DateGroup::Today));
+        assert!(app.mail.folded.contains(&DateGroup::Today));
+        assert_eq!(app.mail.header, Some(DateGroup::Today));
         assert_eq!(app.reader.body, None, "the reader no longer shows t2");
         assert_eq!(app.update(Action::SelectNext), None, "onto Older");
         assert_eq!(app.update(Action::SelectNext), load_body("o1"));
@@ -3204,11 +3221,11 @@ Ada"
     fn right_unfolds_a_header_then_steps_into_it() {
         let mut app = with_folders(&["a"]);
         app.focus = Pane::Messages;
-        app.collapsed_groups.insert(DateGroup::Today);
+        app.mail.folded.insert(DateGroup::Today);
         app.set_messages(today_and_older(&["t1"], &["o1"]));
 
         assert_eq!(app.update(Action::Expand), None);
-        assert!(app.collapsed_groups.is_empty());
+        assert!(app.mail.folded.is_empty());
         assert_eq!(app.update(Action::Expand), load_body("t1"));
     }
 
@@ -3252,7 +3269,7 @@ Ada"
     #[test]
     fn the_zoomed_reader_skips_the_mail_of_folded_groups() {
         let mut app = with_folders(&["a"]);
-        app.collapsed_groups.insert(DateGroup::Older);
+        app.mail.folded.insert(DateGroup::Older);
         app.set_messages(today_and_older(&["t1"], &["o1", "o2"]));
         app.focus = Pane::Reader;
         app.zoomed = true;
@@ -3268,9 +3285,9 @@ Ada"
         app.update(Action::Top);
 
         app.update(Action::Open);
-        assert!(app.collapsed_groups.contains(&DateGroup::Older));
+        assert!(app.mail.folded.contains(&DateGroup::Older));
         app.update(Action::Open);
-        assert!(app.collapsed_groups.is_empty());
+        assert!(app.mail.folded.is_empty());
         assert_eq!(app.focus, Pane::Messages);
     }
 
@@ -3294,10 +3311,10 @@ Ada"
             app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(0))),
             None
         );
-        assert!(app.collapsed_groups.contains(&DateGroup::Older));
-        assert_eq!(app.selected_group, Some(DateGroup::Older));
+        assert!(app.mail.folded.contains(&DateGroup::Older));
+        assert_eq!(app.mail.header, Some(DateGroup::Older));
 
         app.on_mouse(Mouse::Click, hit(Pane::Messages, Some(0)));
-        assert!(app.collapsed_groups.is_empty());
+        assert!(app.mail.folded.is_empty());
     }
 }

@@ -23,6 +23,7 @@ pub mod help;
 pub mod input;
 pub mod keymap;
 pub mod mailboxes;
+pub mod message_list;
 pub mod mover;
 pub mod numbers;
 pub mod older;

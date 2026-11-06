@@ -1640,15 +1640,15 @@ fn draw_folder_rows(
 fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
     let query = app.results_query();
     let title = match query {
-        Some(query) => format!("Search: {} ({})", shown(query), app.messages.len()),
+        Some(query) => format!("Search: {} ({})", shown(query), app.mail.messages.len()),
         None => "Messages".to_owned(),
     };
-    let title = match app.marked.len() {
+    let title = match app.mail.marked.len() {
         0 => title,
         marked => format!("{title} ({marked} marked)"),
     };
     let block = pane_block(app, Pane::Messages, &title);
-    if app.messages.is_empty() {
+    if app.mail.messages.is_empty() {
         let empty = if query.is_some() {
             "Nothing found"
         } else if app.loading_older.is_some() {
@@ -1672,14 +1672,14 @@ fn draw_messages(frame: &mut Frame, app: &AppState, area: Rect) {
                 let title = format!("{fold} {} ({count})", group.title());
                 return ListItem::new(Line::styled(title, style));
             }
-            MessageRow::Message(index) => &app.messages[index],
+            MessageRow::Message(index) => &app.mail.messages[index],
         };
         let style = if m.is_read {
             Style::new().fg(Color::DarkGray)
         } else {
             Style::new().add_modifier(Modifier::BOLD)
         };
-        let mark = if app.marked.contains(&m.id) {
+        let mark = if app.mail.marked.contains(&m.id) {
             Span::styled("● ", Style::new().fg(Color::Yellow))
         } else {
             Span::raw("")

@@ -195,7 +195,7 @@ mod tests {
     fn the_picker_saves_from_its_message_even_if_a_sync_moves_the_selection() {
         let mut app = reading(&["a1", "a2"]);
         app.update(Action::SaveAttachments);
-        let mut other = app.messages[0].clone();
+        let mut other = app.mail.messages[0].clone();
         other.id = MessageId("m2".to_owned());
 
         app.refresh_messages(vec![other]);

@@ -15,7 +15,7 @@ impl AppState {
             let selected = self.selected();
             return selected.map(|m| m.id.clone()).into_iter().collect();
         }
-        self.messages.iter().map(|m| m.id.clone()).collect()
+        self.mail.messages.iter().map(|m| m.id.clone()).collect()
     }
 }
 
@@ -173,7 +173,7 @@ mod tests {
         let mut app = two_accounts();
         select(&mut app, "unread:work-inbox");
         app.set_messages(vec![message("m1", true), message("m2", false)]);
-        app.selected_message = 1;
+        app.mail.selected = 1;
 
         assert_eq!(app.kept_read(), ids(&["m1", "m2"]));
 
