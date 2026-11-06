@@ -1,7 +1,10 @@
 //! Whether a newer tuilook has been released. This only ever tells: installing
 //! it stays with whichever way tuilook was installed.
 
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
 use jiff::{SignedDuration, Timestamp};
@@ -107,6 +110,23 @@ pub fn current() -> Version {
 /// Whether `latest` is a newer version than `current`.
 pub fn newer(current: &Version, latest: &Version) -> bool {
     latest > current
+}
+
+/// Where `cargo install` puts binaries: `$CARGO_HOME/bin`, or `~/.cargo/bin`.
+pub fn cargo_bin() -> Option<PathBuf> {
+    let home = match std::env::var_os("CARGO_HOME") {
+        Some(home) if !home.is_empty() => PathBuf::from(home),
+        _ => directories::BaseDirs::new()?.home_dir().join(".cargo"),
+    };
+    Some(home.join("bin"))
+}
+
+/// Whether `exe` is in `cargo_bin`, where Cargo, not tuilook, keeps it
+/// up to date.
+pub fn managed_by_cargo(exe: &Path, cargo_bin: &Path) -> bool {
+    let canonical = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
+    exe.parent()
+        .is_some_and(|dir| canonical(dir) == canonical(cargo_bin))
 }
 
 /// Asks GitHub for the latest release. GitHub leaves out drafts and
@@ -252,6 +272,26 @@ mod tests {
             Some("otlk-v0.1.5-x86_64-unknown-linux-gnu.tar.gz")
         );
         assert_eq!(release.asset("aarch64-apple-darwin"), None);
+    }
+
+    #[test]
+    fn a_binary_in_cargos_bin_is_cargos() {
+        let cargo = tempfile::tempdir().unwrap();
+        let bin = cargo.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+
+        assert!(managed_by_cargo(&bin.join("otlk"), &bin));
+        assert!(managed_by_cargo(&bin.join("otlk.exe"), &bin));
+    }
+
+    #[test]
+    fn a_binary_elsewhere_is_not_cargos() {
+        let cargo = tempfile::tempdir().unwrap();
+        let bin = cargo.path().join("bin");
+        let local = cargo.path().join("local");
+
+        assert!(!managed_by_cargo(&local.join("otlk"), &bin));
+        assert!(!managed_by_cargo(&bin.join("nested").join("otlk"), &bin));
     }
 
     #[test]
