@@ -32,8 +32,8 @@ pub enum Request {
         address: String,
         delta: isize,
     },
-    /// Write the signature of the account at this index.
-    Signature(usize),
+    /// Write the signature of the account at this address.
+    Signature(String),
 }
 
 /// Which field of the form the keys go to.
@@ -96,6 +96,26 @@ impl AccountManager {
         }
     }
 
+    /// Lists the account signed in as, with what it signed in with, and
+    /// picks it.
+    pub fn signed_in(&mut self, address: String, login: Login) {
+        match self
+            .accounts
+            .iter()
+            .position(|(a, _)| a.eq_ignore_ascii_case(&address))
+        {
+            Some(at) => {
+                self.accounts[at].1 = login;
+                self.selected = at;
+            }
+            None => {
+                self.accounts.push((address, login));
+                self.selected = self.accounts.len() - 1;
+            }
+        }
+        self.mode = Mode::List;
+    }
+
     /// Back to the list, after a sign-in failed.
     pub fn sign_in_failed(&mut self) {
         self.mode = Mode::List;
@@ -139,7 +159,7 @@ impl AccountManager {
                         }
                     }
                     KeyCode::Char('d') | KeyCode::Delete => Request::Remove(address),
-                    KeyCode::Char('s') => Request::Signature(self.selected),
+                    KeyCode::Char('s') => Request::Signature(address),
                     KeyCode::Char('K') => self.move_by(address, -1),
                     KeyCode::Char('J') => self.move_by(address, 1),
                     _ => Request::None,
@@ -379,7 +399,7 @@ mod tests {
         );
         assert_eq!(
             press(&mut manager, &[KeyCode::Char('s')]),
-            Request::Signature(1)
+            Request::Signature("me@work.example".to_owned())
         );
     }
 
@@ -399,6 +419,29 @@ mod tests {
         assert_eq!(manager.accounts[1].0, "me@outlook.com");
         assert_eq!(manager.selected, 1);
         assert_eq!(press(&mut manager, &[KeyCode::Char('J')]), Request::None);
+    }
+
+    #[test]
+    fn a_new_account_signed_in_is_listed_and_picked() {
+        let mut manager = manager();
+        press(&mut manager, &[KeyCode::Char('a'), KeyCode::Enter]);
+
+        manager.signed_in("new@outlook.com".to_owned(), login("consumers"));
+
+        assert_eq!(manager.accounts.len(), 3);
+        assert_eq!(manager.picked().unwrap().0, "new@outlook.com");
+        assert_eq!(manager.mode, Mode::List);
+    }
+
+    #[test]
+    fn signing_in_again_updates_the_account_listed() {
+        let mut manager = manager();
+
+        manager.signed_in("ME@work.example".to_owned(), login("contoso"));
+
+        assert_eq!(manager.accounts.len(), 2);
+        assert_eq!(manager.accounts[1].1, login("contoso"));
+        assert_eq!(manager.selected, 1);
     }
 
     #[test]
