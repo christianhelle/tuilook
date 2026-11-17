@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `Enter` on a message opens it zoomed, the reading pane filling the screen,
-  rather than only moving to the reading pane. `z` goes back to the panes.
+  rather than only moving to the reading pane. `z` or `Esc` goes back to the
+  panes; `Esc` clears marks first, if any.
 - Internal restructuring, with no change in behaviour: one account registry
   now handles signing in, forgetting and caching for both the command line and
   the mail client. The calendar works out what to load and fetch by the app's
