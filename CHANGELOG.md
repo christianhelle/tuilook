@@ -9,8 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- A new application icon, showing mail and a calendar, on `otlk.exe` and atop
-  the README.
+- A new application icon, showing mail and a calendar, on `otlk.exe`.
 
 ## [0.1.6] - 2026-11-17
 
