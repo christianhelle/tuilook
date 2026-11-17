@@ -298,14 +298,14 @@ there next time.
 | Keys | What they do |
 | --- | --- |
 | `Tab` / `Shift-Tab` | Next pane / previous pane |
-| `Enter` | Open the folder, open the message zoomed (`z` leaves the zoom), or fold or unfold a date group |
+| `Enter` | Open the folder, open the message zoomed (`z` or `Esc` leaves the zoom), or fold or unfold a date group |
 | `j` `k` or `↓` `↑` | Move |
 | `l` `h` or `→` `←` | Expand a folder or date group, collapse it or go up; in the reading pane, `→` `←` show the next or previous mail |
 | `*` | Add the folder to Favorites, or take it out |
 | `PgDn` `PgUp` or `Ctrl-F` `Ctrl-B` | Move or scroll a page |
 | `Ctrl-D` `Ctrl-U` | Move or scroll half a page |
 | `gg` `G` or `Home` `End` | Jump to the first or last |
-| `z` | Zoom the focused pane, or show every pane again |
+| `z` | Zoom the focused pane, or show every pane again (`Esc` too) |
 | `b` | Hide or show the folders |
 | `L` | Move the reading pane below the messages, or back right of them |
 | `F5` or `Ctrl-R` | Sync every folder now |
