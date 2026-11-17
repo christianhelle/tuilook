@@ -677,6 +677,7 @@ impl AppState {
                 return self.move_selection(1);
             }
             Action::MarkAll if self.focus == Pane::Messages => self.mail.mark_all(),
+            Action::ClearMarks if self.mail.marked.is_empty() && self.zoomed => self.zoomed = false,
             Action::ClearMarks if self.mail.marked.is_empty() => return self.leave_search(),
             Action::ClearMarks => self.mail.marked.clear(),
             Action::ToggleMark | Action::MarkAll => {}
@@ -1714,6 +1715,31 @@ Dear Charles,"
         app.update(Action::Open);
 
         assert_eq!(app.zoomed_pane(), Some(Pane::Reader));
+    }
+
+    #[test]
+    fn esc_leaves_the_zoom() {
+        let mut app = in_message_list(&["m1"]);
+        app.update(Action::Open);
+
+        key(&mut app, KeyCode::Esc);
+
+        assert_eq!(app.zoomed_pane(), None);
+        assert_eq!(app.focus, Pane::Reader);
+    }
+
+    #[test]
+    fn esc_clears_the_marks_before_leaving_the_zoom() {
+        let mut app = in_message_list(&["m0", "m1"]);
+        app.update(Action::MarkAll);
+        app.update(Action::ToggleZoom);
+
+        key(&mut app, KeyCode::Esc);
+        assert!(app.mail.marked.is_empty());
+        assert!(app.zoomed);
+
+        key(&mut app, KeyCode::Esc);
+        assert!(!app.zoomed);
     }
 
     #[test]
