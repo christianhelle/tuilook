@@ -157,7 +157,7 @@ pub const SIGNATURE_HELP: [(&str, &str); 9] = [
 /// What each key does, shown with `?`.
 pub const HELP: [(&str, &str); 23] = [
     ("Tab / Shift-Tab", "Next pane / previous pane"),
-    ("Enter", "Open the folder or message, fold a date group"),
+    ("Enter", "Open the folder, zoom a message, fold a group"),
     (
         "→ ←  l h",
         "Unfold/fold folder or group; → ← next/prev mail",

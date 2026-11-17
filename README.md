@@ -298,7 +298,7 @@ there next time.
 | Keys | What they do |
 | --- | --- |
 | `Tab` / `Shift-Tab` | Next pane / previous pane |
-| `Enter` | Open the folder or message, or fold or unfold a date group |
+| `Enter` | Open the folder, open the message zoomed (`z` leaves the zoom), or fold or unfold a date group |
 | `j` `k` or `↓` `↑` | Move |
 | `l` `h` or `→` `←` | Expand a folder or date group, collapse it or go up; in the reading pane, `→` `←` show the next or previous mail |
 | `*` | Add the folder to Favorites, or take it out |
