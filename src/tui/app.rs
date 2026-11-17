@@ -1268,7 +1268,10 @@ impl AppState {
     fn open(&mut self) {
         match self.focus {
             Pane::Folders if !self.folder_pane.folders.is_empty() => self.focus = Pane::Messages,
-            Pane::Messages if !self.mail.messages.is_empty() => self.focus = Pane::Reader,
+            Pane::Messages if !self.mail.messages.is_empty() => {
+                self.focus = Pane::Reader;
+                self.zoomed = true;
+            }
             _ => {}
         }
     }
@@ -1705,12 +1708,22 @@ Dear Charles,"
     }
 
     #[test]
+    fn opening_a_message_zooms_the_reader() {
+        let mut app = in_message_list(&["m1"]);
+
+        app.update(Action::Open);
+
+        assert_eq!(app.zoomed_pane(), Some(Pane::Reader));
+    }
+
+    #[test]
     fn opening_in_an_empty_message_list_does_nothing() {
         let mut app = in_message_list(&[]);
 
         app.update(Action::Open);
 
         assert_eq!(app.focus, Pane::Messages);
+        assert!(!app.zoomed);
     }
 
     fn load_body(id: &str) -> Option<Effect> {
@@ -3172,6 +3185,7 @@ Ada"
         app.update(Action::Open);
         assert!(app.mail.folded.is_empty());
         assert_eq!(app.focus, Pane::Messages);
+        assert!(!app.zoomed);
     }
 
     #[test]
