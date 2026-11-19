@@ -208,7 +208,7 @@ impl Compose {
         match field {
             Field::From => !self.can_switch_sender(),
             Field::Attachments => self.attachments.is_empty(),
-            Field::Original => self.original.is_none() || !self.original_pane.shown,
+            Field::Original => !self.shows_original(),
             _ => false,
         }
     }

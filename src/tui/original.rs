@@ -32,13 +32,13 @@ impl Original {
     }
 
     /// What the pane is called: what the message being written does to the
-    /// original, who sent it and when.
+    /// original, who sent it and when. Only a reply or forward has one.
     pub fn title(&self, kind: &ComposeKind, original: &Message, zone: &TimeZone) -> String {
         let doing = match kind {
-            ComposeKind::New => "Original",
             ComposeKind::Reply(_) => "Replying to",
             ComposeKind::ReplyAll(_) => "Replying to all",
             ComposeKind::Forward(_) => "Forwarding",
+            ComposeKind::New => "Original",
         };
         let who = if original.from_name.is_empty() {
             shown(&original.from_addr)
