@@ -390,7 +390,9 @@ over several rows is numbered on its first.
 
 What you copy is also kept to put with `p` or `P` in normal mode while writing
 a message or a signature, as in Vim. Text deleted or yanked while writing is
-kept the same way, from one message to the next.
+kept the same way, from one message to the next. The original message shown
+beside a reply works the same way, so text copied from it can be put straight
+into the reply.
 
 Keys the cursor has no use for work as they do in the other panes, so `r`
 replies and `d` deletes. In the reading pane `b` moves back a word; hide the
@@ -472,11 +474,18 @@ The compose screen has To, Cc and Subject fields and a body. Separate several
 addresses with `,` or `;`. Replies and forwards quote the original the way
 Outlook does.
 
+A reply, reply to all or forward shows the message it answers beside the body,
+greyed out under a title naming who sent it and when, so you can read it
+without leaving the message you are writing. `Tab` to it to move about and
+copy from it; `Ctrl-O` hides it and shows it again. On a screen narrower than
+100 columns it sits below the body instead of beside it.
+
 | Keys | What they do |
 | --- | --- |
 | `Tab` / `Shift-Tab` | Next field / previous field |
 | `Enter` `↓` `↑` | Move between To, Cc and Subject |
 | `Ctrl-A` | Attach a file |
+| `Ctrl-O` | Hide or show the original message |
 | `Ctrl-S` | Send |
 | `Esc` (in a field or in normal mode) | Close, asking first if anything was written |
 | `?` (in normal mode) | Show the keys |
