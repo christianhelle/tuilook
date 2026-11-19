@@ -550,6 +550,26 @@ fn the_original_can_be_hidden_and_shown_again() {
 }
 
 #[test]
+fn the_original_shows_the_preview_until_its_body_arrives() {
+    let mut app = sample_app();
+    // Replying before the body has loaded.
+    press(&mut app, "rAgreed⎋");
+
+    let preview = render_wide(&app);
+    assert!(preview.contains("Notes on the engine"), "{preview}");
+
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "The engine weaves algebraic patterns.".to_owned(),
+        vec![],
+    );
+
+    let loaded = render_wide(&app);
+    assert!(loaded.contains("The engine weaves"), "{loaded}");
+    assert!(!loaded.contains("Notes on the engine"), "the preview went");
+}
+
+#[test]
 fn a_narrow_screen_puts_the_original_under_the_reply() {
     let mut terminal = Terminal::new(TestBackend::new(90, 30)).unwrap();
     terminal.draw(|frame| ui::draw(frame, &replying())).unwrap();
