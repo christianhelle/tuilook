@@ -8,6 +8,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::tui::{
     editor::Editor,
     input::TextInput,
+    original::Original,
     vim::{self, Outcome, Register, VimMode},
 };
 
@@ -68,6 +69,10 @@ pub enum Request {
 #[derive(Debug)]
 pub struct Compose {
     pub kind: ComposeKind,
+    /// The message this answers or forwards, to show beside the body.
+    pub original: Option<Message>,
+    /// The pane showing `original`, when there is one.
+    pub original_pane: Original,
     pub to: TextInput,
     pub cc: TextInput,
     pub subject: TextInput,
@@ -103,6 +108,8 @@ impl Compose {
         };
         let mut compose = Compose {
             kind,
+            original: original.cloned(),
+            original_pane: Original::default(),
             to: TextInput::from(to.as_str()),
             cc: TextInput::default(),
             subject: TextInput::from(subject.as_str()),
@@ -425,6 +432,14 @@ mod tests {
     fn ctrl_s(compose: &mut Compose) -> Request {
         let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
         compose.key(ctrl_s, 10, &mut Register::default())
+    }
+
+    #[test]
+    fn a_reply_keeps_the_message_it_answers_and_a_new_message_has_none() {
+        let reply = Compose::new(reply(), Some(&original()));
+
+        assert_eq!(reply.original.as_ref().map(|m| m.id.0.as_str()), Some("m1"));
+        assert_eq!(Compose::new(ComposeKind::New, None).original, None);
     }
 
     #[test]
