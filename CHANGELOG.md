@@ -11,14 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A reply, reply to all or forward shows the message it answers beside the
   body, greyed out under a title naming who sent it and when, so it can be
-  read without leaving the message being written. `Tab` reaches it, its
-  cursor moves as in the reading pane, and `v` `V` with `y` copy from it,
-  into the reply too with `p`. `Ctrl-O` hides it and shows it again. On a
-  screen narrower than 100 columns it sits below the body instead of beside
-  it.
+  read without leaving the message being written. `Tab` reaches it, where
+  `j` `k`, `PgUp` `PgDn`, `Ctrl-D` `Ctrl-U` and `gg` `G` scroll it, and `v`
+  `V` with `y` copy from it, into the reply too with `p`. `Ctrl-O` hides it
+  and shows it again. On a screen narrower than 100 columns it sits below the
+  body instead of beside it.
 
 ### Changed
 
+- Long lines in the body, the signature and an appointment's notes wrap at
+  spaces to fit the pane, so a line is written in one piece and folds on
+  screen. A wrapped line is numbered on its first row.
 - A new application icon, showing mail and a calendar, on `otlk.exe`.
 
 ## [0.1.6] - 2026-11-17
