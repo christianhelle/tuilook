@@ -28,7 +28,7 @@ pub fn table(screen: &Screen) -> &'static [Row] {
 pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
     match &app.screen {
         Screen::Compose(compose) if compose.field == Field::Original => {
-            " v V pick · y copy · Tab next field · Esc back to body · Ctrl-O hide · ? help"
+            " j k scroll · v V pick · y copy · Esc back to body · Ctrl-O hide · ? help"
         }
         Screen::Compose(compose) if compose.field == Field::From => {
             " ← → change sender · Ctrl-S send · Tab next field · Esc close · ? help"
@@ -86,10 +86,7 @@ pub const COMPOSE_HELP: [(&str, &str); 15] = [
     ("Enter  ↑ ↓", "Move between From, To, Cc and Subject"),
     ("← →  in From", "Change the account it is sent from"),
     ("Ctrl-O", "Hide or show the original message"),
-    (
-        "in the original",
-        "v V pick and y copy, Esc back to the body",
-    ),
+    ("in the original", "j k PgUp PgDn scroll; v V pick, y copy"),
     ("a, b; c", "Separate several addresses"),
     ("i a I A o O", "Type in the body, insert mode"),
     ("Esc", "Back to normal mode"),

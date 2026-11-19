@@ -7,7 +7,7 @@ expression: render_tall(&app)
 "┃Cc:   │Enter  ↑ ↓               Move between From, To, Cc and Subject            │      ┃"
 "┃Subjec│← →  in From             Change the account it is sent from               │      ┃"
 "┃──────│Ctrl-O                   Hide or show the original message                │──────┃"
-"┃1     │in the original          v V pick and y copy, Esc back to the body        │      ┃"
+"┃1     │in the original          j k PgUp PgDn scroll; v V pick, y copy           │      ┃"
 "┃      │a, b; c                  Separate several addresses                       │      ┃"
 "┃      │i a I A o O              Type in the body, insert mode                    │      ┃"
 "┃      │Esc                      Back to normal mode                              │      ┃"

@@ -476,9 +476,14 @@ Outlook does.
 
 A reply, reply to all or forward shows the message it answers beside the body,
 greyed out under a title naming who sent it and when, so you can read it
-without leaving the message you are writing. `Tab` to it to move about and
-copy from it; `Ctrl-O` hides it and shows it again. On a screen narrower than
-100 columns it sits below the body instead of beside it.
+without leaving the message you are writing. `Tab` to it to scroll it with
+`j` `k`, `PgUp` `PgDn`, `Ctrl-D` `Ctrl-U` or `gg` `G`, and to copy from it;
+`Ctrl-O` hides it and shows it again. On a screen narrower than 100 columns it
+sits below the body instead of beside it.
+
+Long lines in the body wrap at spaces to fit the pane, so you write them in
+one line and they fold on screen. The signature and an appointment's notes
+wrap the same way.
 
 | Keys | What they do |
 | --- | --- |
@@ -504,7 +509,8 @@ The body is edited vim style. It starts in normal mode; press `i` to type.
 | `v` `V` | Select characters / lines |
 
 Counts work too, like `3dd` or `5j`. The body's lines are numbered as in the
-reading pane, by how far each is from the cursor.
+reading pane, by how far each is from the cursor, and a line wrapped over
+several rows is numbered on its first.
 
 `Ctrl-A` opens a file picker, starting in your Documents folder and then
 wherever you last attached from. Type part of a name to narrow the list, `↑`
