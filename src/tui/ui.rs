@@ -182,7 +182,7 @@ pub fn draw(frame: &mut Frame, app: &AppState) {
     }
     match &app.screen {
         Screen::Panes => {}
-        Screen::Compose(message) => draw_compose(frame, message, compose),
+        Screen::Compose(message) => draw_compose(frame, app, message, compose),
         Screen::Signature(editor) => draw_signature(frame, app, editor, compose),
         Screen::Agenda {
             form: Some(form), ..
@@ -837,27 +837,37 @@ struct ComposeAreas {
     /// The files attached, once there are any.
     attachments: Rect,
     rule: Rect,
-    /// Says the original is quoted below, for a reply or forward.
-    note: Rect,
+    /// The body being written, and the original beside or below it.
     body: Rect,
+    original: Rect,
 }
+
+/// Inside this many columns the reply and the original sit one above the
+/// other rather than side by side, so neither is too narrow to read.
+const ORIGINAL_BESIDE_MIN: u16 = 100;
 
 fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
     let inner = Block::bordered().inner(area);
-    let note = u16::from(compose.quotes_original());
     let from = u16::from(compose.from().is_some());
     let attachments = u16::from(!compose.attachments.is_empty());
-    let [from, to, cc, subject, attachments, rule, note, body] = Layout::vertical([
+    let [from, to, cc, subject, attachments, rule, text] = Layout::vertical([
         Constraint::Length(from),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(attachments),
         Constraint::Length(1),
-        Constraint::Length(note),
         Constraint::Fill(1),
     ])
     .areas(inner);
+    let [body, original] = match compose.shows_original() {
+        true if text.width >= ORIGINAL_BESIDE_MIN => {
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(text)
+        }
+        true => Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .areas(text),
+        false => [text, Rect::default()],
+    };
     ComposeAreas {
         from,
         to,
@@ -865,15 +875,15 @@ fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
         subject,
         attachments,
         rule,
-        note,
         body,
+        original,
     }
 }
 
 /// Width of the labels in front of the header fields.
 const LABEL_WIDTH: u16 = 9;
 
-fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
+fn draw_compose(frame: &mut Frame, app: &AppState, compose: &Compose, area: Rect) {
     let title = match compose.kind {
         ComposeKind::New => "New message",
         ComposeKind::Reply(_) => "Reply",
@@ -956,20 +966,63 @@ fn draw_compose(frame: &mut Frame, compose: &Compose, area: Rect) {
         Line::styled(rule, Style::new().fg(Color::DarkGray)),
         areas.rule,
     );
-    if !areas.note.is_empty() {
-        let note = Style::new()
-            .fg(Color::DarkGray)
-            .add_modifier(Modifier::ITALIC);
-        frame.render_widget(
-            Line::styled("The original message is quoted below what you write", note),
-            areas.note,
-        );
+    if !areas.original.is_empty() {
+        draw_original(frame, app, compose, areas.original);
     }
     draw_body(
         frame,
         &compose.body,
         compose.field == Field::Body,
         areas.body,
+    );
+}
+
+/// The message being answered, greyed out beside the reply so it can be
+/// read and copied from without leaving the message being written.
+fn draw_original(frame: &mut Frame, app: &AppState, compose: &Compose, area: Rect) {
+    let Some(original) = &compose.original else {
+        return;
+    };
+    let zone = app.now().time_zone().clone();
+    let focused = compose.field == Field::Original;
+    let block = section_block(focused, &compose.original_pane.title(&compose.kind, original, &zone));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let lines = app.reader.text(original, &zone);
+    let dim = Style::new().fg(Color::DarkGray);
+    let numbers = numbers::gutter_width(lines.len());
+    let [gutter, text] =
+        Layout::horizontal([Constraint::Length(numbers), Constraint::Fill(1)]).areas(inner);
+    let (cursor, _) = compose.original_pane.viewer.cursor();
+    let selection = compose.original_pane.viewer.selection();
+    // A line wrapped over several rows is numbered on its first, as the
+    // reading pane numbers its own.
+    let width = text.width.max(1);
+    let rows: Vec<usize> = lines
+        .iter()
+        .map(|line| {
+            Paragraph::new(line.as_str())
+                .wrap(Wrap { trim: false })
+                .line_count(width)
+        })
+        .collect();
+    let labels: Vec<Line> = rows
+        .iter()
+        .enumerate()
+        .flat_map(|(index, &tall)| {
+            let label = Line::styled(numbers::label(index, cursor, numbers), dim);
+            std::iter::once(label).chain(std::iter::repeat_n(Line::raw(""), tall.saturating_sub(1)))
+        })
+        .collect();
+    let body: Vec<Line> = lines
+        .iter()
+        .enumerate()
+        .map(|(index, line)| picked_line(line, index, 0, selection))
+        .collect();
+    frame.render_widget(Paragraph::new(labels), gutter);
+    frame.render_widget(
+        Paragraph::new(body).wrap(Wrap { trim: false }).style(dim),
+        text,
     );
 }
 

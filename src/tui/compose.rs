@@ -239,9 +239,10 @@ impl Compose {
         }
     }
 
-    /// Whether the original is quoted below the body when it is sent.
-    pub fn quotes_original(&self) -> bool {
-        self.kind != ComposeKind::New
+    /// Whether the original is shown beside the body: there is one, and the
+    /// pane has not been hidden.
+    pub fn shows_original(&self) -> bool {
+        self.original.is_some() && self.original_pane.shown
     }
 
     /// Acts on a key, paging the body by `page` lines. Text is deleted or

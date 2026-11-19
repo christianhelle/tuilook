@@ -476,11 +476,92 @@ fn ctrl_a_picks_a_file_to_attach() {
 }
 
 #[test]
-fn a_reply_notes_the_original_is_quoted_and_shows_the_vim_mode() {
+fn a_reply_shows_the_original_and_the_vim_mode() {
     let mut app = sample_app();
     press(&mut app, "rAgreed⎋");
 
     insta::assert_snapshot!(render_tall(&app));
+}
+
+/// A screen 140 columns wide and 20 tall, wide enough for the reply and the
+/// original side by side.
+fn render_wide(app: &AppState) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(140, 20)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, app)).unwrap();
+    terminal.backend().to_string()
+}
+
+/// A reply to `m1`, whose body is loaded, ready to send.
+fn replying() -> AppState {
+    let mut app = sample_app();
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "Dear Charles,\n\nThe engine weaves algebraic patterns.".to_owned(),
+        vec![],
+    );
+    press(&mut app, "rAgreed⎋");
+    app
+}
+
+#[test]
+fn a_reply_shows_the_message_it_answers() {
+    let screen = render_wide(&replying());
+
+    assert!(screen.contains("Replying to"), "{screen}");
+    assert!(screen.contains("Ada"), "who sent it");
+    assert!(screen.contains("The engine weaves"), "and what it said");
+    assert!(screen.contains("Agreed"), "beside what is being written");
+}
+
+#[test]
+fn a_reply_names_forwarding_and_replying_to_all_differently() {
+    for (keys, said) in [("f", "Forwarding"), ("R", "Replying to all")] {
+        let mut app = sample_app();
+        app.body_loaded(MessageId("m1".to_owned()), "Dear".to_owned(), vec![]);
+        press(&mut app, keys);
+
+        let screen = render_wide(&app);
+
+        assert!(screen.contains(said), "{keys}: {screen}");
+    }
+}
+
+#[test]
+fn a_new_message_shows_no_original() {
+    let mut app = sample_app();
+    press(&mut app, "cada@example.com⇥⇥Lunch⇥iShall we?");
+
+    let screen = render_wide(&app);
+
+    assert!(!screen.contains("Replying to"), "{screen}");
+    assert!(!screen.contains("Original"), "{screen}");
+}
+
+#[test]
+fn the_original_can_be_hidden_and_shown_again() {
+    let mut app = replying();
+    assert!(render_wide(&app).contains("The engine weaves"));
+
+    app.screen.compose_mut().unwrap().original_pane.toggle();
+
+    let screen = render_wide(&app);
+    assert!(!screen.contains("The engine weaves"), "hidden: {screen}");
+    assert!(screen.contains("Agreed"), "the reply stays");
+}
+
+#[test]
+fn a_narrow_screen_puts_the_original_under_the_reply() {
+    let mut terminal = Terminal::new(TestBackend::new(90, 30)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &replying())).unwrap();
+    let screen = terminal.backend().to_string();
+
+    let body = screen.lines().position(|l| l.contains("Agreed")).unwrap();
+    let original = screen
+        .lines()
+        .position(|l| l.contains("The engine weaves"))
+        .unwrap();
+    assert!(body < original, "the reply is above the original:\n{screen}");
+    assert!(screen.contains("Replying to"), "{screen}");
 }
 
 #[test]
