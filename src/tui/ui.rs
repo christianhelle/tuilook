@@ -30,6 +30,7 @@ use crate::tui::{
     screen::Screen,
     signature::SignatureEditor,
     vim::VimMode,
+    wrap::Wrapped,
 };
 
 /// Mail text made safe to draw. Mail is full of characters that take no room
@@ -1381,8 +1382,25 @@ fn draw_signature(frame: &mut Frame, app: &AppState, editor: &SignatureEditor, a
     draw_body(frame, &editor.body, true, body);
 }
 
-/// Text being written, scrolled so the cursor is in view. The cursor shows
-/// when `focused`.
+/// One wrapped row of line `index`, its characters at `start` in the line,
+/// with the characters in a visual mode's `selection` reversed.
+fn picked_row(text: &str, index: usize, start: usize, selection: Option<(Pos, Pos)>) -> Line<'static> {
+    let picked = Style::new().add_modifier(Modifier::REVERSED);
+    let selected =
+        |at| selection.is_some_and(|(first, last)| first <= (index, at) && (index, at) <= last);
+    let spans: Vec<Span> = text
+        .chars()
+        .enumerate()
+        .map(|(nth, c)| match selected(start + nth) {
+            true => Span::styled(c.to_string(), picked),
+            false => Span::raw(c.to_string()),
+        })
+        .collect();
+    Line::from(spans)
+}
+
+/// Text being written, wrapped to the pane and scrolled so the cursor is in
+/// view. The cursor shows when `focused`.
 fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
     let numbers = numbers::gutter_width(editor.lines().len());
     let [gutter, area] =
@@ -1390,23 +1408,37 @@ fn draw_body(frame: &mut Frame, editor: &Editor, focused: bool, area: Rect) {
     let height = usize::from(area.height);
     let width = usize::from(area.width).max(1);
     let (row, column) = editor.cursor();
-    let top = editor.scroll(height);
-    let left = column.saturating_sub(width - 1);
+    let wrapped = Wrapped::new(editor.lines(), width);
+    // The first row shown, and where the cursor is among all the rows.
+    let top = editor.scroll(height, width);
+    let (cursor_row, cursor_column) = wrapped.place(row, column);
     let selection = editor.vim.selection((row, column));
-    let shown = editor.lines().iter().enumerate().skip(top).take(height);
-    let labels: Vec<Line> = shown
-        .clone()
-        .map(|(index, _)| number_line(index, row, numbers))
-        .collect();
+    let mut labels = Vec::with_capacity(height);
+    let mut lines = Vec::with_capacity(height);
+    let mut at = 0;
+    for (index, _) in editor.lines().iter().enumerate() {
+        for (nth, wrapped_row) in wrapped.line_rows(index).iter().enumerate() {
+            if at >= top && at < top + height {
+                // Only the first row of a line is numbered.
+                labels.push(match nth {
+                    0 => number_line(index, row, numbers),
+                    _ => Line::raw(""),
+                });
+                let text = &wrapped_row.text;
+                lines.push(picked_row(text, index, wrapped_row.start, selection));
+            }
+            at += 1;
+        }
+        if at >= top + height {
+            break;
+        }
+    }
     frame.render_widget(Paragraph::new(labels), gutter);
-    let lines: Vec<Line> = shown
-        .map(|(index, line)| picked_line(line, index, left, selection))
-        .collect();
     frame.render_widget(Paragraph::new(lines), area);
     if focused {
-        let x = u16::try_from(column - left).unwrap_or(u16::MAX);
-        let y = u16::try_from(row - top).unwrap_or(u16::MAX);
-        frame.set_cursor_position((area.x + x, area.y + y));
+        let x = u16::try_from(cursor_column).unwrap_or(u16::MAX);
+        let y = u16::try_from(cursor_row.saturating_sub(top)).unwrap_or(u16::MAX);
+        frame.set_cursor_position((area.x + x.min(area.width.saturating_sub(1)), area.y + y));
     }
 }
 
@@ -1959,7 +1991,25 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
             } => usize::from(appointment_areas(panes.compose, form).notes.height),
             Screen::Panes | Screen::Agenda { form: None, .. } => 0,
         },
+        compose_width: match &app.screen {
+            Screen::Compose(compose) => {
+                body_width(compose_areas(panes.compose, compose).body, &compose.body)
+            }
+            Screen::Signature(editor) => {
+                body_width(signature_areas(panes.compose)[1], &editor.body)
+            }
+            Screen::Agenda {
+                form: Some(form), ..
+            } => body_width(appointment_areas(panes.compose, form).notes, &form.notes),
+            Screen::Panes | Screen::Agenda { form: None, .. } => 0,
+        },
     }
+}
+
+/// Columns text is wrapped to in `area`, past the line numbers.
+fn body_width(area: Rect, editor: &Editor) -> u16 {
+    let numbers = numbers::gutter_width(editor.lines().len());
+    area.width.saturating_sub(numbers).max(1)
 }
 
 #[cfg(test)]

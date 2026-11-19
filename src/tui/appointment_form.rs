@@ -171,9 +171,16 @@ impl AppointmentForm {
         self.step(Field::ORDER.len() - 1);
     }
 
-    /// Acts on a key, paging the notes by `page` lines. Text is deleted or
-    /// yanked into `register` and put from it.
-    pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
+    /// Acts on a key, paging the notes by `page` rows and wrapping them to
+    /// `width` columns. Text is deleted or yanked into `register` and put
+    /// from it.
+    pub fn key(
+        &mut self,
+        key: KeyEvent,
+        page: usize,
+        width: usize,
+        register: &mut Register,
+    ) -> Request {
         if self.saving {
             return Request::None;
         }
@@ -182,15 +189,21 @@ impl AppointmentForm {
             KeyCode::Char('s') if ctrl => return self.save(),
             KeyCode::Tab => self.next_field(),
             KeyCode::BackTab => self.prev_field(),
-            _ if self.field == Field::Notes => return self.notes_key(key, page, register),
+            _ if self.field == Field::Notes => return self.notes_key(key, page, width, register),
             _ => return self.field_key(key),
         }
         Request::None
     }
 
-    fn notes_key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
+    fn notes_key(
+        &mut self,
+        key: KeyEvent,
+        page: usize,
+        width: usize,
+        register: &mut Register,
+    ) -> Request {
         let outcome = vim::key(&mut self.notes, key, page, register);
-        self.notes.follow(page);
+        self.notes.follow(page, width);
         match outcome {
             Outcome::Leave => self.close(),
             Outcome::Unhandled if key.code == KeyCode::Char('?') => Request::Help,
@@ -315,7 +328,7 @@ mod tests {
     }
 
     fn press(form: &mut AppointmentForm, code: KeyCode) -> Request {
-        form.key(KeyEvent::from(code), 10, &mut Register::default())
+        form.key(KeyEvent::from(code), 10, 80, &mut Register::default())
     }
 
     /// Types `keys`, where ⎋ is Esc, ⇥ is Tab and ⌫ is Backspace.
@@ -335,7 +348,7 @@ mod tests {
 
     fn ctrl_s(form: &mut AppointmentForm) -> Request {
         let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
-        form.key(ctrl_s, 10, &mut Register::default())
+        form.key(ctrl_s, 10, 80, &mut Register::default())
     }
 
     /// Empties the field keys are in, of up to 20 characters.

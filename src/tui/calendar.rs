@@ -126,7 +126,12 @@ impl AppState {
     pub(crate) fn appointment_key(&mut self, key: KeyEvent) -> Option<Effect> {
         let account = self.screen.agenda()?.account;
         let form = self.screen.appointment_mut()?;
-        match form.key(key, self.viewport.compose, &mut self.register) {
+        match form.key(
+            key,
+            self.viewport.compose,
+            usize::from(self.viewport.compose_width),
+            &mut self.register,
+        ) {
             appointment_form::Request::None => {}
             appointment_form::Request::Save { id, draft } => {
                 self.show_busy("Saving…");

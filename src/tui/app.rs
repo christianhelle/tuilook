@@ -255,6 +255,8 @@ pub struct Viewport {
     pub reader_width: u16,
     /// Body lines that fit while writing a message.
     pub compose: usize,
+    /// Columns the body wraps its lines to while writing a message.
+    pub compose_width: u16,
 }
 
 /// Everything the UI shows. Rendering is a pure function of this state.
@@ -450,7 +452,12 @@ impl AppState {
     /// A key for the message being written.
     fn compose_key(&mut self, key: KeyEvent) -> Option<Effect> {
         let compose = self.screen.compose_mut()?;
-        match compose.key(key, self.viewport.compose, &mut self.register) {
+        match compose.key(
+            key,
+            self.viewport.compose,
+            usize::from(self.viewport.compose_width),
+            &mut self.register,
+        ) {
             Request::None => {}
             Request::Send(draft) => {
                 let account = compose.account;
@@ -484,7 +491,12 @@ impl AppState {
     /// A key for the signature being written.
     fn signature_key(&mut self, key: KeyEvent) -> Option<Effect> {
         let editor = self.screen.signature_mut()?;
-        match editor.key(key, self.viewport.compose, &mut self.register) {
+        match editor.key(
+            key,
+            self.viewport.compose,
+            usize::from(self.viewport.compose_width),
+            &mut self.register,
+        ) {
             signature::Request::None => {}
             signature::Request::Save(text) => {
                 let account = editor.account;

@@ -1,6 +1,6 @@
 //! Several lines of editable text, for writing mail.
 
-use crate::tui::vim::Vim;
+use crate::tui::{vim::Vim, wrap::Wrapped};
 
 /// A place in the text, as the line and the characters from its start.
 pub type Pos = (usize, usize);
@@ -11,7 +11,7 @@ pub struct Editor {
     lines: Vec<String>,
     row: usize,
     column: usize,
-    /// The first line shown, kept until the cursor leaves the lines shown.
+    /// The first row shown, kept until the cursor leaves the rows shown.
     top: usize,
     /// The text before each change, latest last, to undo them.
     undone: Vec<Snapshot>,
@@ -160,22 +160,25 @@ impl Editor {
         self.column = column.min(self.len());
     }
 
-    /// The first line to show, when this many lines show at once:
-    /// where it was, scrolled only as far as it takes to show the cursor.
-    pub fn scroll(&self, height: usize) -> usize {
+    /// The first row to show, when this many rows show at once, lines
+    /// wrapped to `width`: where it was, scrolled only as far as it takes to
+    /// show the cursor.
+    pub fn scroll(&self, height: usize, width: usize) -> usize {
         let height = height.max(1);
-        if self.row < self.top {
-            self.row
-        } else if self.row >= self.top + height {
-            self.row + 1 - height
+        let wrapped = Wrapped::new(&self.lines, width);
+        let (cursor, _) = wrapped.place(self.row, self.column);
+        if cursor < self.top {
+            cursor
+        } else if cursor >= self.top + height {
+            cursor + 1 - height
         } else {
             self.top
         }
     }
 
-    /// Keeps the lines shown where they are, unless the cursor left them.
-    pub fn follow(&mut self, height: usize) {
-        self.top = self.scroll(height);
+    /// Keeps the rows shown where they are, unless the cursor left them.
+    pub fn follow(&mut self, height: usize, width: usize) {
+        self.top = self.scroll(height, width);
     }
 
     /// How many characters the widest line number takes, at least two.
@@ -719,15 +722,37 @@ mod tests {
     fn the_lines_shown_scroll_only_when_the_cursor_leaves_them() {
         let mut editor = typed("a");
         (0..9).for_each(|_| editor.newline());
-        editor.follow(4);
-        assert_eq!(editor.scroll(4), 6);
+        editor.follow(4, 80);
+        assert_eq!(editor.scroll(4, 80), 6);
 
         editor.up();
-        editor.follow(4);
-        assert_eq!(editor.scroll(4), 6);
+        editor.follow(4, 80);
+        assert_eq!(editor.scroll(4, 80), 6);
         editor.page_up(4);
-        editor.follow(4);
-        assert_eq!(editor.scroll(4), 4);
+        editor.follow(4, 80);
+        assert_eq!(editor.scroll(4, 80), 4);
+    }
+
+    #[test]
+    fn a_wrapped_line_takes_more_of_the_pane_than_one_row() {
+        // Four lines of 15 characters each wrap onto two rows at 10 columns.
+        let mut editor = text(
+            "aaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbb\nccccccccccccccc\nddddddddddddddd",
+        );
+        editor.move_to(3, 0);
+
+        // The cursor is on row 6, so four rows show from row 3: one row of
+        // the line above, and both rows of the line above that.
+        assert_eq!(editor.scroll(4, 10), 3);
+    }
+
+    #[test]
+    fn a_wrapped_cursor_scrolls_to_the_row_it_is_on() {
+        let mut editor = text("aaa bbb ccc ddd\neee");
+        // At 7 columns line 0 is "aaa bbb" then "ccc ddd".
+        editor.move_to(0, 12);
+
+        assert_eq!(editor.scroll(1, 7), 1, "the second row of the line");
     }
 
     fn text(text: &str) -> Editor {

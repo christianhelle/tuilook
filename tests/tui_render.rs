@@ -316,6 +316,7 @@ fn viewport_measures_what_each_pane_can_show() {
             // The line numbers take four of the 34 columns inside the border
             reader_width: 30,
             compose: 0,
+            compose_width: 0,
         }
     );
 }

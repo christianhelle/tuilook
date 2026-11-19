@@ -245,9 +245,15 @@ impl Compose {
         self.original.is_some() && self.original_pane.shown
     }
 
-    /// Acts on a key, paging the body by `page` lines. Text is deleted or
-    /// yanked into `register` and put from it.
-    pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
+    /// Acts on a key, paging by `page` rows and wrapping to `width`
+    /// columns. Text is deleted or yanked into `register` and put from it.
+    pub fn key(
+        &mut self,
+        key: KeyEvent,
+        page: usize,
+        width: usize,
+        register: &mut Register,
+    ) -> Request {
         if self.sending {
             return Request::None;
         }
@@ -265,7 +271,7 @@ impl Compose {
             }
             KeyCode::Tab => self.next_field(),
             KeyCode::BackTab => self.prev_field(),
-            _ if self.field == Field::Body => return self.body_key(key, page, register),
+            _ if self.field == Field::Body => return self.body_key(key, page, width, register),
             _ if self.field == Field::Original => {
                 return self.original_key(key, page, register);
             }
@@ -287,9 +293,15 @@ impl Compose {
         Request::None
     }
 
-    fn body_key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
+    fn body_key(
+        &mut self,
+        key: KeyEvent,
+        page: usize,
+        width: usize,
+        register: &mut Register,
+    ) -> Request {
         let outcome = vim::key(&mut self.body, key, page, register);
-        self.body.follow(page);
+        self.body.follow(page, width);
         match outcome {
             Outcome::Leave => self.close(),
             Outcome::Unhandled if key.code == KeyCode::Char('?') => Request::Help,
@@ -443,7 +455,7 @@ mod tests {
     }
 
     fn press(compose: &mut Compose, code: KeyCode) -> Request {
-        compose.key(KeyEvent::from(code), 10, &mut Register::default())
+        compose.key(KeyEvent::from(code), 10, 80, &mut Register::default())
     }
 
     /// Types `keys`, where ⎋ is Esc, ⇥ is Tab, ⏎ is Enter and ← → are arrows.
@@ -458,14 +470,14 @@ mod tests {
                 '→' => KeyCode::Right,
                 c => KeyCode::Char(c),
             };
-            last = compose.key(KeyEvent::from(code), 10, &mut Register::default());
+            last = compose.key(KeyEvent::from(code), 10, 80, &mut Register::default());
         }
         last
     }
 
     fn ctrl_s(compose: &mut Compose) -> Request {
         let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
-        compose.key(ctrl_s, 10, &mut Register::default())
+        compose.key(ctrl_s, 10, 80, &mut Register::default())
     }
 
     #[test]
@@ -524,6 +536,7 @@ mod tests {
         compose.key(
             KeyEvent::from(KeyCode::BackTab),
             10,
+            80,
             &mut Register::default(),
         );
         assert_eq!(compose.field, Field::From);
@@ -546,6 +559,7 @@ mod tests {
         single.key(
             KeyEvent::from(KeyCode::BackTab),
             10,
+            80,
             &mut Register::default(),
         );
         assert_eq!(single.field, Field::Body);
@@ -635,6 +649,7 @@ Grace",
         reply.key(
             KeyEvent::from(KeyCode::BackTab),
             10,
+            80,
             &mut Register::default(),
         );
         assert_eq!(reply.field, Field::Original, "and back the other way");
@@ -650,6 +665,7 @@ Grace",
         compose.key(
             KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL),
             10,
+            80,
             &mut Register::default(),
         )
     }
@@ -719,7 +735,7 @@ Grace",
         // One register, as the app keeps from one key to the next.
         let mut register = Register::default();
         let mut press = |compose: &mut Compose, code| {
-            compose.key(KeyEvent::from(code), 10, &mut register);
+            compose.key(KeyEvent::from(code), 10, 80, &mut register);
         };
 
         press(&mut compose, KeyCode::Char('y'));
@@ -862,7 +878,7 @@ Grace"
 
     fn ctrl_a(compose: &mut Compose) -> Request {
         let ctrl_a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
-        compose.key(ctrl_a, 10, &mut Register::default())
+        compose.key(ctrl_a, 10, 80, &mut Register::default())
     }
 
     #[test]
