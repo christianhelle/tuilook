@@ -9,6 +9,7 @@ use crate::tui::{
     editor::Editor,
     input::TextInput,
     original::Original,
+    viewer,
     vim::{self, Outcome, Register, VimMode},
 };
 
@@ -23,6 +24,8 @@ pub enum Field {
     /// The files attached, there to pick from once there are any.
     Attachments,
     Body,
+    /// The message being answered, there to read from.
+    Original,
 }
 
 impl Field {
@@ -33,18 +36,20 @@ impl Field {
             Field::Cc => Field::Subject,
             Field::Subject => Field::Attachments,
             Field::Attachments => Field::Body,
-            Field::Body => Field::From,
+            Field::Body => Field::Original,
+            Field::Original => Field::From,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Field::From => Field::Body,
+            Field::From => Field::Original,
             Field::To => Field::From,
             Field::Cc => Field::To,
             Field::Subject => Field::Cc,
             Field::Attachments => Field::Subject,
             Field::Body => Field::Attachments,
+            Field::Original => Field::Body,
         }
     }
 }
@@ -63,6 +68,8 @@ pub enum Request {
     Attach,
     /// The message cannot be sent as it is, for this reason.
     Invalid(String),
+    /// Copy text picked in the original to the clipboard.
+    Copy(String),
 }
 
 /// A message being written.
@@ -195,11 +202,13 @@ impl Compose {
     }
 
     /// Whether `field` has nothing to do: From with one account to send
-    /// from, or the attached files while there are none.
+    /// from, the attached files while there are none, or the original when
+    /// there is none to show or it is hidden.
     fn skips(&self, field: Field) -> bool {
         match field {
             Field::From => !self.can_switch_sender(),
             Field::Attachments => self.attachments.is_empty(),
+            Field::Original => self.original.is_none() || !self.original_pane.shown,
             _ => false,
         }
     }
@@ -248,7 +257,23 @@ impl Compose {
             KeyCode::Tab => self.next_field(),
             KeyCode::BackTab => self.prev_field(),
             _ if self.field == Field::Body => return self.body_key(key, page, register),
+            _ if self.field == Field::Original => {
+                return self.original_key(key, page, register);
+            }
             _ => return self.header_key(key),
+        }
+        Request::None
+    }
+
+    fn original_key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
+        match key.code {
+            KeyCode::Tab => self.next_field(),
+            KeyCode::BackTab => self.prev_field(),
+            KeyCode::Esc => self.field = Field::Body,
+            _ => match self.original_pane.viewer.key(key, page, register) {
+                viewer::Request::Copy(text) => return Request::Copy(text),
+                viewer::Request::None | viewer::Request::Unhandled => {}
+            },
         }
         Request::None
     }
@@ -270,7 +295,7 @@ impl Compose {
             Field::Subject => &mut self.subject,
             Field::From => return self.sender_key(key),
             Field::Attachments => return self.attachments_key(key),
-            Field::Body => unreachable!("the body has its own keys"),
+            Field::Body | Field::Original => unreachable!("they have their own keys"),
         };
         match key.code {
             KeyCode::Esc => return self.close(),
@@ -507,7 +532,7 @@ mod tests {
 
         assert_eq!(reply.from(), Some("me@outlook.com"), "still shown");
         typing(&mut reply, "⇥");
-        assert_eq!(reply.field, Field::To, "the body's tab skips From");
+        assert_eq!(reply.field, Field::Original, "the body's tab skips From");
         assert_eq!(single.from(), None);
         single.key(
             KeyEvent::from(KeyCode::BackTab),
@@ -588,6 +613,28 @@ Navy"
 Grace",
             "a changed signature is kept"
         );
+    }
+
+    #[test]
+    fn tab_reaches_the_original_of_a_reply_and_skips_it_on_a_new_message() {
+        let mut reply = Compose::new(reply(), Some(&original()));
+        assert_eq!(reply.field, Field::Body);
+        typing(&mut reply, "⇥");
+        assert_eq!(reply.field, Field::Original);
+        typing(&mut reply, "⇥");
+        assert_eq!(reply.field, Field::To, "on past From, the only sender");
+        reply.key(
+            KeyEvent::from(KeyCode::BackTab),
+            10,
+            &mut Register::default(),
+        );
+        assert_eq!(reply.field, Field::Original, "and back the other way");
+
+        let mut new = Compose::new(ComposeKind::New, None);
+        typing(&mut new, "⇥⇥⇥");
+        assert_eq!(new.field, Field::Body);
+        typing(&mut new, "⇥");
+        assert_eq!(new.field, Field::To, "there is nothing to show");
     }
 
     #[test]

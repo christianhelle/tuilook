@@ -470,6 +470,13 @@ impl AppState {
                 self.dialog = Some(Dialog::Files(FilePicker::open(dir)));
             }
             Request::Invalid(why) => self.show_error(why),
+            Request::Copy(text) => {
+                match text.lines().count() {
+                    1 => self.show_info("Copied 1 line"),
+                    lines => self.show_info(format!("Copied {lines} lines")),
+                }
+                return Some(Effect::Copy(text));
+            }
         }
         None
     }
