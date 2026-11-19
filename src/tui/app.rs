@@ -727,7 +727,9 @@ impl AppState {
             }
             Action::Search => self.start_search(),
             Action::Calendar => return self.open_calendar(),
-            Action::Compose => self.start_compose(Compose::new(ComposeKind::New, None)),
+            Action::Compose => {
+                return self.start_compose(Compose::new(ComposeKind::New, None));
+            }
             Action::EditSignature => self.edit_signature(self.current_account()),
             Action::ManageAccounts => self.manage_accounts(),
             Action::Reply | Action::ReplyAll | Action::Forward => {
@@ -739,7 +741,7 @@ impl AppState {
                         _ => ComposeKind::Forward(id),
                     };
                     let compose = Compose::new(kind, Some(original));
-                    self.start_compose(compose);
+                    return self.start_compose(compose);
                 }
             }
         }
@@ -853,11 +855,17 @@ impl AppState {
     }
 
     /// Opens a message to write from the account being looked at, or for
-    /// a reply or forward, the account the original is in.
-    pub(crate) fn start_compose(&mut self, compose: Compose) {
+    /// a reply or forward, the account the original is in. The original's
+    /// body is asked for if it is not loaded yet, to show beside the reply.
+    pub(crate) fn start_compose(&mut self, compose: Compose) -> Option<Effect> {
         let account = match (&compose.kind, self.selected()) {
             (ComposeKind::New, _) | (_, None) => self.current_account(),
             (_, Some(original)) => self.message_account(&original.id),
+        };
+        let wanted = match (&compose.kind, &compose.original) {
+            (ComposeKind::New, _) => None,
+            (_, Some(original)) if self.reader.body.is_none() => Some(original.id.clone()),
+            _ => None,
         };
         let senders = self
             .accounts
@@ -869,6 +877,7 @@ impl AppState {
             })
             .collect();
         self.screen = Screen::Compose(Box::new(compose.with_senders(senders, account)));
+        wanted.map(|id| Effect::core(account, Command::LoadBody(id)))
     }
 
     /// Shows the current folder's messages after a sync, keeping the
@@ -2620,6 +2629,33 @@ Ada"
         let compose = app.screen.compose().unwrap();
         assert_eq!(compose.to.text(), "ada@example.com");
         assert_eq!(compose.body.text(), "{€}|\\");
+    }
+
+    #[test]
+    fn replying_to_a_message_whose_body_is_not_loaded_asks_for_it() {
+        let mut app = in_message_list(&["m1", "m2"]);
+        app.mail.messages[0].from_addr = "ada@example.com".to_owned();
+
+        let effect = app.update(Action::Reply);
+
+        assert_eq!(effect, load_body("m1"), "to show beside the reply");
+        assert!(app.screen.compose().is_some());
+    }
+
+    #[test]
+    fn replying_to_a_message_already_read_asks_for_nothing() {
+        let mut app = in_message_list(&["m1"]);
+        app.body_loaded(MessageId("m1".to_owned()), "Dear".to_owned(), vec![]);
+
+        assert_eq!(app.update(Action::Reply), None);
+        assert!(app.screen.compose().is_some());
+    }
+
+    #[test]
+    fn a_new_message_asks_for_no_body_to_show() {
+        let mut app = in_message_list(&["m1"]);
+
+        assert_eq!(app.update(Action::Compose), None);
     }
 
     #[test]
