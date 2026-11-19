@@ -254,6 +254,14 @@ impl Compose {
         match key.code {
             KeyCode::Char('s') if ctrl => return self.send(),
             KeyCode::Char('a') if ctrl => return Request::Attach,
+            KeyCode::Char('o') if ctrl => {
+                self.original_pane.toggle();
+                // The keys cannot stay on a pane that is gone.
+                if self.skips(self.field) {
+                    self.field = Field::Body;
+                }
+                return Request::None;
+            }
             KeyCode::Tab => self.next_field(),
             KeyCode::BackTab => self.prev_field(),
             _ if self.field == Field::Body => return self.body_key(key, page, register),
@@ -635,6 +643,48 @@ Grace",
         assert_eq!(new.field, Field::Body);
         typing(&mut new, "⇥");
         assert_eq!(new.field, Field::To, "there is nothing to show");
+    }
+
+    fn ctrl(compose: &mut Compose, c: char) -> Request {
+        compose.key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL),
+            10,
+            &mut Register::default(),
+        )
+    }
+
+    #[test]
+    fn ctrl_o_hides_and_shows_the_original_from_any_field() {
+        for field in [Field::To, Field::Body, Field::Original] {
+            let mut compose = Compose::new(reply(), Some(&original()));
+            compose.field = field;
+
+            assert_eq!(ctrl(&mut compose, 'o'), Request::None);
+            assert!(!compose.original_pane.shown, "hidden from {field:?}");
+
+            ctrl(&mut compose, 'o');
+            assert!(compose.original_pane.shown, "shown again from {field:?}");
+        }
+    }
+
+    #[test]
+    fn hiding_the_original_takes_the_keys_off_it() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+        compose.field = Field::Original;
+
+        ctrl(&mut compose, 'o');
+
+        assert_eq!(compose.field, Field::Body, "nowhere to stay");
+    }
+
+    #[test]
+    fn hiding_the_original_is_not_a_change_to_the_message() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+
+        ctrl(&mut compose, 'o');
+
+        assert_eq!(typing(&mut compose, "⎋"), Request::None, "to normal mode");
+        assert_eq!(typing(&mut compose, "⎋"), Request::Close);
     }
 
     #[test]
