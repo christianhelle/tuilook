@@ -789,6 +789,9 @@ fn status_line(app: &AppState, width: u16) -> (Line<'static>, Option<u16>) {
     }
     let editing = match &app.screen {
         Screen::Compose(compose) if compose.field == Field::Body => Some(&compose.body),
+        Screen::Compose(compose) if compose.field == Field::Original => {
+            Some(compose.original_pane.viewer.editor())
+        }
         Screen::Signature(editor) => Some(&editor.body),
         Screen::Agenda {
             form: Some(form), ..
@@ -864,8 +867,9 @@ fn compose_areas(area: Rect, compose: &Compose) -> ComposeAreas {
         true if text.width >= ORIGINAL_BESIDE_MIN => {
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(text)
         }
-        true => Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .areas(text),
+        true => {
+            Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(text)
+        }
         false => [text, Rect::default()],
     };
     ComposeAreas {
@@ -985,7 +989,10 @@ fn draw_original(frame: &mut Frame, app: &AppState, compose: &Compose, area: Rec
     };
     let zone = app.now().time_zone().clone();
     let focused = compose.field == Field::Original;
-    let block = section_block(focused, &compose.original_pane.title(&compose.kind, original, &zone));
+    let block = section_block(
+        focused,
+        &compose.original_pane.title(&compose.kind, original, &zone),
+    );
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let lines = app.reader.text(original, &zone);

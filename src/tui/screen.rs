@@ -49,6 +49,9 @@ impl Screen {
     pub fn cursor(&self) -> Cursor {
         match self {
             Screen::Panes | Screen::Agenda { form: None, .. } => Cursor::Default,
+            Screen::Compose(compose) if compose.field == Field::Original => {
+                vim_cursor(compose.original_pane.viewer.mode())
+            }
             Screen::Compose(compose) if compose.field != Field::Body => Cursor::Bar,
             Screen::Compose(compose) => vim_cursor(compose.body.vim.mode),
             Screen::Signature(editor) => vim_cursor(editor.body.vim.mode),
@@ -218,6 +221,17 @@ mod tests {
         press(&mut app, KeyCode::Char('c'));
 
         assert_eq!(app.cursor(), Cursor::Bar);
+    }
+
+    #[test]
+    fn the_original_shows_a_block_while_moving() {
+        let mut app = AppState::default();
+        app.folder_pane.folders = vec![crate::core::fake::folder("a")];
+        app.set_messages(vec![crate::core::fake::message("m1")]);
+        app.update(Action::Reply);
+        app.screen.compose_mut().unwrap().field = crate::tui::compose::Field::Original;
+
+        assert_eq!(app.cursor(), Cursor::Block, "a bar only while typing");
     }
 
     #[test]

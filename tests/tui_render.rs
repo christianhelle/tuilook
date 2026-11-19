@@ -560,7 +560,10 @@ fn a_narrow_screen_puts_the_original_under_the_reply() {
         .lines()
         .position(|l| l.contains("The engine weaves"))
         .unwrap();
-    assert!(body < original, "the reply is above the original:\n{screen}");
+    assert!(
+        body < original,
+        "the reply is above the original:\n{screen}"
+    );
     assert!(screen.contains("Replying to"), "{screen}");
 }
 

@@ -27,6 +27,9 @@ pub fn table(screen: &Screen) -> &'static [Row] {
 /// The keys the status bar offers on the screen shown.
 pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
     match &app.screen {
+        Screen::Compose(compose) if compose.field == Field::Original => {
+            " v V pick · y copy · Tab next field · Esc back to body · Ctrl-O hide · ? help"
+        }
         Screen::Compose(compose) if compose.field == Field::From => {
             " ← → change sender · Ctrl-S send · Tab next field · Esc close · ? help"
         }
@@ -78,10 +81,15 @@ pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
 }
 
 /// What each key does while writing a message, shown with `?` in normal mode.
-pub const COMPOSE_HELP: [(&str, &str); 13] = [
+pub const COMPOSE_HELP: [(&str, &str); 15] = [
     ("Tab / Shift-Tab", "Next field / previous field"),
     ("Enter  ↑ ↓", "Move between From, To, Cc and Subject"),
     ("← →  in From", "Change the account it is sent from"),
+    ("Ctrl-O", "Hide or show the original message"),
+    (
+        "in the original",
+        "v V pick and y copy, Esc back to the body",
+    ),
     ("a, b; c", "Separate several addresses"),
     ("i a I A o O", "Type in the body, insert mode"),
     ("Esc", "Back to normal mode"),

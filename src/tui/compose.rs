@@ -702,13 +702,19 @@ Grace",
             .show(&lines(&["Dear Charles,", "The engine weaves"]));
         compose.field = Field::Original;
 
-        assert_eq!(typing(&mut compose, "jvey"), Request::Copy("The".to_owned()));
+        assert_eq!(
+            typing(&mut compose, "jvey"),
+            Request::Copy("The".to_owned())
+        );
     }
 
     #[test]
     fn what_is_copied_in_the_original_can_be_put_in_the_body() {
         let mut compose = Compose::new(reply(), Some(&original()));
-        compose.original_pane.viewer.show(&lines(&["Dear Charles,"]));
+        compose
+            .original_pane
+            .viewer
+            .show(&lines(&["Dear Charles,"]));
         compose.field = Field::Original;
         // One register, as the app keeps from one key to the next.
         let mut register = Register::default();

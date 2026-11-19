@@ -61,6 +61,11 @@ impl Viewer {
         self.editor.vim.selection(self.editor.cursor())
     }
 
+    /// The editor holding what the pane shows, to read its mode and cursor.
+    pub fn editor(&self) -> &Editor {
+        &self.editor
+    }
+
     /// Acts on a key, moving `page` lines a page and yanking into `register`.
     pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
         let picking = self.mode() != VimMode::Normal;
