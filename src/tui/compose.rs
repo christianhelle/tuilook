@@ -687,6 +687,56 @@ Grace",
         assert_eq!(typing(&mut compose, "⎋"), Request::Close);
     }
 
+    /// The lines of a message, as the reading pane hands them over.
+    fn lines(text: &[&str]) -> Vec<String> {
+        text.iter().map(|line| (*line).to_owned()).collect()
+    }
+
+    #[test]
+    fn v_and_y_in_the_original_copies_the_picked_text() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+        compose
+            .original_pane
+            .viewer
+            .show(&lines(&["Dear Charles,", "The engine weaves"]));
+        compose.field = Field::Original;
+
+        assert_eq!(typing(&mut compose, "jvey"), Request::Copy("The".to_owned()));
+    }
+
+    #[test]
+    fn what_is_copied_in_the_original_can_be_put_in_the_body() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+        compose.original_pane.viewer.show(&lines(&["Dear Charles,"]));
+        compose.field = Field::Original;
+        // One register, as the app keeps from one key to the next.
+        let mut register = Register::default();
+        let mut press = |compose: &mut Compose, code| {
+            compose.key(KeyEvent::from(code), 10, &mut register);
+        };
+
+        press(&mut compose, KeyCode::Char('y'));
+        press(&mut compose, KeyCode::Char('y'));
+        compose.field = Field::Body;
+        press(&mut compose, KeyCode::Esc);
+        press(&mut compose, KeyCode::Char('p'));
+
+        assert_eq!(
+            compose.body.text(),
+            "\nDear Charles,",
+            "yy copies a whole line, which p puts below"
+        );
+    }
+
+    #[test]
+    fn esc_in_the_original_goes_back_to_the_body_without_closing() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+        compose.field = Field::Original;
+
+        assert_eq!(typing(&mut compose, "⎋"), Request::None);
+        assert_eq!(compose.field, Field::Body);
+    }
+
     #[test]
     fn tab_and_enter_move_through_the_fields() {
         let mut compose = Compose::new(ComposeKind::New, None);
