@@ -185,7 +185,11 @@ mod tests {
     #[test]
     fn every_character_is_kept_once_the_spaces_broken_at_are_dropped() {
         let line = "The engine weaves algebraic patterns as the loom weaves flowers";
-        let joined: String = rows(line, 9).concat().chars().filter(|c| *c != ' ').collect();
+        let joined: String = rows(line, 9)
+            .concat()
+            .chars()
+            .filter(|c| *c != ' ')
+            .collect();
         let original: String = line.chars().filter(|c| *c != ' ').collect();
 
         assert_eq!(joined, original);

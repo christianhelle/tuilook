@@ -18,7 +18,7 @@ use ratatui::{
 use crate::tui::{
     account_manager::{Login, Reload},
     agenda::CalendarView,
-    compose::{Compose, Request},
+    compose::{Compose, Field, Request, Size},
     dialog::{Dialog, Picker},
     files::{self, FilePicker},
     folder_pane::FolderPane,
@@ -257,6 +257,10 @@ pub struct Viewport {
     pub compose: usize,
     /// Columns the body wraps its lines to while writing a message.
     pub compose_width: u16,
+    /// Columns the original wraps its lines to while writing a message.
+    pub original_width: u16,
+    /// Rows the original message pane shows while writing a message.
+    pub original_rows: usize,
 }
 
 /// Everything the UI shows. Rendering is a pure function of this state.
@@ -451,11 +455,27 @@ impl AppState {
 
     /// A key for the message being written.
     fn compose_key(&mut self, key: KeyEvent) -> Option<Effect> {
+        // The original's cursor needs its lines before a key moves it.
+        if let Some(compose) = self.screen.compose()
+            && compose.field == Field::Original
+            && let Some(original) = &compose.original
+        {
+            let lines = self.reader.text(original, &self.now().time_zone().clone());
+            if let Some(compose) = self.screen.compose_mut() {
+                compose.original_pane.viewer.show(&lines);
+            }
+        }
         let compose = self.screen.compose_mut()?;
         match compose.key(
             key,
-            self.viewport.compose,
-            usize::from(self.viewport.compose_width),
+            Size {
+                rows: self.viewport.compose,
+                columns: usize::from(self.viewport.compose_width),
+            },
+            Size {
+                rows: self.viewport.original_rows,
+                columns: usize::from(self.viewport.original_width),
+            },
             &mut self.register,
         ) {
             Request::None => {}

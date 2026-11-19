@@ -1006,32 +1006,32 @@ fn draw_original(frame: &mut Frame, app: &AppState, compose: &Compose, area: Rec
     // A line wrapped over several rows is numbered on its first, as the
     // reading pane numbers its own.
     let width = text.width.max(1);
-    let rows: Vec<usize> = lines
-        .iter()
-        .map(|line| {
-            Paragraph::new(line.as_str())
-                .wrap(Wrap { trim: false })
-                .line_count(width)
-        })
-        .collect();
-    let labels: Vec<Line> = rows
-        .iter()
-        .enumerate()
-        .flat_map(|(index, &tall)| {
-            let label = Line::styled(numbers::label(index, cursor, numbers), dim);
-            std::iter::once(label).chain(std::iter::repeat_n(Line::raw(""), tall.saturating_sub(1)))
-        })
-        .collect();
-    let body: Vec<Line> = lines
-        .iter()
-        .enumerate()
-        .map(|(index, line)| picked_line(line, index, 0, selection))
-        .collect();
+    let wrapped = Wrapped::new(&lines, usize::from(width));
+    let height = usize::from(text.height);
+    let top = compose
+        .original_pane
+        .viewer
+        .scroll(height, usize::from(width));
+    let mut labels = Vec::with_capacity(height);
+    let mut body = Vec::with_capacity(height);
+    let mut at = 0;
+    for (index, line) in lines.iter().enumerate() {
+        for (nth, row) in wrapped.line_rows(index).iter().enumerate() {
+            if at >= top && at < top + height {
+                labels.push(match nth {
+                    0 => Line::styled(numbers::label(index, cursor, numbers), dim),
+                    _ => Line::raw(""),
+                });
+                body.push(picked_row(line, index, row.start, selection));
+            }
+            at += 1;
+        }
+        if at >= top + height {
+            break;
+        }
+    }
     frame.render_widget(Paragraph::new(labels), gutter);
-    frame.render_widget(
-        Paragraph::new(body).wrap(Wrap { trim: false }).style(dim),
-        text,
-    );
+    frame.render_widget(Paragraph::new(body).style(dim), text);
 }
 
 /// The files attached to a message being written, the one picked shown
@@ -1384,7 +1384,12 @@ fn draw_signature(frame: &mut Frame, app: &AppState, editor: &SignatureEditor, a
 
 /// One wrapped row of line `index`, its characters at `start` in the line,
 /// with the characters in a visual mode's `selection` reversed.
-fn picked_row(text: &str, index: usize, start: usize, selection: Option<(Pos, Pos)>) -> Line<'static> {
+fn picked_row(
+    text: &str,
+    index: usize,
+    start: usize,
+    selection: Option<(Pos, Pos)>,
+) -> Line<'static> {
     let picked = Style::new().add_modifier(Modifier::REVERSED);
     let selected =
         |at| selection.is_some_and(|(first, last)| first <= (index, at) && (index, at) <= last);
@@ -2003,7 +2008,33 @@ pub fn viewport(area: Rect, app: &AppState) -> Viewport {
             } => body_width(appointment_areas(panes.compose, form).notes, &form.notes),
             Screen::Panes | Screen::Agenda { form: None, .. } => 0,
         },
+        original_width: match &app.screen {
+            Screen::Compose(compose) => original_size(panes.compose, compose, app).0,
+            _ => 0,
+        },
+        original_rows: match &app.screen {
+            Screen::Compose(compose) => original_size(panes.compose, compose, app).1,
+            _ => 0,
+        },
     }
+}
+
+/// The columns and rows the original message's text has inside its border.
+fn original_size(area: Rect, compose: &Compose, app: &AppState) -> (u16, usize) {
+    let Some(original) = &compose.original else {
+        return (0, 0);
+    };
+    let rect = compose_areas(area, compose).original;
+    if rect.is_empty() {
+        return (0, 0);
+    }
+    let inner = Block::bordered().inner(rect);
+    let lines = app.reader.text(original, &app.now().time_zone().clone());
+    let numbers = numbers::gutter_width(lines.len());
+    (
+        inner.width.saturating_sub(numbers).max(1),
+        usize::from(inner.height),
+    )
 }
 
 /// Columns text is wrapped to in `area`, past the line numbers.

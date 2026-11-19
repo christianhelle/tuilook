@@ -736,9 +736,7 @@ mod tests {
     #[test]
     fn a_wrapped_line_takes_more_of_the_pane_than_one_row() {
         // Four lines of 15 characters each wrap onto two rows at 10 columns.
-        let mut editor = text(
-            "aaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbb\nccccccccccccccc\nddddddddddddddd",
-        );
+        let mut editor = text("aaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbb\nccccccccccccccc\nddddddddddddddd");
         editor.move_to(3, 0);
 
         // The cursor is on row 6, so four rows show from row 3: one row of

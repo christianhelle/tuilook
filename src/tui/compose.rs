@@ -72,6 +72,14 @@ pub enum Request {
     Copy(String),
 }
 
+/// How much of a pane shows at once: the rows it has, and the columns its
+/// text wraps to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Size {
+    pub rows: usize,
+    pub columns: usize,
+}
+
 /// A message being written.
 #[derive(Debug)]
 pub struct Compose {
@@ -245,13 +253,14 @@ impl Compose {
         self.original.is_some() && self.original_pane.shown
     }
 
-    /// Acts on a key, paging by `page` rows and wrapping to `width`
-    /// columns. Text is deleted or yanked into `register` and put from it.
+    /// Acts on a key, paging and wrapping the body as `body` says and the
+    /// original as `original` does. Text is deleted or yanked into
+    /// `register` and put from it.
     pub fn key(
         &mut self,
         key: KeyEvent,
-        page: usize,
-        width: usize,
+        body: Size,
+        original: Size,
         register: &mut Register,
     ) -> Request {
         if self.sending {
@@ -271,37 +280,32 @@ impl Compose {
             }
             KeyCode::Tab => self.next_field(),
             KeyCode::BackTab => self.prev_field(),
-            _ if self.field == Field::Body => return self.body_key(key, page, width, register),
+            _ if self.field == Field::Body => return self.body_key(key, body, register),
             _ if self.field == Field::Original => {
-                return self.original_key(key, page, register);
+                return self.original_key(key, original, register);
             }
             _ => return self.header_key(key),
         }
         Request::None
     }
 
-    fn original_key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
+    fn original_key(&mut self, key: KeyEvent, size: Size, register: &mut Register) -> Request {
         match key.code {
             KeyCode::Tab => self.next_field(),
             KeyCode::BackTab => self.prev_field(),
             KeyCode::Esc => self.field = Field::Body,
-            _ => match self.original_pane.viewer.key(key, page, register) {
+            _ => match self.original_pane.viewer.key(key, size.rows, register) {
                 viewer::Request::Copy(text) => return Request::Copy(text),
                 viewer::Request::None | viewer::Request::Unhandled => {}
             },
         }
+        // The cursor may have moved past the rows shown, which then scroll.
+        self.original_pane.viewer.follow(size.rows, size.columns);
         Request::None
     }
-
-    fn body_key(
-        &mut self,
-        key: KeyEvent,
-        page: usize,
-        width: usize,
-        register: &mut Register,
-    ) -> Request {
-        let outcome = vim::key(&mut self.body, key, page, register);
-        self.body.follow(page, width);
+    fn body_key(&mut self, key: KeyEvent, size: Size, register: &mut Register) -> Request {
+        let outcome = vim::key(&mut self.body, key, size.rows, register);
+        self.body.follow(size.rows, size.columns);
         match outcome {
             Outcome::Leave => self.close(),
             Outcome::Unhandled if key.code == KeyCode::Char('?') => Request::Help,
@@ -454,8 +458,22 @@ mod tests {
         ComposeKind::Reply(MessageId("m1".to_owned()))
     }
 
+    /// A pane tall enough that nothing scrolls, and wide enough that
+    /// nothing wraps.
+    fn roomy() -> Size {
+        Size {
+            rows: 10,
+            columns: 80,
+        }
+    }
+
     fn press(compose: &mut Compose, code: KeyCode) -> Request {
-        compose.key(KeyEvent::from(code), 10, 80, &mut Register::default())
+        compose.key(
+            KeyEvent::from(code),
+            roomy(),
+            roomy(),
+            &mut Register::default(),
+        )
     }
 
     /// Types `keys`, where ⎋ is Esc, ⇥ is Tab, ⏎ is Enter and ← → are arrows.
@@ -470,14 +488,19 @@ mod tests {
                 '→' => KeyCode::Right,
                 c => KeyCode::Char(c),
             };
-            last = compose.key(KeyEvent::from(code), 10, 80, &mut Register::default());
+            last = compose.key(
+                KeyEvent::from(code),
+                roomy(),
+                roomy(),
+                &mut Register::default(),
+            );
         }
         last
     }
 
     fn ctrl_s(compose: &mut Compose) -> Request {
         let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
-        compose.key(ctrl_s, 10, 80, &mut Register::default())
+        compose.key(ctrl_s, roomy(), roomy(), &mut Register::default())
     }
 
     #[test]
@@ -535,8 +558,8 @@ mod tests {
         assert_eq!(compose.from(), Some("me@work.example"));
         compose.key(
             KeyEvent::from(KeyCode::BackTab),
-            10,
-            80,
+            roomy(),
+            roomy(),
             &mut Register::default(),
         );
         assert_eq!(compose.field, Field::From);
@@ -558,8 +581,8 @@ mod tests {
         assert_eq!(single.from(), None);
         single.key(
             KeyEvent::from(KeyCode::BackTab),
-            10,
-            80,
+            roomy(),
+            roomy(),
             &mut Register::default(),
         );
         assert_eq!(single.field, Field::Body);
@@ -648,8 +671,8 @@ Grace",
         assert_eq!(reply.field, Field::To, "on past From, the only sender");
         reply.key(
             KeyEvent::from(KeyCode::BackTab),
-            10,
-            80,
+            roomy(),
+            roomy(),
             &mut Register::default(),
         );
         assert_eq!(reply.field, Field::Original, "and back the other way");
@@ -664,8 +687,8 @@ Grace",
     fn ctrl(compose: &mut Compose, c: char) -> Request {
         compose.key(
             KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL),
-            10,
-            80,
+            roomy(),
+            roomy(),
             &mut Register::default(),
         )
     }
@@ -735,7 +758,7 @@ Grace",
         // One register, as the app keeps from one key to the next.
         let mut register = Register::default();
         let mut press = |compose: &mut Compose, code| {
-            compose.key(KeyEvent::from(code), 10, 80, &mut register);
+            compose.key(KeyEvent::from(code), roomy(), roomy(), &mut register);
         };
 
         press(&mut compose, KeyCode::Char('y'));
@@ -749,6 +772,74 @@ Grace",
             "\nDear Charles,",
             "yy copies a whole line, which p puts below"
         );
+    }
+
+    /// Four rows, so a message longer than four scrolls.
+    fn short() -> Size {
+        Size {
+            rows: 4,
+            columns: 80,
+        }
+    }
+
+    #[test]
+    fn moving_down_the_original_scrolls_it() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+        compose
+            .original_pane
+            .viewer
+            .show(&lines(&["one", "two", "three", "four", "five", "six"]));
+        compose.field = Field::Original;
+
+        // Four rows show, so moving to the fifth scrolls just one.
+        for _ in 0..4 {
+            let j = KeyEvent::from(KeyCode::Char('j'));
+            compose.key(j, roomy(), short(), &mut Register::default());
+        }
+
+        assert_eq!(
+            compose.original_pane.viewer.scroll(4, 80),
+            1,
+            "the top row follows the cursor"
+        );
+    }
+
+    #[test]
+    fn paging_the_original_scrolls_it_a_page_at_a_time() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+        let many: Vec<String> = (0..40).map(|i| format!("line {i}")).collect();
+        compose.original_pane.viewer.show(&many);
+        compose.field = Field::Original;
+
+        let page_down = KeyEvent::from(KeyCode::PageDown);
+        compose.key(page_down, roomy(), short(), &mut Register::default());
+        assert_eq!(compose.original_pane.viewer.cursor().0, 4, "a page down");
+
+        let ctrl_d = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL);
+        compose.key(ctrl_d, roomy(), short(), &mut Register::default());
+        assert_eq!(compose.original_pane.viewer.cursor().0, 6, "half a page");
+
+        let ctrl_u = KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL);
+        compose.key(ctrl_u, roomy(), short(), &mut Register::default());
+        assert_eq!(compose.original_pane.viewer.cursor().0, 4, "and back");
+    }
+
+    #[test]
+    fn the_original_scrolls_back_up_to_its_first_row() {
+        let mut compose = Compose::new(reply(), Some(&original()));
+        let many: Vec<String> = (0..40).map(|i| format!("line {i}")).collect();
+        compose.original_pane.viewer.show(&many);
+        compose.field = Field::Original;
+        let g = KeyEvent::from(KeyCode::Char('G'));
+        compose.key(g, roomy(), short(), &mut Register::default());
+        assert!(compose.original_pane.viewer.scroll(4, 80) > 0, "scrolled");
+
+        for _ in 0..2 {
+            let g = KeyEvent::from(KeyCode::Char('g'));
+            compose.key(g, roomy(), short(), &mut Register::default());
+        }
+
+        assert_eq!(compose.original_pane.viewer.scroll(4, 80), 0);
     }
 
     #[test]
@@ -878,7 +969,7 @@ Grace"
 
     fn ctrl_a(compose: &mut Compose) -> Request {
         let ctrl_a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
-        compose.key(ctrl_a, 10, 80, &mut Register::default())
+        compose.key(ctrl_a, roomy(), roomy(), &mut Register::default())
     }
 
     #[test]

@@ -317,6 +317,8 @@ fn viewport_measures_what_each_pane_can_show() {
             reader_width: 30,
             compose: 0,
             compose_width: 0,
+            original_width: 0,
+            original_rows: 0,
         }
     );
 }
@@ -568,6 +570,31 @@ fn the_original_shows_the_preview_until_its_body_arrives() {
     let loaded = render_wide(&app);
     assert!(loaded.contains("The engine weaves"), "{loaded}");
     assert!(!loaded.contains("Notes on the engine"), "the preview went");
+}
+
+#[test]
+fn the_original_scrolls_as_its_cursor_moves() {
+    let mut app = sample_app();
+    let body: Vec<String> = (1..=40)
+        .map(|i| format!("Line {i} of the original"))
+        .collect();
+    app.body_loaded(MessageId("m1".to_owned()), body.join("\n"), vec![]);
+    press(&mut app, "rAgreed⎋");
+    // Tab from the body to the original.
+    press(&mut app, "⇥");
+    let top = render_wide(&app);
+    assert!(top.contains("From: Ada"), "starts at the headers");
+
+    let mut keymap = tuilook::tui::keymap::Keymap::default();
+    for _ in 0..2 {
+        app.viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 140, 20), &app);
+        app.on_key(KeyEvent::from(KeyCode::PageDown), &mut keymap);
+    }
+
+    let scrolled = render_wide(&app);
+    assert_ne!(scrolled, top, "the original scrolled");
+    assert!(!scrolled.contains("From: Ada"), "past the headers");
+    assert!(scrolled.contains("of the original"), "{scrolled}");
 }
 
 #[test]

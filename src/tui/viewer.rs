@@ -66,6 +66,17 @@ impl Viewer {
         &self.editor
     }
 
+    /// The first row shown, when this many rows show at once, lines wrapped
+    /// to `width`.
+    pub fn scroll(&self, height: usize, width: usize) -> usize {
+        self.editor.scroll(height, width)
+    }
+
+    /// Keeps the rows shown where they are, unless the cursor left them.
+    pub fn follow(&mut self, height: usize, width: usize) {
+        self.editor.follow(height, width);
+    }
+
     /// Acts on a key, moving `page` lines a page and yanking into `register`.
     pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
         let picking = self.mode() != VimMode::Normal;
