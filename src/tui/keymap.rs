@@ -19,6 +19,12 @@ impl Keymap {
             self.pending_g = true;
             return None;
         }
+        if pending_g
+            && key.code == KeyCode::Char('x')
+            && !key.modifiers.contains(KeyModifiers::CONTROL)
+        {
+            return Some(Action::OpenUrl);
+        }
         single_key(key)
     }
 }
@@ -158,6 +164,25 @@ mod tests {
         assert_eq!(next, Some(Action::SelectNext));
         let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
         assert_eq!(keymap.action_for(g), None, "the earlier g was dropped");
+    }
+
+    #[test]
+    fn g_then_x_opens_the_link_under_the_cursor() {
+        let mut keymap = Keymap::default();
+
+        assert_eq!(
+            keymap.action_for(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE)),
+            None
+        );
+        assert_eq!(
+            keymap.action_for(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)),
+            Some(Action::OpenUrl)
+        );
+        assert_eq!(
+            keymap.action_for(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)),
+            None,
+            "the g was used up"
+        );
     }
 
     #[test]

@@ -17,6 +17,8 @@ pub enum Action {
     Top,
     Bottom,
     Open,
+    /// Open the web address under the reading pane's cursor in a browser.
+    OpenUrl,
     /// Show the selected folder's subfolders, or go into them.
     Expand,
     /// Hide the selected folder's subfolders, or go up to its parent.

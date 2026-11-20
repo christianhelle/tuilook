@@ -700,6 +700,7 @@ impl AppState {
                 return self.toggle_group();
             }
             Action::Open => self.open(),
+            Action::OpenUrl => {}
             Action::Expand if self.focus == Pane::Folders => return self.expand_folder(),
             Action::Collapse if self.focus == Pane::Folders => return self.collapse_folder(),
             Action::Expand if self.focus == Pane::Messages => return self.expand_group(),
