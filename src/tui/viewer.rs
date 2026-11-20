@@ -171,17 +171,25 @@ fn url_at(line: &str, column: usize) -> Option<String> {
     let chars: Vec<char> = line.chars().collect();
     let mut start = 0;
     while start < chars.len() {
-        if !starts_with(&chars, start, "http://") && !starts_with(&chars, start, "https://") {
+        let scheme = if starts_with(&chars, start, "https://") {
+            "https://"
+        } else if starts_with(&chars, start, "http://") {
+            "http://"
+        } else {
             start += 1;
             continue;
-        }
+        };
         if start > 0 && chars[start - 1].is_ascii_alphanumeric() {
             start += 1;
             continue;
         }
+        // A host in brackets, as an IPv6 address, keeps its closing bracket.
+        let bracketed = chars.get(start + scheme.len()) == Some(&'[');
         let end = (start..chars.len())
             .find(|&at| {
-                chars[at].is_whitespace() || matches!(chars[at], '<' | '>' | '"' | '\'' | '`')
+                chars[at].is_whitespace()
+                    || matches!(chars[at], '<' | '>' | '"' | '\'' | '`')
+                    || (!bracketed && matches!(chars[at], '[' | ']'))
             })
             .unwrap_or(chars.len());
         let end = trim_url_end(&chars, start, end);
@@ -203,10 +211,26 @@ fn starts_with(chars: &[char], start: usize, word: &str) -> bool {
             .all(|(c, w)| c.to_ascii_lowercase() == *w)
 }
 
+/// Where a web address ends, leaving out a footnote reference right after it,
+/// as in `[https://example.com][1]`.
+fn trim_footnote_end(chars: &[char], start: usize, end: usize) -> usize {
+    if end <= start || chars[end - 1] != ']' {
+        return end;
+    }
+    let mut at = end - 1;
+    while at > start && chars[at - 1].is_ascii_digit() {
+        at -= 1;
+    }
+    if at < end - 1 && at >= start + 2 && chars[at - 1] == '[' && chars[at - 2] == ']' {
+        return at - 2;
+    }
+    end
+}
+
 /// Where a web address ends, leaving out punctuation that is part of the
 /// sentence or of a bracket around it.
 fn trim_url_end(chars: &[char], start: usize, end: usize) -> usize {
-    let mut end = end;
+    let mut end = trim_footnote_end(chars, start, end);
     while end > start && ".,;:!?".contains(chars[end - 1]) {
         end -= 1;
     }
@@ -327,6 +351,24 @@ mod tests {
             url_at_cursor("https://en.wikipedia.org/wiki/Foo_(bar)", "wikipedia"),
             Some("https://en.wikipedia.org/wiki/Foo_(bar)".to_owned()),
             "a bracket the address opened is part of it"
+        );
+    }
+
+    #[test]
+    fn a_footnote_reference_after_an_address_is_not_part_of_it() {
+        assert_eq!(
+            url_at_cursor(
+                "[https://docs.signpath.io/trusted-build-systems/github][2]",
+                "signpath"
+            ),
+            Some("https://docs.signpath.io/trusted-build-systems/github".to_owned())
+        );
+        assert_eq!(
+            url_at_cursor(
+                "https://docs.signpath.io/artifact-configuration/][1",
+                "artifact"
+            ),
+            Some("https://docs.signpath.io/artifact-configuration/".to_owned())
         );
     }
 
