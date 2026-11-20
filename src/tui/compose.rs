@@ -296,7 +296,7 @@ impl Compose {
             KeyCode::Esc => self.field = Field::Body,
             _ => match self.original_pane.viewer.key(key, size.rows, register) {
                 viewer::Request::Copy(text) => return Request::Copy(text),
-                viewer::Request::None | viewer::Request::Unhandled => {}
+                viewer::Request::None | viewer::Request::Unhandled | viewer::Request::OpenUrl => {}
             },
         }
         // The cursor may have moved past the rows shown, which then scroll.

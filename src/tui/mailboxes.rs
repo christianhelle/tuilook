@@ -309,6 +309,7 @@ impl Mailboxes {
                     self.clipboard.flush()?;
                     None
                 }
+                Effect::OpenUrl(_) => None,
                 Effect::ShowCalendar {
                     account,
                     load: (from, to),

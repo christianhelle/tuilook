@@ -11,6 +11,8 @@ use crate::tui::{
 #[derive(Debug, Default)]
 pub struct Viewer {
     editor: Editor,
+    /// Whether a `g` waits for an `x`, to open the link under the cursor.
+    g: bool,
 }
 
 /// What a key asks of the reading pane.
@@ -19,6 +21,8 @@ pub enum Request {
     None,
     /// Copy the picked or yanked text to the clipboard.
     Copy(String),
+    /// Open the web address under the cursor in a browser.
+    OpenUrl,
     /// The viewer has no use for the key in normal mode, so the pane may.
     Unhandled,
 }
@@ -29,6 +33,7 @@ impl Viewer {
         if self.editor.lines() == lines {
             return;
         }
+        self.g = false;
         let (row, column) = self.editor.cursor();
         let vim = std::mem::take(&mut self.editor.vim);
         self.editor.set_text(&lines.join(
@@ -91,6 +96,16 @@ impl Viewer {
     /// Acts on a key, moving `page` lines a page and yanking into `register`.
     pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
         let picking = self.mode() != VimMode::Normal;
+        let pending_g = std::mem::take(&mut self.g);
+        if !picking
+            && pending_g
+            && key.code == KeyCode::Char('x')
+            && !key.modifiers.contains(KeyModifiers::CONTROL)
+        {
+            // Drop the g Vim is waiting on, and leave the cursor where it is.
+            vim::to_normal(&mut self.editor);
+            return Request::OpenUrl;
+        }
         if !reads(key, picking) {
             if picking {
                 return Request::None;
@@ -99,7 +114,16 @@ impl Viewer {
             vim::to_normal(&mut self.editor);
             return Request::Unhandled;
         }
-        match vim::key(&mut self.editor, key, page, register) {
+        let outcome = vim::key(&mut self.editor, key, page, register);
+        if !picking
+            && !pending_g
+            && key.code == KeyCode::Char('g')
+            && !key.modifiers.contains(KeyModifiers::CONTROL)
+            && outcome == Outcome::Handled
+        {
+            self.g = true;
+        }
+        match outcome {
             Outcome::Yanked(text) => Request::Copy(text),
             Outcome::Unhandled | Outcome::Leave => Request::Unhandled,
             Outcome::Handled => Request::None,
@@ -393,6 +417,14 @@ Dear Charles,",
             keys(&mut viewer, "jyy"),
             Request::Copy("Dear Charles,".into())
         );
+    }
+
+    #[test]
+    fn gx_asks_to_open_the_link_under_the_cursor() {
+        let mut viewer = viewing("https://example.com/docs");
+
+        assert_eq!(keys(&mut viewer, "gx"), Request::OpenUrl);
+        assert_eq!(viewer.mode(), VimMode::Normal);
     }
 
     #[test]

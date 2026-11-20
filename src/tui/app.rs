@@ -64,6 +64,8 @@ pub enum Effect {
     },
     /// Put text on the clipboard.
     Copy(String),
+    /// Open a web address in the default browser.
+    OpenUrl(String),
     /// Show `account`'s calendar cached between `load`'s ends in its open
     /// agenda, then have its core do each of `commands`.
     ShowCalendar {
@@ -564,6 +566,7 @@ impl AppState {
                     }
                     return Some(Effect::Copy(text));
                 }
+                viewer::Request::OpenUrl => return self.open_url(),
                 viewer::Request::Unhandled => {}
             }
         }
@@ -700,6 +703,7 @@ impl AppState {
                 return self.toggle_group();
             }
             Action::Open => self.open(),
+            Action::OpenUrl if self.focus == Pane::Reader => return self.open_url(),
             Action::OpenUrl => {}
             Action::Expand if self.focus == Pane::Folders => return self.expand_folder(),
             Action::Collapse if self.focus == Pane::Folders => return self.collapse_folder(),
@@ -876,6 +880,7 @@ impl AppState {
             | Effect::Sync
             | Effect::Search(_)
             | Effect::Copy(_)
+            | Effect::OpenUrl(_)
             | Effect::InstallUpdate
             | Effect::SignIn { .. }
             | Effect::CancelSignIn
@@ -1326,6 +1331,17 @@ impl AppState {
         }
     }
 
+    /// Asks for the web address under the reading pane's cursor to be opened
+    /// in the default browser.
+    fn open_url(&mut self) -> Option<Effect> {
+        let Some(url) = self.reader.viewer.url_under_cursor() else {
+            self.show_info("No link under the cursor");
+            return None;
+        };
+        self.show_info("Opened the link");
+        Some(Effect::OpenUrl(url))
+    }
+
     /// Rows the focused pane shows; at least 2 so half a page still moves.
     fn page(&self) -> isize {
         let rows = match self.focus {
@@ -1556,6 +1572,32 @@ mod tests {
         type_keys(&mut app, "z");
 
         assert!(app.zoomed);
+    }
+
+    #[test]
+    fn gx_in_the_reader_opens_the_link_under_the_cursor() {
+        let mut app = reading(10, 5);
+        app.reader.body = Some("https://example.com/docs".to_owned());
+
+        let effect = type_keys(&mut app, "Ggx");
+
+        assert_eq!(
+            effect,
+            Some(Effect::OpenUrl("https://example.com/docs".to_owned()))
+        );
+        assert_eq!(app.status, Some(Status::Info("Opened the link".to_owned())));
+    }
+
+    #[test]
+    fn gx_without_a_link_says_so() {
+        let mut app = reading(10, 5);
+        app.reader.body = Some("No links here".to_owned());
+
+        assert_eq!(type_keys(&mut app, "Ggx"), None);
+        assert_eq!(
+            app.status,
+            Some(Status::Info("No link under the cursor".to_owned()))
+        );
     }
 
     #[test]
