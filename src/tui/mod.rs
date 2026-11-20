@@ -5,6 +5,7 @@ pub mod agenda;
 pub mod app;
 pub mod appointment_form;
 pub mod attachments;
+pub mod browser;
 pub mod calendar;
 pub mod calendar_grid;
 pub mod clipboard;

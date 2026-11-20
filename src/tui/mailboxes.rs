@@ -3,7 +3,7 @@
 //! show the app what each core reports.
 
 use std::{
-    io::Write,
+    io::{self, Write},
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -18,7 +18,7 @@ use crate::store::Store;
 use crate::tui::{
     account_manager::{AccountRequest, Reload},
     app::{AppState, Effect},
-    clipboard,
+    browser, clipboard,
     search::SEARCH_LIMIT,
 };
 
@@ -30,6 +30,9 @@ pub struct Mailbox {
     pub commands: mpsc::UnboundedSender<Command>,
 }
 
+/// How a web address is opened in the default browser.
+pub type Opener = Box<dyn Fn(&str) -> io::Result<()>>;
+
 /// Every account's mailbox, in the order of the app's accounts.
 pub struct Mailboxes {
     mailboxes: Vec<Mailbox>,
@@ -37,6 +40,8 @@ pub struct Mailboxes {
     registry: Option<Registry>,
     /// Where copied text goes, as an OSC 52 sequence: the terminal.
     clipboard: Box<dyn Write>,
+    /// How web addresses are opened in the default browser.
+    opener: Opener,
     /// Asks for tuilook to be updated, where it can be.
     installer: Option<mpsc::UnboundedSender<()>>,
     /// Asks for accounts to be signed in, where they can be.
@@ -53,9 +58,16 @@ impl Mailboxes {
             mailboxes,
             registry,
             clipboard,
+            opener: Box::new(browser::open),
             installer: None,
             signer: None,
         }
+    }
+
+    /// Has web addresses opened by `opener`, as tests do.
+    pub fn with_opener(mut self, opener: Opener) -> Self {
+        self.opener = opener;
+        self
     }
 
     /// Has accounts signed in by asking `signer`. Without one, as in the
@@ -309,7 +321,12 @@ impl Mailboxes {
                     self.clipboard.flush()?;
                     None
                 }
-                Effect::OpenUrl(_) => None,
+                Effect::OpenUrl(url) => {
+                    if let Err(e) = (self.opener)(&url) {
+                        app.show_error(format!("Could not open the link: {e}"));
+                    }
+                    None
+                }
                 Effect::ShowCalendar {
                     account,
                     load: (from, to),

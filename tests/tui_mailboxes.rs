@@ -535,6 +535,49 @@ fn installing_an_update_asks_the_installer() {
 }
 
 #[test]
+fn opening_a_link_asks_the_opener() {
+    let (_dir, mailboxes) = one_mailbox();
+    let opened = Rc::new(RefCell::new(Vec::new()));
+    let seen = opened.clone();
+    let mut mailboxes = mailboxes.with_opener(Box::new(move |url| {
+        seen.borrow_mut().push(url.to_owned());
+        Ok(())
+    }));
+    let mut app = AppState::default();
+
+    mailboxes
+        .apply(
+            &mut app,
+            Some(Effect::OpenUrl("https://example.com/docs".into())),
+        )
+        .unwrap();
+
+    assert_eq!(*opened.borrow(), ["https://example.com/docs"]);
+}
+
+#[test]
+fn a_link_the_opener_cannot_open_says_so() {
+    let (_dir, mailboxes) = one_mailbox();
+    let mut mailboxes =
+        mailboxes.with_opener(Box::new(|_| Err(io::Error::other("there is no browser"))));
+    let mut app = AppState::default();
+
+    mailboxes
+        .apply(
+            &mut app,
+            Some(Effect::OpenUrl("https://example.com".into())),
+        )
+        .unwrap();
+
+    assert_eq!(
+        app.status,
+        Some(Status::Error(
+            "Could not open the link: there is no browser".into()
+        ))
+    );
+}
+
+#[test]
 fn without_an_installer_nothing_is_installed() {
     let (_dir, mut mailboxes) = one_mailbox();
     let mut app = AppState::default();
