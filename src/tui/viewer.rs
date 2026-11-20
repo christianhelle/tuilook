@@ -77,6 +77,17 @@ impl Viewer {
         self.editor.follow(height, width);
     }
 
+    /// The web address under the cursor, or the one a footnote reference under
+    /// the cursor names.
+    pub fn url_under_cursor(&self) -> Option<String> {
+        let (row, column) = self.cursor();
+        let lines = self.editor.lines();
+        let line = lines.get(row)?;
+        footnote_at(line, column)
+            .and_then(|number| footnote_url(lines, &number))
+            .or_else(|| url_at(line, column))
+    }
+
     /// Acts on a key, moving `page` lines a page and yanking into `register`.
     pub fn key(&mut self, key: KeyEvent, page: usize, register: &mut Register) -> Request {
         let picking = self.mode() != VimMode::Normal;
@@ -94,6 +105,109 @@ impl Viewer {
             Outcome::Handled => Request::None,
         }
     }
+}
+
+/// A footnote reference `[n]` under the cursor, as `n`.
+fn footnote_at(line: &str, column: usize) -> Option<String> {
+    let chars: Vec<char> = line.chars().collect();
+    for start in 0..chars.len() {
+        if chars[start] != '[' {
+            continue;
+        }
+        let Some(end) = (start + 1..chars.len()).find(|&at| chars[at] == ']') else {
+            continue;
+        };
+        if start > column || column > end {
+            continue;
+        }
+        let number: String = chars[start + 1..end].iter().collect();
+        if !number.is_empty() && number.chars().all(|c| c.is_ascii_digit()) {
+            return Some(number);
+        }
+    }
+    None
+}
+
+/// The address a footnote `number` names, as `[n]: address`.
+fn footnote_url(lines: &[String], number: &str) -> Option<String> {
+    let prefix = format!("[{number}]:");
+    lines.iter().find_map(|line| {
+        let rest = line.trim_start().strip_prefix(&prefix)?;
+        let url = rest.trim();
+        let url = url
+            .strip_prefix('<')
+            .and_then(|url| url.strip_suffix('>'))
+            .unwrap_or(url);
+        is_web_url(url).then(|| url.to_owned())
+    })
+}
+
+/// A web address on `line` that the cursor at `column` is on.
+fn url_at(line: &str, column: usize) -> Option<String> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut start = 0;
+    while start < chars.len() {
+        if !starts_with(&chars, start, "http://") && !starts_with(&chars, start, "https://") {
+            start += 1;
+            continue;
+        }
+        if start > 0 && chars[start - 1].is_ascii_alphanumeric() {
+            start += 1;
+            continue;
+        }
+        let end = (start..chars.len())
+            .find(|&at| {
+                chars[at].is_whitespace() || matches!(chars[at], '<' | '>' | '"' | '\'' | '`')
+            })
+            .unwrap_or(chars.len());
+        let end = trim_url_end(&chars, start, end);
+        if start <= column && column < end {
+            return Some(chars[start..end].iter().collect());
+        }
+        start = end.max(start + 1);
+    }
+    None
+}
+
+/// Whether `chars` at `start` spell `word`, whatever the case of its letters.
+fn starts_with(chars: &[char], start: usize, word: &str) -> bool {
+    let word: Vec<char> = word.chars().collect();
+    chars.len() >= start + word.len()
+        && chars[start..start + word.len()]
+            .iter()
+            .zip(&word)
+            .all(|(c, w)| c.to_ascii_lowercase() == *w)
+}
+
+/// Where a web address ends, leaving out punctuation that is part of the
+/// sentence or of a bracket around it.
+fn trim_url_end(chars: &[char], start: usize, end: usize) -> usize {
+    let mut end = end;
+    while end > start && ".,;:!?".contains(chars[end - 1]) {
+        end -= 1;
+    }
+    for (open, close) in [('(', ')'), ('[', ']'), ('{', '}')] {
+        while end > start
+            && chars[end - 1] == close
+            && chars[start..end].iter().filter(|&&c| c == close).count()
+                > chars[start..end].iter().filter(|&&c| c == open).count()
+        {
+            end -= 1;
+        }
+    }
+    end
+}
+
+/// Whether `url` is one a browser can open.
+fn is_web_url(url: &str) -> bool {
+    let url = url.to_ascii_lowercase();
+    let Some(rest) = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    !rest.is_empty()
 }
 
 /// Whether a key only moves, picks or yanks, leaving the text as it is.
@@ -140,6 +254,84 @@ mod tests {
         let mut viewer = Viewer::default();
         viewer.show(&lines);
         viewer
+    }
+
+    /// Puts the cursor where `at` starts in `text`, and reads the address
+    /// there.
+    fn url_at_cursor(text: &str, at: &str) -> Option<String> {
+        let mut viewer = viewing(text);
+        let row = text.lines().position(|line| line.contains(at)).unwrap();
+        let column = text.lines().nth(row).unwrap().find(at).unwrap();
+        viewer.move_to(row, column);
+        viewer.url_under_cursor()
+    }
+
+    #[test]
+    fn a_web_address_under_the_cursor_opens() {
+        assert_eq!(
+            url_at_cursor("See https://example.com/docs for more", "https"),
+            Some("https://example.com/docs".to_owned())
+        );
+        assert_eq!(
+            url_at_cursor("An HTTP link: HTTP://EXAMPLE.COM/A", "HTTP://"),
+            Some("HTTP://EXAMPLE.COM/A".to_owned())
+        );
+    }
+
+    #[test]
+    fn text_beside_a_web_address_has_nothing_to_open() {
+        assert_eq!(url_at_cursor("See https://example.com/docs", "See"), None);
+        assert_eq!(
+            url_at_cursor("See https://example.com/docs", "docs"),
+            Some("https://example.com/docs".to_owned()),
+            "the end of the address is on it"
+        );
+        assert_eq!(
+            url_at_cursor("See https://example.com/docs.", "example"),
+            Some("https://example.com/docs".to_owned()),
+            "a full stop after the address is not part of it"
+        );
+    }
+
+    #[test]
+    fn brackets_around_an_address_are_not_part_of_it() {
+        assert_eq!(
+            url_at_cursor("(see https://example.com/docs)", "example"),
+            Some("https://example.com/docs".to_owned())
+        );
+        assert_eq!(
+            url_at_cursor("https://en.wikipedia.org/wiki/Foo_(bar)", "wikipedia"),
+            Some("https://en.wikipedia.org/wiki/Foo_(bar)".to_owned()),
+            "a bracket the address opened is part of it"
+        );
+    }
+
+    #[test]
+    fn a_footnote_reference_opens_its_address() {
+        let text = "See [the docs][1].\n\n[1]: https://example.com/docs";
+
+        assert_eq!(
+            url_at_cursor(text, "[1]"),
+            Some("https://example.com/docs".to_owned())
+        );
+        assert_eq!(
+            url_at_cursor(text, "[1]:"),
+            Some("https://example.com/docs".to_owned())
+        );
+        assert_eq!(
+            url_at_cursor(text, "https"),
+            Some("https://example.com/docs".to_owned())
+        );
+    }
+
+    #[test]
+    fn only_web_addresses_open() {
+        assert_eq!(
+            url_at_cursor("Write to mailto:ada@example.com", "mailto"),
+            None
+        );
+        assert_eq!(url_at_cursor("Fetch ftp://example.com/file", "ftp"), None);
+        assert_eq!(url_at_cursor("A footnote [1] with no address", "[1]"), None);
     }
 
     #[test]
