@@ -12,7 +12,7 @@ expression: terminal.backend().to_string()
 "┃>   In│Ctrl-U Ctrl-D            Move or scroll half a page                       │      │"
 "┃    Se│g g  G  Home End         Jump to the first or last                        │      │"
 "┃    Pr│h j k l w b e 0 $        Move the cursor in the message, as Vim does      │      │"
-"┃      │v V then y, or yy        Pick text or lines from the cursor, copy them    │      │"
+"┃      │v V then y, yy; g x      Pick text or lines, copy; open the link          │      │"
 "┃      │z  b  L                  Zoom or show all (Esc), hide folders, move reader│      │"
 "┃      │Space, Ctrl-A            Mark a message, mark them all (Esc clears)       │      │"
 "┃      │d                        Move marked, selected or folder to Deleted Items │      │"

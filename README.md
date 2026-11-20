@@ -385,6 +385,7 @@ over several rows is numbered on its first.
 | `v` / `V` | Pick characters / whole lines from the cursor |
 | `y` | Copy what is picked to the clipboard |
 | `yy` `yw` `y$` and so on | Copy a line, a word, to the end of the line |
+| `g x` | Open the web address under the cursor in the default browser |
 | `Esc` | Stop picking |
 | `→` `←` | Show the next or previous mail |
 
@@ -393,6 +394,11 @@ a message or a signature, as in Vim. Text deleted or yanked while writing is
 kept the same way, from one message to the next. The original message shown
 beside a reply works the same way, so text copied from it can be put straight
 into the reply.
+
+`g x` opens the web address under the cursor in the default browser. HTML mail
+is shown with its links as numbered footnotes, so `g x` on a `[1]` reference
+opens the address it names, and so does `g x` on the address itself. Only
+`http` and `https` addresses open.
 
 Keys the cursor has no use for work as they do in the other panes, so `r`
 replies and `d` deletes. In the reading pane `b` moves back a word; hide the

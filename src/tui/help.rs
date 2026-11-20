@@ -59,17 +59,17 @@ pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
         Screen::Panes if picking => " y copy · Esc cancel",
         // First, as a narrow status bar cuts off the end.
         Screen::Panes if app.focus == Pane::Reader && app.reader.invite.is_some() => {
-            " i respond · v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit"
+            " i respond · gx open · v V pick · yy copy · ← → next/prev · ? help · q quit"
         }
         Screen::Panes if app.reader.invite.is_some() => {
             " i respond · ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit"
         }
         // Saving is offered only once the selected mail's files are known.
         Screen::Panes if app.focus == Pane::Reader && !app.reader.attachments.is_empty() => {
-            " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit · s save files"
+            " gx open · v V pick · yy copy · ← → next/prev · r reply · ? help · q quit · s save files"
         }
         Screen::Panes if app.focus == Pane::Reader => {
-            " v V pick · yy copy · ← → next/prev mail · r reply · ? help · q quit"
+            " gx open · v V pick · yy copy · ← → next/prev · r reply · ? help · q quit"
         }
         Screen::Panes if !app.reader.attachments.is_empty() => {
             " ? help · Tab switch pane · Enter open · / search · c write · r reply · d delete · q quit · s save files"
@@ -177,8 +177,8 @@ pub const HELP: [(&str, &str); 23] = [
         "Move the cursor in the message, as Vim does",
     ),
     (
-        "v V then y, or yy",
-        "Pick text or lines from the cursor, copy them",
+        "v V then y, yy; g x",
+        "Pick text or lines, copy; open the link",
     ),
     (
         "z  b  L",

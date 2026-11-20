@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `g x` in the reading pane opens the web address under the cursor in the
+  default browser. HTML mail's links are shown as numbered footnotes, and `g x`
+  on a `[1]` reference opens the address it names too.
 - A reply, reply to all or forward shows the message it answers beside the
   body, greyed out under a title naming who sent it and when, so it can be
   read without leaving the message being written. `Tab` reaches it, where
