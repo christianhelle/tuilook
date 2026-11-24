@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Moving and deleting by words, as in any Windows app: `Ctrl-←` and `Ctrl-→` move
+  a word at a time, and `Ctrl-Backspace` and `Ctrl-Delete` delete the word before
+  or after the cursor. They work in every field tuilook lets you type into,
+  including the body, the signature and an appointment's notes. A word is what
+  Vim's `w` and `b` move over, so punctuation counts on its own. Most terminals
+  cannot send `Ctrl-Backspace`, so `Ctrl-H` and `Ctrl-W` do the same thing; in
+  Vim's normal mode these keys still do nothing.
+
 ## [0.1.7] - 2026-11-22
 
 ### Added

@@ -495,6 +495,7 @@ wrap the same way.
 | --- | --- |
 | `Tab` / `Shift-Tab` | Next field / previous field |
 | `Enter` `↓` `↑` | Move between To, Cc and Subject |
+| `Ctrl-←` `Ctrl-→` `Ctrl-Backspace` `Ctrl-Delete` | Move or delete a word |
 | `Ctrl-A` | Attach a file |
 | `Ctrl-O` | Hide or show the original message |
 | `Ctrl-S` | Send |
@@ -508,11 +509,20 @@ The body is edited vim style. It starts in normal mode; press `i` to type.
 | `i` `a` `I` `A` `o` `O` | Start typing (insert mode) |
 | `Esc` | Back to normal mode |
 | `h` `j` `k` `l` `w` `b` `e` `0` `^` `$` `gg` `G` | Move |
+| `Ctrl-←` `Ctrl-→` | Move a word at a time, as Windows does |
+| `Ctrl-Backspace` `Ctrl-Delete` | Delete the word before or after the cursor |
 | `x` `X` `D` `C` `J` `r` | Delete, change, join, replace a character |
 | `d` `c` `y` + a motion, e.g. `dd` `cw` `diw` `yy` | Delete, change or copy |
 | `p` `P` | Paste after / before |
 | `u` `Ctrl-R` | Undo / redo |
 | `v` `V` | Select characters / lines |
+
+`Ctrl-←` `Ctrl-→` `Ctrl-Backspace` and `Ctrl-Delete` work in every field tuilook
+lets you type into, not only the body. A word is what Vim's `w` and `b` move
+over, so punctuation counts on its own: `Ctrl-Backspace` on `ada@example.com`
+leaves `ada@example.`. Most terminals cannot send `Ctrl-Backspace`, so `Ctrl-H`
+and `Ctrl-W` do the same thing. In normal mode these keys do nothing; use `w`,
+`b` and `dw` there.
 
 Counts work too, like `3dd` or `5j`. The body's lines are numbered as in the
 reading pane, by how far each is from the cursor, and a line wrapped over

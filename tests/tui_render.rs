@@ -675,9 +675,9 @@ fn the_writing_help_names_the_word_keys() {
         &help::SIGNATURE_HELP[..],
         &help::APPOINTMENT_HELP[..],
     ] {
-        let names_a_word_key = table.iter().any(|(keys, _)| {
-            keys.contains("Ctrl-←") && keys.contains("Ctrl-Backspace")
-        });
+        let names_a_word_key = table
+            .iter()
+            .any(|(keys, _)| keys.contains("Ctrl-←") && keys.contains("Ctrl-Backspace"));
 
         assert!(names_a_word_key, "one row names both word keys: {table:?}");
     }
