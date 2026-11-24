@@ -1,6 +1,10 @@
 //! Several lines of editable text, for writing mail.
 
-use crate::tui::{vim::Vim, wrap::Wrapped};
+use crate::tui::{
+    vim::Vim,
+    word::{Class, class_of},
+    wrap::Wrapped,
+};
 
 /// A place in the text, as the line and the characters from its start.
 pub type Pos = (usize, usize);
@@ -514,12 +518,7 @@ impl Editor {
 
     /// Whether a place holds a space, a word character or punctuation.
     fn class_at(&self, at: Pos) -> Class {
-        match self.char_at(at) {
-            None => Class::Space,
-            Some(c) if c.is_whitespace() => Class::Space,
-            Some(c) if c.is_alphanumeric() || c == '_' => Class::Word,
-            Some(_) => Class::Punctuation,
-        }
+        class_of(self.char_at(at))
     }
 
     /// The character after a place, at the start of the next line after the last.
@@ -562,14 +561,6 @@ impl Editor {
             .nth(chars)
             .map_or(line.len(), |(index, _)| index)
     }
-}
-
-/// What kind of character, for moving by words.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Class {
-    Space,
-    Word,
-    Punctuation,
 }
 
 #[cfg(test)]
