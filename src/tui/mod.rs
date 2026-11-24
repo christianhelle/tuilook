@@ -40,4 +40,5 @@ pub mod ui;
 pub mod unread;
 pub mod viewer;
 pub mod vim;
+pub mod word;
 pub mod wrap;
