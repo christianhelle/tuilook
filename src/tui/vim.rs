@@ -171,6 +171,13 @@ fn insert_key(vim: &mut Vim, editor: &mut Editor, key: KeyEvent, page: usize) ->
         }
         KeyCode::Char(c) if !ctrl => editor.insert(c),
         KeyCode::Enter => editor.newline(),
+        // Ctrl-Backspace deletes a word. Terminals that cannot send it send
+        // Ctrl-H or Ctrl-W instead, so those do the same.
+        KeyCode::Backspace if ctrl => editor.delete_word_back(),
+        KeyCode::Char('h' | 'w') if ctrl => editor.delete_word_back(),
+        KeyCode::Delete if ctrl => editor.delete_word_forward(),
+        KeyCode::Left if ctrl => editor.word_left(),
+        KeyCode::Right if ctrl => editor.word_right(),
         KeyCode::Backspace => editor.backspace(),
         KeyCode::Delete => editor.delete(),
         KeyCode::Left => editor.left(),
@@ -891,5 +898,95 @@ d"
         typing.keys("2d2w");
 
         assert_eq!(typing.text(), "e f g");
+    }
+
+    #[test]
+    fn ctrl_backspace_deletes_a_word_while_typing() {
+        let mut typing = Typing::new("Hi there!");
+        typing.keys("A");
+        assert_eq!(typing.text(), "Hi there!");
+
+        let ctrl_backspace = KeyEvent::new(KeyCode::Backspace, KeyModifiers::CONTROL);
+        typing.press(ctrl_backspace);
+        assert_eq!(typing.text(), "Hi there");
+
+        typing.press(ctrl_backspace);
+        assert_eq!(typing.text(), "Hi ");
+
+        assert_eq!(
+            typing.editor.vim.mode,
+            VimMode::Insert,
+            "still typing afterwards"
+        );
+    }
+
+    #[test]
+    fn ctrl_h_and_ctrl_w_delete_a_word_too_and_type_nothing() {
+        for c in ['h', 'w'] {
+            let mut typing = Typing::new("Hi there!");
+            typing.keys("A");
+
+            typing.press(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL));
+
+            assert_eq!(typing.text(), "Hi there", "Ctrl-{c}");
+        }
+    }
+
+    #[test]
+    fn ctrl_delete_deletes_a_word_on_while_typing() {
+        let mut typing = Typing::new("Hi there!");
+        typing.keys("A");
+        typing.press(KeyEvent::from(KeyCode::Home));
+        assert_eq!(typing.cursor(), (0, 0));
+
+        typing.press(KeyEvent::new(KeyCode::Delete, KeyModifiers::CONTROL));
+
+        assert_eq!(typing.text(), "there!");
+        assert_eq!(typing.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn ctrl_arrows_move_a_word_at_a_time_while_typing() {
+        let mut typing = Typing::new("Hi there!");
+        typing.keys("A");
+
+        let ctrl_left = KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL);
+        typing.press(ctrl_left);
+        assert_eq!(typing.cursor(), (0, 8), "on the ! it moved off");
+        typing.press(ctrl_left);
+        assert_eq!(typing.cursor(), (0, 3));
+
+        let ctrl_right = KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL);
+        typing.press(ctrl_right);
+        assert_eq!(typing.cursor(), (0, 8));
+    }
+}
+
+#[cfg(test)]
+mod typing_mode_tests {
+    use super::*;
+
+    #[test]
+    fn word_keys_do_nothing_in_normal_mode() {
+        for pressed in [
+            KeyEvent::new(KeyCode::Backspace, KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Delete, KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL),
+        ] {
+            let mut editor = Editor::default();
+            editor.set_text("Hi there");
+            editor.move_to(0, 4);
+            let mut register = Register::default();
+
+            let outcome = key(&mut editor, pressed, 10, &mut register);
+
+            assert_eq!(outcome, Outcome::Unhandled, "{pressed:?}");
+            assert_eq!(editor.text(), "Hi there", "{pressed:?}");
+            assert_eq!(editor.cursor(), (0, 4), "{pressed:?}");
+            assert!(editor.vim.is_idle(), "{pressed:?}");
+        }
     }
 }
