@@ -492,6 +492,20 @@ impl Editor {
         }
     }
 
+    /// Moves back to the start of the word before the cursor, as Windows'
+    /// Ctrl-Left does, crossing to the line above from the start of one.
+    pub fn word_left(&mut self) {
+        let to = self.word_back(self.cursor());
+        self.move_to(to.0, to.1);
+    }
+
+    /// Moves on to the start of the word after the cursor, as Windows'
+    /// Ctrl-Right does, crossing to the line below from the end of one.
+    pub fn word_right(&mut self) {
+        let to = self.word_forward(self.cursor());
+        self.move_to(to.0, to.1);
+    }
+
     /// Deletes from the cursor back to the start of the word before it, as
     /// Windows' Ctrl-Backspace does, joining lines at the start of one.
     pub fn delete_word_back(&mut self) {
@@ -869,6 +883,37 @@ mod tests {
 
         assert_eq!(editor.text(), "Hi");
         assert_eq!(editor.cursor(), (0, 2));
+    }
+
+    #[test]
+    fn moving_a_word_left_goes_to_the_start_of_the_run_before_the_cursor() {
+        let mut editor = text("Hi there!");
+
+        editor.word_left();
+        assert_eq!(editor.cursor(), (0, 8), "on the ! it moved off");
+        editor.word_left();
+        assert_eq!(editor.cursor(), (0, 3));
+        editor.word_left();
+        assert_eq!(editor.cursor(), (0, 0));
+        editor.word_left();
+
+        assert_eq!(editor.cursor(), (0, 0), "stops at the start");
+    }
+
+    #[test]
+    fn moving_a_word_right_goes_to_the_start_of_the_run_after_the_cursor() {
+        let mut editor = text("Hi there!");
+
+        editor.move_to(0, 0);
+        editor.word_right();
+        assert_eq!(editor.cursor(), (0, 3));
+        editor.word_right();
+        assert_eq!(editor.cursor(), (0, 8));
+        editor.word_right();
+        assert_eq!(editor.cursor(), (0, 9), "the end of the text");
+        editor.word_right();
+
+        assert_eq!(editor.cursor(), (0, 9), "stops at the end");
     }
 
     fn text(text: &str) -> Editor {
