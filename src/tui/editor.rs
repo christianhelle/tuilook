@@ -492,6 +492,32 @@ impl Editor {
         }
     }
 
+    /// Deletes from the cursor back to the start of the word before it, as
+    /// Windows' Ctrl-Backspace does, joining lines at the start of one.
+    pub fn delete_word_back(&mut self) {
+        let from = self.word_back(self.cursor());
+        self.delete_to(from);
+    }
+
+    /// Deletes from the cursor on to the start of the word after it, as
+    /// Windows' Ctrl-Delete does, joining lines at the end of one.
+    pub fn delete_word_forward(&mut self) {
+        let to = self.word_forward(self.cursor());
+        self.delete_to(to);
+    }
+
+    /// Deletes the text between `to` and the cursor, as one change to undo,
+    /// and does nothing when they are the same place. The cursor ends at
+    /// whichever place comes first.
+    fn delete_to(&mut self, to: Pos) {
+        let cursor = self.cursor();
+        if to == cursor {
+            return;
+        }
+        self.checkpoint();
+        self.delete_between(to.min(cursor), to.max(cursor));
+    }
+
     /// The first and last characters of the word or the spaces at a place.
     pub fn word_around(&self, (row, column): Pos) -> (Pos, Pos) {
         let class = self.class_at((row, column));
@@ -742,6 +768,107 @@ mod tests {
         editor.move_to(0, 12);
 
         assert_eq!(editor.scroll(1, 7), 1, "the second row of the line");
+    }
+
+    #[test]
+    fn deleting_a_word_back_takes_the_run_before_the_cursor() {
+        let mut editor = text("Hi there!");
+
+        editor.delete_word_back();
+        assert_eq!(editor.text(), "Hi there");
+        assert_eq!(editor.cursor(), (0, 8), "on the ! it left");
+
+        editor.delete_word_back();
+        assert_eq!(editor.text(), "Hi ");
+        assert_eq!(editor.cursor(), (0, 3));
+
+        // As `b` does: from just past a space, it goes to the word before it.
+        editor.delete_word_back();
+        assert_eq!(editor.text(), "");
+        assert_eq!(editor.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn deleting_a_word_back_at_the_very_start_does_nothing() {
+        let mut editor = text("Hi");
+
+        editor.move_to(0, 0);
+        editor.delete_word_back();
+
+        assert_eq!(editor.text(), "Hi");
+        assert_eq!(editor.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn deleting_a_word_back_at_the_start_of_a_line_joins_it_to_the_one_above() {
+        let mut editor = text("Hi there\nagain\nmore");
+
+        editor.move_to(1, 0);
+        editor.delete_word_back();
+
+        // As `db` does: the word above goes with the newline.
+        assert_eq!(editor.text(), "Hi again\nmore");
+        assert_eq!(editor.cursor(), (0, 3));
+    }
+
+    #[test]
+    fn deleting_a_word_back_is_one_change_to_undo() {
+        let mut editor = text("Hi there!");
+
+        editor.delete_word_back();
+        assert!(editor.undo());
+
+        assert_eq!(editor.text(), "Hi there!");
+        assert_eq!(editor.cursor(), (0, 9));
+    }
+
+    #[test]
+    fn deleting_a_word_before_a_punctuation_run_leaves_the_run_whole() {
+        let mut editor = text("ada@example.com");
+
+        editor.delete_word_back();
+        assert_eq!(editor.text(), "ada@example.");
+        assert_eq!(editor.cursor(), (0, 12), "on the full stop it left");
+
+        editor.delete_word_back();
+        assert_eq!(editor.text(), "ada@example");
+        assert_eq!(editor.cursor(), (0, 11), "on the e it left");
+
+        editor.delete_word_back();
+        assert_eq!(editor.text(), "ada@");
+        assert_eq!(editor.cursor(), (0, 4), "on the @ it left");
+    }
+
+    #[test]
+    fn deleting_a_word_forward_takes_the_run_after_the_cursor() {
+        let mut editor = text("Hi there!");
+
+        editor.move_to(0, 0);
+        editor.delete_word_forward();
+
+        assert_eq!(editor.text(), "there!");
+        assert_eq!(editor.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn deleting_a_word_forward_at_the_end_of_a_line_joins_the_one_below() {
+        let mut editor = text("Hi\nthere");
+
+        editor.move_to(0, 2);
+        editor.delete_word_forward();
+
+        assert_eq!(editor.text(), "Hithere");
+        assert_eq!(editor.cursor(), (0, 2));
+    }
+
+    #[test]
+    fn deleting_a_word_forward_at_the_very_end_does_nothing() {
+        let mut editor = text("Hi");
+
+        editor.delete_word_forward();
+
+        assert_eq!(editor.text(), "Hi");
+        assert_eq!(editor.cursor(), (0, 2));
     }
 
     fn text(text: &str) -> Editor {
