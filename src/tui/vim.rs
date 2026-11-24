@@ -960,11 +960,6 @@ d"
         typing.press(ctrl_right);
         assert_eq!(typing.cursor(), (0, 8));
     }
-}
-
-#[cfg(test)]
-mod typing_mode_tests {
-    use super::*;
 
     #[test]
     fn word_keys_do_nothing_in_normal_mode() {
