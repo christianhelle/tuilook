@@ -81,7 +81,7 @@ pub(crate) fn key_hints(app: &AppState, picking: bool) -> &'static str {
 }
 
 /// What each key does while writing a message, shown with `?` in normal mode.
-pub const COMPOSE_HELP: [(&str, &str); 15] = [
+pub const COMPOSE_HELP: [(&str, &str); 16] = [
     ("Tab / Shift-Tab", "Next field / previous field"),
     ("Enter  ↑ ↓", "Move between From, To, Cc and Subject"),
     ("← →  in From", "Change the account it is sent from"),
@@ -92,6 +92,7 @@ pub const COMPOSE_HELP: [(&str, &str); 15] = [
     ("Esc", "Back to normal mode"),
     ("h j k l w b e 0 $ gg G", "Move in the body"),
     ("dd cw x p u Ctrl-R v V", "Edit vim style"),
+    ("Ctrl-← → Ctrl-Backspace", "Move or delete a word"),
     ("Ctrl-A", "Attach a file (Tab to it, d takes it off)"),
     ("Ctrl-S", "Send"),
     (
@@ -126,7 +127,7 @@ pub const AGENDA_HELP: [(&str, &str); 15] = [
 
 /// What each key does while writing an appointment, shown with `?` in the
 /// notes' normal mode.
-pub const APPOINTMENT_HELP: [(&str, &str); 11] = [
+pub const APPOINTMENT_HELP: [(&str, &str); 12] = [
     ("Tab / Shift-Tab", "Next field / previous field"),
     ("Enter  ↑ ↓", "Move between the fields above the notes"),
     ("2026-11-30  14:30", "How to write the date and the times"),
@@ -134,6 +135,7 @@ pub const APPOINTMENT_HELP: [(&str, &str); 11] = [
     ("a, b; c", "Separate several addresses to invite"),
     ("i a I A o O", "Type in the notes, insert mode"),
     ("dd cw x p u Ctrl-R v V", "Edit the notes vim style"),
+    ("Ctrl-← → Ctrl-Backspace", "Move or delete a word"),
     ("Ctrl-S", "Save, inviting those added"),
     (
         "Esc in normal mode",
@@ -144,11 +146,12 @@ pub const APPOINTMENT_HELP: [(&str, &str); 11] = [
 ];
 
 /// What each key does while writing a signature, shown with `?` in normal mode.
-pub const SIGNATURE_HELP: [(&str, &str); 9] = [
+pub const SIGNATURE_HELP: [(&str, &str); 10] = [
     ("i a I A o O", "Type, insert mode"),
     ("Esc", "Back to normal mode"),
     ("h j k l w b e 0 $ gg G", "Move"),
     ("dd cw x p u Ctrl-R v V", "Edit vim style"),
+    ("Ctrl-← → Ctrl-Backspace", "Move or delete a word"),
     ("Ctrl-S", "Save"),
     (
         "Esc in normal mode",

@@ -669,6 +669,21 @@ fn ctrl_backspace_deletes_a_word_in_the_to_field() {
 }
 
 #[test]
+fn the_writing_help_names_the_word_keys() {
+    for table in [
+        &help::COMPOSE_HELP[..],
+        &help::SIGNATURE_HELP[..],
+        &help::APPOINTMENT_HELP[..],
+    ] {
+        let names_a_word_key = table.iter().any(|(keys, _)| {
+            keys.contains("Ctrl-←") && keys.contains("Ctrl-Backspace")
+        });
+
+        assert!(names_a_word_key, "one row names both word keys: {table:?}");
+    }
+}
+
+#[test]
 fn the_writing_help_fits_too() {
     let inside = usize::from(ui::HELP_WIDTH) - 2;
 

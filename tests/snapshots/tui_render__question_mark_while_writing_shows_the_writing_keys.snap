@@ -1,5 +1,6 @@
 ---
 source: tests/tui_render.rs
+assertion_line: 631
 expression: render_tall(&app)
 ---
 "┏ Reply┌Keys──────────────────────────────────────────────────────────────────────┐━━━━━━┓"
@@ -13,8 +14,8 @@ expression: render_tall(&app)
 "┃      │Esc                      Back to normal mode                              │      ┃"
 "┃      │h j k l w b e 0 $ gg G   Move in the body                                 │      ┃"
 "┃┌  Rep│dd cw x p u Ctrl-R v V   Edit vim style                                   │─────┐┃"
-"┃│1   F│Ctrl-A                   Attach a file (Tab to it, d takes it off)        │     │┃"
-"┃│  1 S│Ctrl-S                   Send                                             │     │┃"
-"┃└─────│Esc in normal mode       Close, asking first if anything was written      │─────┘┃"
-"┗━━━━━━│Ctrl-C                   Quit                                             │━━━━━━┛"
+"┃│1   F│Ctrl-← → Ctrl-Backspace  Move or delete a word                            │     │┃"
+"┃│  1 S│Ctrl-A                   Attach a file (Tab to it, d takes it off)        │     │┃"
+"┃└─────│Ctrl-S                   Send                                             │─────┘┃"
+"┗━━━━━━│Esc in normal mode       Close, asking first if anything was written      │━━━━━━┛"
 " NORMAL└──────────────────────────────────────────────────────────────────────────┘       "
