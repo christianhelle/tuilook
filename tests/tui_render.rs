@@ -632,6 +632,43 @@ fn question_mark_while_writing_shows_the_writing_keys() {
 }
 
 #[test]
+fn ctrl_backspace_deletes_a_word_in_the_body() {
+    use ratatui::crossterm::event::KeyModifiers;
+
+    let mut app = sample_app();
+    press(&mut app, "cada@example.com⇥⇥Lunch⇥iHi there!");
+    let mut keymap = tuilook::tui::keymap::Keymap::default();
+    let ctrl = |code| KeyEvent::new(code, KeyModifiers::CONTROL);
+
+    app.viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 90, 16), &app);
+    app.on_key(ctrl(KeyCode::Backspace), &mut keymap);
+
+    let compose = app.screen.compose().unwrap();
+    assert_eq!(compose.body.text(), "Hi there");
+
+    app.on_key(ctrl(KeyCode::Left), &mut keymap);
+    assert_eq!(app.screen.compose().unwrap().body.cursor(), (0, 3));
+}
+
+#[test]
+fn ctrl_backspace_deletes_a_word_in_the_to_field() {
+    use ratatui::crossterm::event::KeyModifiers;
+
+    let mut app = sample_app();
+    press(&mut app, "cada@example.com grace@example.com");
+    let mut keymap = tuilook::tui::keymap::Keymap::default();
+
+    app.viewport = ui::viewport(ratatui::layout::Rect::new(0, 0, 90, 16), &app);
+    app.on_key(
+        KeyEvent::new(KeyCode::Backspace, KeyModifiers::CONTROL),
+        &mut keymap,
+    );
+
+    let to = &app.screen.compose().unwrap().to;
+    assert_eq!(to.text(), "ada@example.com grace@example.", "`.com` went");
+}
+
+#[test]
 fn the_writing_help_fits_too() {
     let inside = usize::from(ui::HELP_WIDTH) - 2;
 
