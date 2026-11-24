@@ -2,6 +2,8 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::tui::word::{Class, class_of};
+
 /// Text with a cursor, counted in characters.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TextInput {
@@ -40,8 +42,16 @@ impl TextInput {
     /// Edits the text or moves the cursor for an editing key, and says
     /// whether `key` was one.
     pub fn key(&mut self, key: KeyEvent) -> bool {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => self.insert(c),
+            KeyCode::Char(c) if !ctrl => self.insert(c),
+            // Ctrl-Backspace deletes a word. Terminals that cannot send it
+            // send Ctrl-H or Ctrl-W instead, so those do the same.
+            KeyCode::Backspace if ctrl => self.delete_word_back(),
+            KeyCode::Char('h' | 'w') if ctrl => self.delete_word_back(),
+            KeyCode::Delete if ctrl => self.delete_word_forward(),
+            KeyCode::Left if ctrl => self.word_left(),
+            KeyCode::Right if ctrl => self.word_right(),
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
             KeyCode::Left => self.left(),
@@ -65,6 +75,80 @@ impl TextInput {
             self.cursor -= 1;
             self.delete();
         }
+    }
+
+    /// Moves back to the start of the word before the cursor, as Windows'
+    /// Ctrl-Left does.
+    pub fn word_left(&mut self) {
+        if let Some(at) = self.word_before(self.cursor) {
+            self.cursor = at;
+        }
+    }
+
+    /// Moves on to the start of the word after the cursor, as Windows'
+    /// Ctrl-Right does.
+    pub fn word_right(&mut self) {
+        if let Some(at) = self.word_after(self.cursor) {
+            self.cursor = at;
+        }
+    }
+
+    /// Deletes from the cursor back to the start of the word before it, as
+    /// Windows' Ctrl-Backspace does.
+    pub fn delete_word_back(&mut self) {
+        if let Some(at) = self.word_before(self.cursor) {
+            self.cut(at, self.cursor);
+            self.cursor = at;
+        }
+    }
+
+    /// Deletes from the cursor on to the start of the word after it, as
+    /// Windows' Ctrl-Delete does.
+    pub fn delete_word_forward(&mut self) {
+        if let Some(at) = self.word_after(self.cursor) {
+            self.cut(self.cursor, at);
+        }
+    }
+
+    /// The class of the character at `at`, or of the end of the text.
+    fn class_at(&self, at: usize) -> Class {
+        class_of(self.text.chars().nth(at))
+    }
+
+    /// Where the word before `at` starts, as Vim's `b` finds it, or `None`
+    /// at the start of the text.
+    fn word_before(&self, at: usize) -> Option<usize> {
+        let mut here = at.checked_sub(1)?;
+        while here > 0 && self.class_at(here) == Class::Space {
+            here -= 1;
+        }
+        let class = self.class_at(here);
+        while here > 0 && self.class_at(here - 1) == class {
+            here -= 1;
+        }
+        Some(here)
+    }
+
+    /// Where the word after `at` starts, or `None` at the end of the text.
+    fn word_after(&self, at: usize) -> Option<usize> {
+        let len = self.len();
+        let mut here = at;
+        let class = self.class_at(at);
+        if class != Class::Space {
+            while here < len && self.class_at(here) == class {
+                here += 1;
+            }
+        }
+        while here < len && self.class_at(here) == Class::Space {
+            here += 1;
+        }
+        (here != at).then_some(here)
+    }
+
+    /// Takes the characters from `from` up to `to` out of the text.
+    fn cut(&mut self, from: usize, to: usize) {
+        let (start, end) = (self.byte_index(from), self.byte_index(to));
+        self.text.replace_range(start..end, "");
     }
 
     /// Deletes the character under the cursor.
@@ -147,5 +231,106 @@ mod tests {
         assert_eq!(input.cursor(), 1);
         input.move_to(10);
         assert_eq!(input.cursor(), 3);
+    }
+
+    /// Presses `key` with Ctrl held.
+    fn ctrl_key(input: &mut TextInput, code: KeyCode) -> bool {
+        input.key(KeyEvent::new(code, KeyModifiers::CONTROL))
+    }
+
+    #[test]
+    fn ctrl_left_and_right_move_a_word_at_a_time() {
+        let mut input = TextInput::from("Hi there!");
+
+        assert!(ctrl_key(&mut input, KeyCode::Left));
+        assert_eq!(input.cursor(), 8, "on the ! it moved off");
+        ctrl_key(&mut input, KeyCode::Left);
+        assert_eq!(input.cursor(), 3);
+        ctrl_key(&mut input, KeyCode::Left);
+        assert_eq!(input.cursor(), 0);
+        ctrl_key(&mut input, KeyCode::Left);
+        assert_eq!(input.cursor(), 0, "stops at the start");
+
+        ctrl_key(&mut input, KeyCode::Right);
+        assert_eq!(input.cursor(), 3);
+        ctrl_key(&mut input, KeyCode::Right);
+        assert_eq!(input.cursor(), 8);
+        ctrl_key(&mut input, KeyCode::Right);
+        assert_eq!(input.cursor(), 9, "the end of the text");
+    }
+
+    #[test]
+    fn ctrl_backspace_deletes_a_word() {
+        let mut input = TextInput::from("Hi there!");
+
+        assert!(ctrl_key(&mut input, KeyCode::Backspace));
+        assert_eq!(input.text(), "Hi there");
+        ctrl_key(&mut input, KeyCode::Backspace);
+        assert_eq!(input.text(), "Hi ");
+        ctrl_key(&mut input, KeyCode::Backspace);
+        assert_eq!(input.text(), "", "as `b` does, past the space too");
+        ctrl_key(&mut input, KeyCode::Backspace);
+        assert_eq!(input.text(), "", "and nothing at the start");
+    }
+
+    #[test]
+    fn ctrl_h_and_ctrl_w_delete_a_word_too_and_type_nothing() {
+        for c in ['h', 'w'] {
+            let mut input = TextInput::from("Hi there!");
+
+            assert!(
+                ctrl_key(&mut input, KeyCode::Char(c)),
+                "Ctrl-{c} is an editing key"
+            );
+
+            assert_eq!(input.text(), "Hi there", "Ctrl-{c}");
+        }
+    }
+
+    #[test]
+    fn ctrl_delete_deletes_the_word_after_the_cursor() {
+        let mut input = TextInput::from("Hi there!");
+        input.home();
+
+        assert!(ctrl_key(&mut input, KeyCode::Delete));
+        assert_eq!(input.text(), "there!", "as `w` finds the word after");
+        assert_eq!(input.cursor(), 0);
+
+        ctrl_key(&mut input, KeyCode::Delete);
+        assert_eq!(input.text(), "!", "the ! is a run of its own");
+        ctrl_key(&mut input, KeyCode::Delete);
+        assert_eq!(input.text(), "", "and the last run goes too");
+    }
+
+    #[test]
+    fn the_word_keys_do_nothing_to_empty_text() {
+        let mut input = TextInput::default();
+
+        for code in [
+            KeyCode::Left,
+            KeyCode::Right,
+            KeyCode::Backspace,
+            KeyCode::Delete,
+            KeyCode::Char('h'),
+            KeyCode::Char('w'),
+        ] {
+            ctrl_key(&mut input, code);
+
+            assert_eq!(input.text(), "", "{code:?}");
+            assert_eq!(input.cursor(), 0, "{code:?}");
+        }
+    }
+
+    #[test]
+    fn the_word_keys_leave_punctuation_runs_whole() {
+        let mut input = TextInput::from("ada@example.com");
+
+        ctrl_key(&mut input, KeyCode::Backspace);
+        assert_eq!(input.text(), "ada@example.");
+        ctrl_key(&mut input, KeyCode::Backspace);
+        assert_eq!(input.text(), "ada@example");
+        ctrl_key(&mut input, KeyCode::Backspace);
+
+        assert_eq!(input.text(), "ada@");
     }
 }
