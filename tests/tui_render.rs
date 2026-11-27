@@ -598,6 +598,21 @@ fn the_original_scrolls_as_its_cursor_moves() {
 }
 
 #[test]
+fn a_long_line_in_the_original_wraps_instead_of_repeating() {
+    let mut app = sample_app();
+    app.body_loaded(
+        MessageId("m1".to_owned()),
+        "alpha bravo charlie delta echo foxtrot golf hotel india juliett kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu".to_owned(),
+        vec![],
+    );
+    press(&mut app, "rAgreed⎋");
+    let screen = render_wide(&app);
+
+    assert!(screen.contains("zulu"), "{screen}");
+    assert_eq!(screen.matches("alpha").count(), 1, "{screen}");
+}
+
+#[test]
 fn a_narrow_screen_puts_the_original_under_the_reply() {
     let mut terminal = Terminal::new(TestBackend::new(90, 30)).unwrap();
     terminal.draw(|frame| ui::draw(frame, &replying())).unwrap();

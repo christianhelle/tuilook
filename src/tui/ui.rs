@@ -1015,14 +1015,14 @@ fn draw_original(frame: &mut Frame, app: &AppState, compose: &Compose, area: Rec
     let mut labels = Vec::with_capacity(height);
     let mut body = Vec::with_capacity(height);
     let mut at = 0;
-    for (index, line) in lines.iter().enumerate() {
+    for (index, _) in lines.iter().enumerate() {
         for (nth, row) in wrapped.line_rows(index).iter().enumerate() {
             if at >= top && at < top + height {
                 labels.push(match nth {
                     0 => Line::styled(numbers::label(index, cursor, numbers), dim),
                     _ => Line::raw(""),
                 });
-                body.push(picked_row(line, index, row.start, selection));
+                body.push(picked_row(&row.text, index, row.start, selection));
             }
             at += 1;
         }
