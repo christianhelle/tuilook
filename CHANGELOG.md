@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cannot send `Ctrl-Backspace`, so `Ctrl-H` and `Ctrl-W` do the same thing; in
   Vim's normal mode these keys still do nothing.
 
+### Fixed
+
+- Long lines in the original message beside a reply wrap instead of repeating
+  their start.
+
 ## [0.1.7] - 2026-11-22
 
 ### Added
