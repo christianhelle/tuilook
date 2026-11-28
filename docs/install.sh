@@ -80,10 +80,20 @@ get_latest_release() {
 
   log_info "Fetching latest release information..."
 
-  if ! curl -fsSL --proto '=https' --tlsv1.2 "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[^"]*$'; then
+  local tag
+
+  # GitHub may or may not put whitespace after the colon, so allow both
+  tag=$(curl -fsSL --proto '=https' --tlsv1.2 "$api_url" |
+    grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' |
+    head -n 1 |
+    sed 's/.*:[[:space:]]*"\(.*\)"/\1/') || true
+
+  if [[ -z "$tag" ]]; then
     log_error "Failed to fetch release information from GitHub Releases."
     exit 1
   fi
+
+  echo "$tag"
 }
 
 ensure_install_directory() {
